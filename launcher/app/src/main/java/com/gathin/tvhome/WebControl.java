@@ -49,6 +49,8 @@ final class WebControl {
     private static final String COOKIE = "hk";
     private static final int READ_TIMEOUT_MS = 5000;
     static final int MAX_JSON = 4 * 1024;
+    /** The occasions list: 50 entries with texts and YouTube links. */
+    static final int MAX_OCCASIONS_JSON = 16 * 1024;
     static final long MAX_UPLOAD = 15L * 1024 * 1024;
     private static final int MAX_LISTED = 500;
     private static final int THUMB_PX = 240;
@@ -315,14 +317,15 @@ final class WebControl {
     }
 
     /**
-     * The whole list of the owner's occasions, {"occasions": [{"date": "MM-DD" or "YYYY-MM-DD", "text": "…"}]},
+     * The whole list of the owner's occasions, {"occasions": [{"date": "MM-DD" or "YYYY-MM-DD", "text": "…",
+     * "video": optional YouTube link or id}]},
      * replacing the previous one. Every entry must validate; a bad one rejects the request rather than
      * being dropped quietly.
      */
     private static void occasions(Context ctx, WebHttp.Request req, InputStream in, OutputStream out) throws Exception {
         long length = req.contentLength();
-        if (length < 0 || length > MAX_JSON) {
-            sendError(out, 413, "Occasions are at most " + MAX_JSON + " bytes");
+        if (length < 0 || length > MAX_OCCASIONS_JSON) {
+            sendError(out, 413, "Occasions are at most " + MAX_OCCASIONS_JSON + " bytes");
             return;
         }
         JSONArray list;
@@ -339,9 +342,14 @@ final class WebControl {
         List<Occasions.Entry> entries = new ArrayList<>();
         for (int i = 0; i < list.length(); i++) {
             JSONObject o = list.optJSONObject(i);
-            Occasions.Entry e = o == null ? null : Occasions.entry(o.optString("date", ""), o.optString("text", ""));
+            String video = o == null ? "" : o.optString("video", "").trim();
+            Occasions.Entry e = o == null ? null : Occasions.entry(o.optString("date", ""), o.optString("text", ""), video);
             if (e == null) {
                 sendError(out, 400, "Occasion " + (i + 1) + " needs a real date and a text");
+                return;
+            }
+            if (!video.isEmpty() && e.video.isEmpty()) {
+                sendError(out, 400, "Occasion " + (i + 1) + ": the video must be a YouTube link");
                 return;
             }
             entries.add(e);

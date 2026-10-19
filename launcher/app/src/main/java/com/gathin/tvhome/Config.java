@@ -69,6 +69,8 @@ final class Config {
     /** Occasions: the owner's days as a JSON array (validated by Occasions.parse), and the built-in holidays. */
     final String occasions;
     final boolean holidays;
+    /** YouTube videos (ids or links) for the built-in holidays' Play card; empty: search for the song. */
+    final String christmasVideo, newYearVideo, tetVideo;
     /** Background colour behind everything, #RRGGBB; black unless a theme says otherwise. */
     final int backgroundColor;
     /** Full-screen picture behind the launcher, or null for the plain colour. */
@@ -80,7 +82,8 @@ final class Config {
                    String sourcePanelService, String sourcePanelAction, String inputAction,
                    int columns, int rowsBelowDock,
                    boolean shamsiDate, boolean moduleCards, String vpnApp, boolean showHomeSettingsShortcut, String selfUpdate, boolean btcTicker, String greetingName, boolean nowPlaying, boolean gallery,
-                   boolean weather, String weatherLocation, String weatherUnit, int screensaverIntervalS, boolean webControl, int webPort, String occasions, boolean holidays, int backgroundColor,
+                   boolean weather, String weatherLocation, String weatherUnit, int screensaverIntervalS, boolean webControl, int webPort, String occasions, boolean holidays,
+                   String christmasVideo, String newYearVideo, String tetVideo, int backgroundColor,
                    File wallpaper, boolean overlayApplied) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -108,6 +111,9 @@ final class Config {
         this.webPort = webPort;
         this.occasions = occasions;
         this.holidays = holidays;
+        this.christmasVideo = christmasVideo;
+        this.newYearVideo = newYearVideo;
+        this.tetVideo = tetVideo;
         this.backgroundColor = backgroundColor;
         this.wallpaper = wallpaper;
         this.overlayApplied = overlayApplied;
@@ -146,6 +152,9 @@ final class Config {
         int webPort = res.getInteger(R.integer.web_port);
         String occasions = res.getString(R.string.occasions);
         boolean holidays = res.getBoolean(R.bool.holidays);
+        String christmasVideo = res.getString(R.string.christmas_video).trim();
+        String newYearVideo = res.getString(R.string.new_year_video).trim();
+        String tetVideo = res.getString(R.string.tet_video).trim();
         int background = 0xFF000000;
         boolean applied = false;
 
@@ -182,6 +191,9 @@ final class Config {
             JSONArray occ = json.optJSONArray("occasions");
             if (occ != null) occasions = occ.toString();
             holidays = bool(json, "holidays", holidays);
+            christmasVideo = string(json, "christmas_video", christmasVideo).trim();
+            newYearVideo = string(json, "new_year_video", newYearVideo).trim();
+            tetVideo = string(json, "tet_video", tetVideo).trim();
             background = color(json, "background_color", background);
         }
         File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;
@@ -192,7 +204,8 @@ final class Config {
         return new Config(dock, hidden, liveTv, liveTvAction, panelService, panelAction, inputAction,
                 Math.max(1, columns), Math.max(0, rowsBelow), shamsi, moduleCards, vpn, homeSettings, Updater.mode(selfUpdate), btc, name, nowPlaying, gallery,
                 weather, weatherLocation, Weather.FAHRENHEIT.equals(weatherUnit) ? Weather.FAHRENHEIT : Weather.CELSIUS,
-                Math.max(10, Math.min(600, screensaverInterval)), webControl, Math.max(1024, Math.min(65535, webPort)), occasions, holidays, background,
+                Math.max(10, Math.min(600, screensaverInterval)), webControl, Math.max(1024, Math.min(65535, webPort)), occasions, holidays,
+                christmasVideo, newYearVideo, tetVideo, background,
                 wallpaper, applied);
     }
 

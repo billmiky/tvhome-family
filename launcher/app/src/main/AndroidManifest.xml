@@ -34,6 +34,14 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="com.gathin.tvhome.category.DOCK_CARD" />
         </intent>
+        <!-- The occasion Play card: YouTube links and searches (MainActivity.playOccasion). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" android:host="www.youtube.com" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEARCH" />
+        </intent>
     </queries>
 
     <application

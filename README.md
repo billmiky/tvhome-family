@@ -68,7 +68,8 @@ Rather not build? `CHANNEL=official` installs the signed release APK instead, an
 - **One floating glass highlight** that springs from tile to tile. The focused tile lifts and shows its name.
 - **Three frosted buttons**: Inputs (HDMI ports, AV, Live TV), Wi-Fi or Ethernet with the network name, Settings.
 - **A greeting, a thin clock and the date** in [Outfit](https://fonts.google.com/specimen/Outfit), and a matching Clock screensaver.
-  On birthdays and other days you set (`occasions`), and at Christmas, New Year and Tết, the greeting says so instead.
+  On birthdays and other days you set (`occasions`), and at Christmas, New Year and Tết, the greeting says so instead. A Play
+  card takes Now playing's place those days and plays the song on YouTube (the occasion's own link, or a search).
 - **Now playing**: a card above the dock for music playing in the background, with play/pause and skip on the remote.
 - **Gallery**, off by default: your own photos from `Pictures/Launcher` on the TV as the background, a random one every five minutes.
 - **Themes** that change colours, wallpaper, dock and columns without a rebuild, and **module cards** that let other apps plug a tile in, only with your say-so.

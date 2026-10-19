@@ -72,6 +72,9 @@
     <string name="gallery_empty">On · no photos in Pictures/Launcher</string>
     <string name="gallery_no_permission">On · allow access to photos</string>
     <string name="now_playing_description">Now playing: OK plays or pauses, left and right skip, hold OK to open the app</string>
+    <string name="occasion_play">Play</string>
+    <string name="occasion_play_description">Play %1$s on YouTube</string>
+    <string name="occasion_play_failed">Couldn\'t open YouTube</string>
     <string name="update_menu_check">Check for updates · %1$s</string>
     <string name="update_checking">Checking…</string>
     <string name="update_up_to_date">Up to date</string>

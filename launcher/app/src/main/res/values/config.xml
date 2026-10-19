@@ -106,7 +106,7 @@
     <integer name="web_port">8080</integer>
 
     <!-- Occasions: days the greeting line (above the clock) says something else, as a JSON array of
-         {"date": "MM-DD" every year or "YYYY-MM-DD" once, "text": "…"}, e.g.
+         {"date": "MM-DD" every year or "YYYY-MM-DD" once, "text": "…", "video": optional YouTube link}, e.g.
          [{\"date\": \"03-14\", \"text\": \"Happy birthday, bé An\"}] (Android string resources drop
          unescaped double quotes, hence the backslashes). Up to 50, text up to 48 characters. In a theme's
          config.json write the plain array instead. The phone page can also edit them. -->
@@ -115,4 +115,10 @@
          CHRISTMAS 🎄 🎅); New Year, 31 December and 1 January (HAPPY NEW YEAR 🍾 🎉); Tết, three days before
          mùng 1 to five days after (HAPPY NEW YEAR 🧧 🎉). -->
     <bool name="holidays">true</bool>
+    <!-- On an occasion day a Play card stands in for Now playing and plays a song on YouTube: the occasion's
+         own "video", else a search (Happy Birthday song for birthdays). These pick a video for the built-in
+         holidays instead of a search: a YouTube link or 11-character video id; empty searches for the song. -->
+    <string name="christmas_video" translatable="false"></string>
+    <string name="new_year_video" translatable="false"></string>
+    <string name="tet_video" translatable="false"></string>
 </resources>

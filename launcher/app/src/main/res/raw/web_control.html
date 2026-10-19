@@ -63,11 +63,11 @@
   .occ .what { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   .occ button { padding: 4px 11px; font-size: 13px; }
   .add { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 14px 16px; border-top: 1px solid var(--line); }
-  .add input[type=date], .add input[type=text] {
+  .add input[type=date], .add input[type=text], .add input[type=url] {
     min-width: 0; background: #0b0c0f; color: var(--text); border: 1px solid var(--line);
     border-radius: 10px; padding: 9px 11px; font: inherit; color-scheme: dark;
   }
-  .add input[type=text] { grid-column: 1 / -1; }
+  .add input[type=text], .add input[type=url] { grid-column: 1 / -1; }
   .add label { display: flex; align-items: center; gap: 8px; color: var(--mid); font-size: 14px; }
   .add button { grid-column: 1 / -1; }
 </style>
@@ -93,9 +93,11 @@
     <input type="date" id="occDate" required>
     <label><input type="checkbox" id="occYearly" checked> Every year</label>
     <input type="text" id="occText" maxlength="120" placeholder="Happy birthday, Phúc 🥳 🎁" autocomplete="off" required>
+    <input type="url" id="occVideo" maxlength="200" placeholder="YouTube link (optional)" autocomplete="off">
     <button type="submit">Add</button>
   </form>
-  <p class="note">On that day the line above the clock shows this instead of the greeting.</p>
+  <p class="note">On that day the line above the clock shows this instead of the greeting, and a Play card
+    plays the YouTube link (a birthday without one plays a Happy Birthday song).</p>
 </div>
 
 <h2>Photos</h2>
@@ -157,7 +159,9 @@
       when.textContent = o.date.length === 5 ? o.date.replace('-', '/') + ' ↻' : o.date;
       const what = document.createElement('span');
       what.className = 'what';
-      what.textContent = o.text;
+      // ▶ marks an occasion with its own video.
+      what.textContent = o.video ? o.text + '  ▶' : o.text;
+      if (o.video) what.title = 'youtu.be/' + o.video;
       const del = document.createElement('button');
       del.className = 'ghost';
       del.textContent = 'Remove';
@@ -219,8 +223,11 @@
     // Counted in characters as the TV counts them: an emoji is one, not two.
     if ([...text].length > 48) { say('At most 48 characters', true); return; }
     const date = $('occYearly').checked ? d.slice(5) : d;
+    const video = $('occVideo').value.trim();
+    const entry = video ? { date, text, video } : { date, text };
     $('occText').value = '';
-    saveOccasions(occasions.concat([{ date, text }]));
+    $('occVideo').value = '';
+    saveOccasions(occasions.concat([entry]));
   });
 
   for (const k of ['gallery', 'btc', 'weather', 'now_playing', 'holidays']) {

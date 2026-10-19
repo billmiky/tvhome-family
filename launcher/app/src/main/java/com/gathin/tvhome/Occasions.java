@@ -39,16 +39,28 @@ final class Occasions {
             {2036, 1, 28}, {2037, 2, 15}, {2038, 2, 4}, {2039, 1, 24}, {2040, 2, 12},
     };
 
-    /** One owner's occasion: every year (year 0) or on one day only. */
+    /** Songs searched on YouTube when an occasion has no video of its own. */
+    static final String BIRTHDAY_SONG = "Happy Birthday song";
+    static final String CHRISTMAS_SONG = "Merry Christmas song";
+    static final String NEW_YEAR_SONG = "ABBA Happy New Year";
+    static final String TET_SONG = "Ngày Tết quê em";
+
+    /** One owner's occasion: every year (year 0) or on one day only, with an optional YouTube video id. */
     static final class Entry {
         final int year, month, day;
         final String text;
+        final String video;
 
         Entry(int year, int month, int day, String text) {
+            this(year, month, day, text, "");
+        }
+
+        Entry(int year, int month, int day, String text, String video) {
             this.year = year;
             this.month = month;
             this.day = day;
             this.text = text;
+            this.video = video == null ? "" : video;
         }
 
         /** "MM-DD" or "YYYY-MM-DD", as written in the config. */
@@ -81,7 +93,7 @@ final class Occasions {
                 break;
             }
             JSONObject o = a.optJSONObject(i);
-            Entry e = o == null ? null : entry(o.optString("date", ""), o.optString("text", ""));
+            Entry e = o == null ? null : entry(o.optString("date", ""), o.optString("text", ""), o.optString("video", ""));
             if (e == null) {
                 if (skipped != null) skipped.add("occasion " + (i + 1) + " needs a date (MM-DD or YYYY-MM-DD) and a text");
                 continue;
@@ -91,7 +103,16 @@ final class Occasions {
         return out;
     }
 
-    /** One validated entry, or null: a real calendar date and 1 to {@link #MAX_TEXT} characters of text. */
+    /**
+     * One validated entry, or null: a real calendar date and 1 to {@link #MAX_TEXT} characters of text. A
+     * video that isn't a YouTube id or link is dropped (the entry stays, without it).
+     */
+    static Entry entry(String date, String text, String video) {
+        Entry e = entry(date, text);
+        return e == null ? null : new Entry(e.year, e.month, e.day, e.text, YouTube.videoId(video));
+    }
+
+    /** One validated entry without a video, or null. */
     static Entry entry(String date, String text) {
         String t = clean(text);
         if (t.isEmpty()) return null;
@@ -141,7 +162,9 @@ final class Occasions {
         JSONArray a = new JSONArray();
         for (Entry e : entries) {
             try {
-                a.put(new JSONObject().put("date", e.date()).put("text", e.text));
+                JSONObject o = new JSONObject().put("date", e.date()).put("text", e.text);
+                if (!e.video.isEmpty()) o.put("video", e.video);
+                a.put(o);
             } catch (Exception ignored) {
                 // put() only throws for non-finite numbers
             }
@@ -166,6 +189,47 @@ final class Occasions {
             else if ((m == 12 && d == 31) || (m == 1 && d == 1)) found.add(NEW_YEAR);
         }
         return String.join(" · ", found);
+    }
+
+    /** What the Play card on an occasion day plays: a video id, or a search when there is none. */
+    static final class Play {
+        /** The card's second line: the song, or the occasion. */
+        final String song;
+        final String videoId;
+        final String search;
+
+        Play(String song, String videoId, String search) {
+            this.song = song;
+            this.videoId = videoId;
+            this.search = search;
+        }
+    }
+
+    /**
+     * The Play card for {@code date}, following the same precedence as {@link #on}: the first of the owner's
+     * occasions that day, else the built-in holiday (videos from {@code christmas}, {@code newYear},
+     * {@code tet} when they are YouTube ids or links); null on an ordinary day.
+     */
+    static Play play(LocalDate date, List<Entry> owner, boolean holidays, String christmas, String newYear, String tet) {
+        for (Entry e : owner) {
+            if (!matches(e, date)) continue;
+            boolean birthday = YouTube.isBirthday(e.text);
+            String plain = YouTube.withoutEmoji(e.text);
+            if (!e.video.isEmpty()) return new Play(birthday ? BIRTHDAY_SONG : plain, e.video, "");
+            if (birthday) return new Play(BIRTHDAY_SONG, "", BIRTHDAY_SONG);
+            if (!plain.isEmpty()) return new Play(plain, "", plain);
+        }
+        if (!holidays) return null;
+        int m = date.getMonthValue(), d = date.getDayOfMonth();
+        if (m == 12 && (d == 24 || d == 25)) return holiday(CHRISTMAS_SONG, christmas);
+        if (isTet(date)) return holiday(TET_SONG, tet);
+        if ((m == 12 && d == 31) || (m == 1 && d == 1)) return holiday(NEW_YEAR_SONG, newYear);
+        return null;
+    }
+
+    private static Play holiday(String song, String video) {
+        String id = YouTube.videoId(video);
+        return new Play(song, id, id.isEmpty() ? song : "");
     }
 
     static boolean matches(Entry e, LocalDate date) {

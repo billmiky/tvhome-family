@@ -176,6 +176,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean dockHidden;
     private Bitmap nowPlayingSource;
     private String nowPlayingPkg;
+    /** On an occasion day the card plays its song instead of showing Now playing; null on other days. */
+    private Occasions.Play todayPlay;
     private final Runnable nowPlayingRefresh = () -> NowPlaying.run(() -> {
         refreshNowPlaying();
         return null;
@@ -1022,7 +1024,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         else if (hour < 22) res = R.string.good_evening;
         else res = R.string.good_night;
         // An occasion (birthday, Tết…) takes the line for the day; the minute tick moves on at midnight.
-        String occasion = Occasions.on(java.time.LocalDate.now(), occasions, holidaysOn);
+        java.time.LocalDate today = java.time.LocalDate.now();
+        String occasion = Occasions.on(today, occasions, holidaysOn);
+        updateOccasionCard(config == null ? null : Occasions.play(today, occasions, holidaysOn,
+                config.christmasVideo, config.newYearVideo, config.tetVideo));
         if (!occasion.isEmpty()) greeting.setText(occasion);
         else greeting.setText(greetingName.isEmpty() ? getString(res) : getString(res) + ", " + greetingName);
         if (shamsi) shamsiDate.setText(Shamsi.today());
@@ -1517,15 +1522,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
         nowPlayingArt.setClipToOutline(true);
-        nowPlaying.setOnClickListener(v -> NowPlaying.run(() -> {
+        nowPlaying.setOnClickListener(v -> {
+            if (todayPlay != null) {
+                playOccasion(todayPlay);
+                return;
+            }
+            NowPlaying.run(() -> {
             MediaController c = shownSession;
             if (c == null) return null;
             PlaybackState st = c.getPlaybackState();
             if (st != null && NowPlaying.isActive(st.getState())) c.getTransportControls().pause();
             else c.getTransportControls().play();
             return null;
-        }, null));
+            }, null);
+        });
         nowPlaying.setOnLongClickListener(v -> {
+            if (todayPlay != null) return true;   // the occasion card has nothing to open
             NowPlaying.run(() -> {
                 openNowPlayingApp();
                 return null;
@@ -1540,6 +1552,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 focusTile(COLUMNS - 1);                      // back to the tile it is entered from
                 return true;
             }
+            if (todayPlay != null) return true;            // nothing to skip on the occasion card
             if (event.getRepeatCount() > 0) return true;   // one skip per press, not a run of them
             NowPlaying.run(() -> {
                 MediaController c = shownSession;
@@ -1558,7 +1571,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
-                if (nowPlayingHasSession) placeNowPlaying();
+                if (nowPlayingHasSession || todayPlay != null) placeNowPlaying();
             }
         });
     }
@@ -1642,7 +1655,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int pick = NowPlaying.choose(states, packages, getPackageName());
         shownSession = pick >= 0 ? watched.get(pick) : null;
         nowPlayingHasSession = shownSession != null;
-        if (nowPlayingHasSession) bindNowPlaying(shownSession, states[pick]);
+        if (nowPlayingHasSession && todayPlay == null) bindNowPlaying(shownSession, states[pick]);
         placeNowPlaying();
     }
 
@@ -1727,7 +1740,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private void placeNowPlaying() {
-        boolean want = nowPlayingOn && nowPlayingHasSession && NowPlaying.working() && !dockHidden
+        boolean want = (todayPlay != null || (nowPlayingOn && nowPlayingHasSession && NowPlaying.working())) && !dockHidden
                 && !grid.canScrollVertically(-1) && grid.getHeight() > 0;
         float top = 0;
         if (want) {
@@ -1767,6 +1780,86 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The card is reached only from Settings (Down) and the last dock tile (Up, onTileVerticalKey).
         btnWifi.setNextFocusDownId(R.id.grid);
         btnSettings.setNextFocusDownId(nowPlayingVisible ? R.id.nowPlaying : R.id.grid);
+    }
+
+    // ---- occasion Play card --------------------------------------------------------------------
+
+    /**
+     * On an occasion day the Now playing card becomes a Play card for the day's song; back to Now playing
+     * the day after. Same place, look and navigation, so nothing else changes.
+     */
+    private void updateOccasionCard(Occasions.Play play) {
+        boolean was = todayPlay != null;
+        String before = was ? todayPlay.song + "|" + todayPlay.videoId + "|" + todayPlay.search : "";
+        String after = play != null ? play.song + "|" + play.videoId + "|" + play.search : "";
+        todayPlay = play;
+        if (before.equals(after)) return;
+        if (play != null) {
+            GradientDrawable festive = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[] {0xFFE53935, 0xFFFFB300});
+            festive.setCornerRadius(9 * density);
+            nowPlayingArt.setBackground(festive);
+            nowPlayingArt.setImageResource(R.drawable.ic_play);
+            nowPlayingArt.setImageTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+            nowPlayingArt.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            int pad = (int) (11 * density);
+            nowPlayingArt.setPadding(pad, pad, pad, pad);
+            nowPlayingTitle.setText(R.string.occasion_play);
+            nowPlayingSubtitle.setText(play.song);
+            nowPlayingSubtitle.setVisibility(View.VISIBLE);
+            nowPlayingState.setVisibility(View.GONE);
+            nowPlaying.setContentDescription(getString(R.string.occasion_play_description, play.song));
+        } else {
+            // Back to Now playing: its artwork and state icon return with the next session update.
+            nowPlayingArt.setBackground(null);
+            nowPlayingArt.setImageTintList(null);
+            nowPlayingArt.setImageDrawable(null);
+            nowPlayingArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            nowPlayingArt.setPadding(0, 0, 0, 0);
+            nowPlayingState.setVisibility(View.VISIBLE);
+            nowPlaying.setContentDescription(getString(R.string.now_playing_description));
+            nowPlayingSource = null;
+            nowPlayingPkg = null;
+            if (nowPlayingHasSession && shownSession != null) {
+                PlaybackState st = shownSession.getPlaybackState();
+                bindNowPlaying(shownSession, st != null ? st.getState() : NowPlaying.STATE_NONE);
+            }
+        }
+        placeNowPlaying();
+    }
+
+    private static final String YOUTUBE_TV = "com.google.android.youtube.tv";
+    private static final String[] SMART_TUBE = {"com.teamsmart.videomanager.tv", "com.liskovsoft.videomanager"};
+
+    /**
+     * Plays the day's song: a video in YouTube for Android TV (else SmartTube, else whatever handles
+     * YouTube links), or a search there when the occasion has no video.
+     */
+    private void playOccasion(Occasions.Play p) {
+        java.util.List<Intent> tries = new java.util.ArrayList<>();
+        if (!p.videoId.isEmpty()) {
+            Uri uri = Uri.parse("https://www.youtube.com/watch?v=" + p.videoId);
+            tries.add(new Intent(Intent.ACTION_VIEW, uri).setPackage(YOUTUBE_TV));
+            for (String pkg : SMART_TUBE) tries.add(new Intent(Intent.ACTION_VIEW, uri).setPackage(pkg));
+            tries.add(new Intent(Intent.ACTION_VIEW, uri));
+        } else {
+            // YouTube for Android TV answers the system search intent (the remote's voice search uses it).
+            tries.add(new Intent(Intent.ACTION_SEARCH).setPackage(YOUTUBE_TV).putExtra(android.app.SearchManager.QUERY, p.search));
+            Uri results = Uri.parse("https://www.youtube.com/results?search_query=" + Uri.encode(p.search));
+            tries.add(new Intent(Intent.ACTION_VIEW, results).setPackage(YOUTUBE_TV));
+            for (String pkg : SMART_TUBE) tries.add(new Intent(Intent.ACTION_VIEW, results).setPackage(pkg));
+            tries.add(new Intent(Intent.ACTION_VIEW, results));
+        }
+        for (Intent i : tries) {
+            if (i.resolveActivity(getPackageManager()) == null) continue;
+            try {
+                startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return;
+            } catch (ActivityNotFoundException | SecurityException e) {
+                // try the next app
+            }
+        }
+        Toast.makeText(this, R.string.occasion_play_failed, Toast.LENGTH_SHORT).show();
     }
 
     /** Hold OK on the card: the app's own player screen, or failing that its launcher entry. */
