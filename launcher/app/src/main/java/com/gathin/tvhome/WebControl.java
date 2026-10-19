@@ -15,6 +15,7 @@ import android.util.Log;
 import android.util.LruCache;
 import android.util.Size;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
@@ -29,6 +30,8 @@ import java.net.Socket;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -218,6 +221,9 @@ final class WebControl {
             case "POST /api/settings":
                 settings(ctx, req, in, out);
                 break;
+            case "POST /api/occasions":
+                occasions(ctx, req, in, out);
+                break;
             case "POST /api/photo": {
                 Remote r = remote;
                 String dir = req.query.get("dir");
@@ -254,6 +260,8 @@ final class WebControl {
                 .append(",\"now_playing\":").append(p.getBoolean(MainActivity.PREF_NOW_PLAYING, cfg.nowPlaying))
                 .append(",\"greeting\":").append(WebHttp.json(p.getString(MainActivity.PREF_GREETING, cfg.greetingName)))
                 .append(",\"weather_location\":").append(WebHttp.json(p.getString(MainActivity.PREF_WEATHER_LOCATION, cfg.weatherLocation)))
+                .append(",\"holidays\":").append(p.getBoolean(MainActivity.PREF_HOLIDAYS, cfg.holidays))
+                .append(",\"occasions\":").append(Occasions.toJson(Occasions.parse(p.getString(MainActivity.PREF_OCCASIONS, cfg.occasions), null)))
                 .append(",\"home\":").append(remote != null)
                 .append(",\"photos\":[");
         if (Build.VERSION.SDK_INT >= 29) {
@@ -295,11 +303,51 @@ final class WebControl {
         putBoolean(e, o, "btc", MainActivity.PREF_BTC);
         putBoolean(e, o, "weather", MainActivity.PREF_WEATHER);
         putBoolean(e, o, "now_playing", MainActivity.PREF_NOW_PLAYING);
+        putBoolean(e, o, "holidays", MainActivity.PREF_HOLIDAYS);
         if (o.has("greeting")) e.putString(MainActivity.PREF_GREETING, WebHttp.cleanText(o.optString("greeting"), 40));
         if (o.has("weather_location")) {
             e.putString(MainActivity.PREF_WEATHER_LOCATION, WebHttp.cleanText(o.optString("weather_location"), 80));
         }
         e.apply();
+        Remote r = remote;
+        if (r != null) r.settingsChanged();
+        sendJson(out, 200, state(ctx));
+    }
+
+    /**
+     * The whole list of the owner's occasions, {"occasions": [{"date": "MM-DD" or "YYYY-MM-DD", "text": "…"}]},
+     * replacing the previous one. Every entry must validate; a bad one rejects the request rather than
+     * being dropped quietly.
+     */
+    private static void occasions(Context ctx, WebHttp.Request req, InputStream in, OutputStream out) throws Exception {
+        long length = req.contentLength();
+        if (length < 0 || length > MAX_JSON) {
+            sendError(out, 413, "Occasions are at most " + MAX_JSON + " bytes");
+            return;
+        }
+        JSONArray list;
+        try {
+            list = new JSONObject(new String(readBody(in, (int) length), StandardCharsets.UTF_8)).getJSONArray("occasions");
+        } catch (Exception e) {
+            sendError(out, 400, "Not JSON with an occasions list");
+            return;
+        }
+        if (list.length() > Occasions.MAX_ENTRIES) {
+            sendError(out, 400, "At most " + Occasions.MAX_ENTRIES + " occasions");
+            return;
+        }
+        List<Occasions.Entry> entries = new ArrayList<>();
+        for (int i = 0; i < list.length(); i++) {
+            JSONObject o = list.optJSONObject(i);
+            Occasions.Entry e = o == null ? null : Occasions.entry(o.optString("date", ""), o.optString("text", ""));
+            if (e == null) {
+                sendError(out, 400, "Occasion " + (i + 1) + " needs a real date and a text");
+                return;
+            }
+            entries.add(e);
+        }
+        ctx.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE).edit()
+                .putString(MainActivity.PREF_OCCASIONS, Occasions.toJson(entries)).apply();
         Remote r = remote;
         if (r != null) r.settingsChanged();
         sendJson(out, 200, state(ctx));

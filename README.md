@@ -68,6 +68,7 @@ Rather not build? `CHANNEL=official` installs the signed release APK instead, an
 - **One floating glass highlight** that springs from tile to tile. The focused tile lifts and shows its name.
 - **Three frosted buttons**: Inputs (HDMI ports, AV, Live TV), Wi-Fi or Ethernet with the network name, Settings.
 - **A greeting, a thin clock and the date** in [Outfit](https://fonts.google.com/specimen/Outfit), and a matching Clock screensaver.
+  On birthdays and other days you set (`occasions`), and at Christmas, New Year and Tết, the greeting says so instead.
 - **Now playing**: a card above the dock for music playing in the background, with play/pause and skip on the remote.
 - **Gallery**, off by default: your own photos from `Pictures/Launcher` on the TV as the background, a random one every five minutes.
 - **Themes** that change colours, wallpaper, dock and columns without a rebuild, and **module cards** that let other apps plug a tile in, only with your say-so.
@@ -213,7 +214,7 @@ module card prompts are not kept; the TV asks again.
 
 Hold OK on the network button: the menu shows a link like `http://192.168.1.13:8080/?k=123456` and the
 same link as a QR code. Open it on a phone on the same Wi-Fi to switch Gallery, Bitcoin price, Weather
-and Now playing, set the greeting name and the weather place, step through the photos, and add or delete
+and Now playing, set the greeting name and the weather place, add or remove occasions, step through the photos, and add or delete
 Gallery photos (they go to Pictures/Launcher; photos copied there from a computer can't be deleted from
 the phone).
 

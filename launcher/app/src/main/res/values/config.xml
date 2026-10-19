@@ -104,4 +104,15 @@
          Only answers addresses on the local network. false: no server at all. -->
     <bool name="web_control">true</bool>
     <integer name="web_port">8080</integer>
+
+    <!-- Occasions: days the greeting line (above the clock) says something else, as a JSON array of
+         {"date": "MM-DD" every year or "YYYY-MM-DD" once, "text": "…"}, e.g.
+         [{\"date\": \"03-14\", \"text\": \"Happy birthday, bé An\"}] (Android string resources drop
+         unescaped double quotes, hence the backslashes). Up to 50, text up to 48 characters. In a theme's
+         config.json write the plain array instead. The phone page can also edit them. -->
+    <string name="occasions" translatable="false">[]</string>
+    <!-- Built-in holidays when no occasion of yours is set that day: Christmas, 24 and 25 December (MERRY
+         CHRISTMAS 🎄 🎅); New Year, 31 December and 1 January (HAPPY NEW YEAR 🍾 🎉); Tết, three days before
+         mùng 1 to five days after (HAPPY NEW YEAR 🧧 🎉). -->
+    <bool name="holidays">true</bool>
 </resources>

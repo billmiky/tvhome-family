@@ -52,6 +52,7 @@ import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -217,6 +218,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     static final String PREF_NOW_PLAYING = "now_playing";
     static final String PREF_GREETING = "greeting_name";
     static final String PREF_WEATHER_LOCATION = "weather_location";
+    /** The owner's occasions as a JSON array (replaces the config's list once set) and the built-in holidays. */
+    static final String PREF_OCCASIONS = "occasions";
+    static final String PREF_HOLIDAYS = "holidays";
+    /** Occasions for the greeting line (Occasions); parsed when the settings are read. */
+    private List<Occasions.Entry> occasions = Collections.emptyList();
+    private boolean holidaysOn = true;
     /** config.xml with the theme's config.json over it, for the defaults behind those overrides. */
     private Config config;
     /** Weather next to the date: on from the weather key, or from the Settings menu, which wins once used. */
@@ -715,6 +722,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         nowPlayingOn = p.getBoolean(PREF_NOW_PLAYING, config.nowPlaying);
         greetingName = p.getString(PREF_GREETING, config.greetingName);
         weatherLocation = p.getString(PREF_WEATHER_LOCATION, config.weatherLocation);
+        holidaysOn = p.getBoolean(PREF_HOLIDAYS, config.holidays);
+        List<String> skipped = new ArrayList<>();
+        occasions = Occasions.parse(p.getString(PREF_OCCASIONS, config.occasions), skipped);
+        for (String why : skipped) Log.w("TvHomeOccasions", why);
     }
 
     /** A change from the phone page while Home is in front: stop what depends on it and start it again. */
@@ -1010,7 +1021,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         else if (hour < 17) res = R.string.good_afternoon;
         else if (hour < 22) res = R.string.good_evening;
         else res = R.string.good_night;
-        greeting.setText(greetingName.isEmpty() ? getString(res) : getString(res) + ", " + greetingName);
+        // An occasion (birthday, Tết…) takes the line for the day; the minute tick moves on at midnight.
+        String occasion = Occasions.on(java.time.LocalDate.now(), occasions, holidaysOn);
+        if (!occasion.isEmpty()) greeting.setText(occasion);
+        else greeting.setText(greetingName.isEmpty() ? getString(res) : getString(res) + ", " + greetingName);
         if (shamsi) shamsiDate.setText(Shamsi.today());
     }
 

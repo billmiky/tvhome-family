@@ -57,6 +57,19 @@
   #status.show { opacity: 1; }
   #status.bad { background: var(--bad); color: #fff; }
   input[type=file] { display: none; }
+  .occ { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  .occ:first-child { border-top: 0; }
+  .occ .when { color: var(--mid); font-size: 13px; min-width: 64px; font-variant-numeric: tabular-nums; }
+  .occ .what { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .occ button { padding: 4px 11px; font-size: 13px; }
+  .add { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 14px 16px; border-top: 1px solid var(--line); }
+  .add input[type=date], .add input[type=text] {
+    min-width: 0; background: #0b0c0f; color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 11px; font: inherit; color-scheme: dark;
+  }
+  .add input[type=text] { grid-column: 1 / -1; }
+  .add label { display: flex; align-items: center; gap: 8px; color: var(--mid); font-size: 14px; }
+  .add button { grid-column: 1 / -1; }
 </style>
 </head>
 <body>
@@ -68,8 +81,21 @@
   <div class="row"><label for="btc">Bitcoin price</label><span class="switch"><input type="checkbox" id="btc"><span></span></span></div>
   <div class="row"><label for="weather">Weather</label><span class="switch"><input type="checkbox" id="weather"><span></span></span></div>
   <div class="row"><label for="now_playing">Now playing</label><span class="switch"><input type="checkbox" id="now_playing"><span></span></span></div>
+  <div class="row"><label for="holidays">Built-in holidays (Tết, New Year)</label><span class="switch"><input type="checkbox" id="holidays"><span></span></span></div>
   <div class="row"><label for="greeting">Greeting name</label><input type="text" id="greeting" maxlength="40" placeholder="Mr. Trịnh" autocomplete="off"></div>
   <div class="row"><label for="weather_location">Weather place</label><input type="text" id="weather_location" maxlength="80" placeholder="Singapore or 1.29,103.85" autocomplete="off"></div>
+</div>
+
+<h2>Occasions</h2>
+<div class="card">
+  <div id="occList"></div>
+  <form class="add" id="occForm">
+    <input type="date" id="occDate" required>
+    <label><input type="checkbox" id="occYearly" checked> Every year</label>
+    <input type="text" id="occText" maxlength="120" placeholder="Happy birthday, Phúc 🥳 🎁" autocomplete="off" required>
+    <button type="submit">Add</button>
+  </form>
+  <p class="note">On that day the line above the clock shows this instead of the greeting.</p>
 </div>
 
 <h2>Photos</h2>
@@ -93,6 +119,7 @@
   const H = { 'X-Requested-With': 'tvhome' };
   const $ = id => document.getElementById(id);
   let timer;
+  let occasions = [];
 
   function say(text, bad) {
     const s = $('status');
@@ -111,7 +138,33 @@
   }
 
   function render(s) {
-    for (const k of ['gallery', 'btc', 'weather', 'now_playing']) $(k).checked = !!s[k];
+    for (const k of ['gallery', 'btc', 'weather', 'now_playing', 'holidays']) $(k).checked = !!s[k];
+    occasions = s.occasions || [];
+    const list = $('occList');
+    list.textContent = '';
+    if (!occasions.length) {
+      const empty = document.createElement('div');
+      empty.className = 'occ';
+      empty.innerHTML = '<span class="what" style="color:var(--mid)">No occasions yet.</span>';
+      list.appendChild(empty);
+    }
+    occasions.forEach((o, i) => {
+      const row = document.createElement('div');
+      row.className = 'occ';
+      const when = document.createElement('span');
+      when.className = 'when';
+      // "03-14" every year, "2027-03-14" once.
+      when.textContent = o.date.length === 5 ? o.date.replace('-', '/') + ' ↻' : o.date;
+      const what = document.createElement('span');
+      what.className = 'what';
+      what.textContent = o.text;
+      const del = document.createElement('button');
+      del.className = 'ghost';
+      del.textContent = 'Remove';
+      del.addEventListener('click', () => saveOccasions(occasions.filter((_, j) => j !== i)));
+      row.append(when, what, del);
+      list.appendChild(row);
+    });
     for (const k of ['greeting', 'weather_location']) if (document.activeElement !== $(k)) $(k).value = s[k] || '';
     $('prev').disabled = $('next').disabled = !s.home;
     const grid = $('grid');
@@ -151,7 +204,26 @@
     catch (e) { say(e.message, true); load(); }
   }
 
-  for (const k of ['gallery', 'btc', 'weather', 'now_playing']) {
+  async function saveOccasions(next) {
+    try {
+      render(await call('POST', '/api/occasions', JSON.stringify({ occasions: next }), { 'Content-Type': 'application/json' }));
+      say('Saved');
+    } catch (e) { say(e.message, true); load(); }
+  }
+
+  $('occForm').addEventListener('submit', ev => {
+    ev.preventDefault();
+    const d = $('occDate').value;           // YYYY-MM-DD
+    const text = $('occText').value.trim();
+    if (!d || !text) return;
+    // Counted in characters as the TV counts them: an emoji is one, not two.
+    if ([...text].length > 48) { say('At most 48 characters', true); return; }
+    const date = $('occYearly').checked ? d.slice(5) : d;
+    $('occText').value = '';
+    saveOccasions(occasions.concat([{ date, text }]));
+  });
+
+  for (const k of ['gallery', 'btc', 'weather', 'now_playing', 'holidays']) {
     $(k).addEventListener('change', () => save({ [k]: $(k).checked }));
   }
   for (const k of ['greeting', 'weather_location']) {
