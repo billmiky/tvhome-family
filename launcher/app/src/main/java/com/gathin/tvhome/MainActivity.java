@@ -744,7 +744,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             heroName.setTranslationX(0f);
             heroName.animate().alpha(1f).setDuration(260).start();
             setAmbient(color);
-            ambient.animate().alpha(1f).setDuration(600).start();
+            ambient.animate().alpha(ambientAlpha()).setDuration(600).start();
             heroShown = true;
         } else if (changed) {
             heroName.animate().alpha(0f).translationX(-12 * density).setDuration(120).withEndAction(() -> {
@@ -754,14 +754,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 heroName.animate().alpha(1f).translationX(0f).setDuration(200).start();
             }).start();
             if (color != ambientColor) {
-                ambient.animate().alpha(0.35f).setDuration(200).withEndAction(() -> {
+                ambient.animate().alpha(0.35f * ambientAlpha()).setDuration(200).withEndAction(() -> {
                     setAmbient(color);
-                    ambient.animate().alpha(1f).setDuration(500).start();
+                    ambient.animate().alpha(ambientAlpha()).setDuration(500).start();
                 }).start();
             }
         } else {
             heroName.setY(y);
         }
+    }
+
+    /** The app-coloured glow stays off over Gallery photos: tinting family photos red or blue looks wrong. */
+    private float ambientAlpha() {
+        return galleryOn ? 0f : 1f;
     }
 
     private void setAmbient(int color) {
@@ -1854,6 +1859,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         galleryRow.setOnClickListener(v -> {
             galleryOn = !galleryOn;
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_GALLERY, galleryOn).apply();
+            if (heroShown) ambient.animate().alpha(ambientAlpha()).setDuration(300).start();
             galleryStatus.setText(galleryState());
             if (galleryOn && !hasPhotoPermission()) {
                 popup.dismiss();
