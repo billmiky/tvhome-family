@@ -51,6 +51,9 @@
 
     <TextView
         android:id="@+id/name"
+        android:shadowColor="#B3000000"
+        android:shadowRadius="8"
+        android:shadowDy="1"
         android:layout_width="180dp"
         android:layout_height="22dp"
         android:layout_gravity="center_horizontal|top"

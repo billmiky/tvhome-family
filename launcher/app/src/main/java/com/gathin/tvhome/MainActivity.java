@@ -430,11 +430,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                // The left end is Inputs, or Wi-Fi on a box without inputs.
-                return v.getId() == R.id.btnInputs
+                // The left end is Inputs, or Wi-Fi on a box without inputs; there Left steps back a photo.
+                boolean end = v.getId() == R.id.btnInputs
                         || (v.getId() == R.id.btnWifi && btnInputs.getVisibility() != View.VISIBLE);
+                if (end) stepPhoto(true);
+                return end;
             }
-            return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == R.id.btnSettings;
+            boolean end = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == R.id.btnSettings;
+            if (end) stepPhoto(false);
+            return end;
         };
         btnInputs.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
@@ -802,11 +806,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int target;
         // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
         // escapes up into the top bar. Mid-row moves fall through to the default focus search.
+        // At a row's ends, with Gallery on, the key steps through the photos instead.
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-            return position % COLUMNS == 0;
+            if (position % COLUMNS != 0) return false;
+            stepPhoto(true);
+            return true;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            return position % COLUMNS == COLUMNS - 1 || position == count - 1;
+            if (position % COLUMNS != COLUMNS - 1 && position != count - 1) return false;
+            stepPhoto(false);
+            return true;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             if (position < COLUMNS) {
@@ -1669,6 +1678,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Lists the folder when due, picks the next photo and decodes it on the gallery thread. */
     private void nextPhoto() {
+        nextPhoto(false);
+    }
+
+    /**
+     * Left on the leftmost tile or button, Right on the rightmost: the photo before or after this one. Only with
+     * Gallery showing; the five-minute timer starts again from this photo. False when there is no gallery.
+     */
+    private boolean stepPhoto(boolean back) {
+        if (!galleryOn || galleryLayer == null || !Gallery.working()) return false;
+        handler.removeCallbacks(galleryTick);
+        nextPhoto(back);
+        handler.postDelayed(galleryTick, Gallery.INTERVAL_MS);
+        return true;
+    }
+
+    private void nextPhoto(final boolean back) {
         if (galleryLoading || !Gallery.working()) return;
         galleryLoading = true;
         final Context app = getApplicationContext();
@@ -1683,7 +1708,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 }
                 // A photo that can't be read is skipped; give up after a few so a folder of bad files can't spin.
                 for (int tries = 0; tries < 5; tries++) {
-                    String item = galleryBag.next(galleryPhotos);
+                    String item = back ? galleryBag.previous(galleryPhotos) : galleryBag.next(galleryPhotos);
                     if (item == null) return null;
                     Bitmap b = Gallery.decode(app, item, w, h);
                     if (b != null) return b;

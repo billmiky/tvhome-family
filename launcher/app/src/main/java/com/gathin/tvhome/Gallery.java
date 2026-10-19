@@ -82,20 +82,48 @@ final class Gallery {
         return listedAt <= 0 || listedAt > now || now - listedAt >= RELIST_MS;
     }
 
-    /** Every photo once, in random order, then a new round; the last of a round never opens the next. */
+    /**
+     * Every photo once, in random order, then a new round; the last of a round never opens the next. Keeps the
+     * last {@link #HISTORY} photos shown, so the remote can step back through them and forward again.
+     */
     static final class ShuffleBag {
+        static final int HISTORY = 50;
         private final Random random;
         private final List<String> left = new ArrayList<>();
+        private final List<String> history = new ArrayList<>();
+        /** Index in {@link #history} of the photo on screen; below the end after stepping back. */
+        private int pos = -1;
         private String last;
 
         ShuffleBag(Random random) {
             this.random = random;
         }
 
-        /** The next photo out of {@code all}, or null when there are none. Photos removed meanwhile are skipped. */
+        /** The photo before the one on screen, or null at the start of the history. Removed photos are skipped. */
+        String previous(List<String> all) {
+            Set<String> present = new HashSet<>(all);
+            for (int i = pos - 1; i >= 0; i--) {
+                if (present.contains(history.get(i))) {
+                    pos = i;
+                    return history.get(i);
+                }
+            }
+            return null;
+        }
+
+        /**
+         * The next photo out of {@code all}, or null when there are none: forward through the history after
+         * stepping back, otherwise a new one from the bag. Photos removed meanwhile are skipped.
+         */
         String next(List<String> all) {
             if (all.isEmpty()) return null;
             Set<String> present = new HashSet<>(all);
+            for (int i = pos + 1; i < history.size(); i++) {
+                if (present.contains(history.get(i))) {
+                    pos = i;
+                    return history.get(i);
+                }
+            }
             left.retainAll(present);
             if (left.isEmpty()) {
                 left.addAll(all);
@@ -105,6 +133,9 @@ final class Gallery {
                 }
             }
             last = left.remove(0);
+            history.add(last);
+            if (history.size() > HISTORY) history.remove(0);
+            pos = history.size() - 1;
             return last;
         }
     }

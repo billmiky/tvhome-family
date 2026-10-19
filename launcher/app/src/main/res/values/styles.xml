@@ -21,6 +21,10 @@
         <item name="android:letterSpacing">0.01</item>
         <item name="android:drawablePadding">9dp</item>
         <item name="android:drawableTint">@drawable/pill_text</item>
+        <!-- Soft shadow so the label reads on bright Gallery photos. -->
+        <item name="android:shadowColor">#80000000</item>
+        <item name="android:shadowRadius">4</item>
+        <item name="android:shadowDy">1</item>
         <item name="android:focusable">true</item>
         <item name="android:clickable">true</item>
     </style>

@@ -85,4 +85,18 @@ public class GalleryTest {
         assertTrue(Gallery.relistDue(now - Gallery.RELIST_MS, now));
         assertTrue(Gallery.relistDue(now + 5, now));
     }
+
+    @Test
+    public void stepsBackAndForwardThroughHistory() {
+        Gallery.ShuffleBag bag = new Gallery.ShuffleBag(new java.util.Random(1));
+        java.util.List<String> all = Arrays.asList("a", "b", "c", "d");
+        String first = bag.next(all), second = bag.next(all), third = bag.next(all);
+        assertEquals(second, bag.previous(all));
+        assertEquals(first, bag.previous(all));
+        assertNull(bag.previous(all));
+        assertEquals(second, bag.next(all));
+        assertEquals(third, bag.next(all));
+        String fourth = bag.next(all);
+        assertFalse(Arrays.asList(first, second, third).contains(fourth));
+    }
 }
