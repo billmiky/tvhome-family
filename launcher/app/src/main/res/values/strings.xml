@@ -51,6 +51,17 @@
     <string name="settings_menu_off">Off</string>
     <string name="settings_menu_on">On</string>
     <string name="settings_menu_btc">Bitcoin price</string>
+    <string name="net_menu_address">IP address</string>
+    <string name="net_menu_offline">Not connected</string>
+    <string name="net_menu_adb">ADB</string>
+    <string name="net_menu_wireless_port">Wireless debugging port</string>
+    <string name="net_menu_wireless">Wireless debugging</string>
+    <string name="net_menu_checking">Checking…</string>
+    <string name="net_menu_not_found">Not found</string>
+    <string name="net_menu_no_permission">Needs the install script\'s grant</string>
+    <string name="net_menu_pair">Pair new device…</string>
+    <string name="net_menu_pair_hint">Developer options → Wireless debugging shows the code</string>
+    <string name="net_menu_wifi_settings">Wi-Fi settings</string>
     <string name="settings_menu_gallery">Gallery</string>
     <string name="gallery_empty">On · no photos in Pictures/Launcher</string>
     <string name="gallery_no_permission">On · allow access to photos</string>

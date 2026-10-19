@@ -33,6 +33,10 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.net.LinkAddress;
+import android.net.LinkProperties;
+import android.net.nsd.NsdManager;
+import android.net.nsd.NsdServiceInfo;
 import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
@@ -398,7 +402,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs.setOnClickListener(v -> showInputs());
         btnWifi.setOnClickListener(v -> openNetworkPill());
         btnWifi.setOnLongClickListener(v -> {
-            open(new Intent(Settings.ACTION_WIFI_SETTINGS));
+            showNetworkMenu();
             return true;
         });
         btnSettings.setOnClickListener(v -> open(new Intent(Settings.ACTION_SETTINGS)));
@@ -1884,6 +1888,173 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         dropIn(popup, panel, anchor, Gravity.END);
         rows.getChildAt(0).requestFocus();
+    }
+
+    // ---- network menu (hold OK on the network pill) ---------------------------------------------
+
+    /**
+     * The TV's address and its ADB endpoints, so a computer can connect without digging through
+     * Developer options: classic ADB on 5555 when it is open, and the Wireless debugging port, which
+     * changes every time and is found the way `adb mdns services` finds it. The pairing code itself
+     * is only ever shown by the system's own pairing screen; "Pair new device" opens Developer options.
+     */
+    private void showNetworkMenu() {
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (380 * density));
+        final String ip = ipv4Address();
+
+        addMenuRow(rows, getString(R.string.net_menu_address), ip != null ? ip : getString(R.string.net_menu_offline));
+        final TextView adbStatus = addMenuRow(rows, getString(R.string.net_menu_adb), getString(R.string.net_menu_checking))
+                .findViewById(R.id.status);
+        final TextView wirelessStatus = addMenuRow(rows, getString(R.string.net_menu_wireless_port), "")
+                .findViewById(R.id.status);
+        View toggleRow = addMenuRow(rows, getString(R.string.net_menu_wireless), "");
+        final TextView toggleStatus = toggleRow.findViewById(R.id.status);
+        addMenuRow(rows, getString(R.string.net_menu_pair), getString(R.string.net_menu_pair_hint))
+                .setOnClickListener(v -> {
+                    popup.dismiss();
+                    open(new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS));
+                });
+        addMenuRow(rows, getString(R.string.net_menu_wifi_settings), "").setOnClickListener(v -> {
+            popup.dismiss();
+            open(new Intent(Settings.ACTION_WIFI_SETTINGS));
+        });
+
+        final NsdManager nsd = getSystemService(NsdManager.class);
+        final NsdManager.DiscoveryListener[] discovery = new NsdManager.DiscoveryListener[1];
+        final Runnable refreshWireless = () -> {
+            stopAdbDiscovery(nsd, discovery);
+            boolean on = Settings.Global.getInt(getContentResolver(), "adb_wifi_enabled", 0) == 1;
+            toggleStatus.setText(on ? R.string.settings_menu_on : R.string.settings_menu_off);
+            if (!on || ip == null) {
+                wirelessStatus.setText(R.string.settings_menu_off);
+                return;
+            }
+            wirelessStatus.setText(R.string.net_menu_checking);
+            discovery[0] = findAdbPort(nsd, ip, port -> {
+                if (popup.isShowing()) wirelessStatus.setText(ip + ":" + port);
+            });
+            // Nothing found within a few seconds: say so instead of "Checking…" forever.
+            handler.postDelayed(() -> {
+                if (popup.isShowing() && getString(R.string.net_menu_checking).contentEquals(wirelessStatus.getText())) {
+                    wirelessStatus.setText(R.string.net_menu_not_found);
+                }
+            }, 6000);
+        };
+        refreshWireless.run();
+        toggleRow.setOnClickListener(v -> {
+            boolean on = Settings.Global.getInt(getContentResolver(), "adb_wifi_enabled", 0) == 1;
+            try {
+                // Needs WRITE_SECURE_SETTINGS, which the install script grants over adb.
+                Settings.Global.putInt(getContentResolver(), "adb_wifi_enabled", on ? 0 : 1);
+            } catch (SecurityException e) {
+                toggleStatus.setText(R.string.net_menu_no_permission);
+                return;
+            }
+            // adbd needs a moment to start listening before it advertises the new port.
+            toggleStatus.setText(R.string.net_menu_checking);
+            handler.postDelayed(() -> {
+                if (popup.isShowing()) refreshWireless.run();
+            }, 1500);
+        });
+        popup.setOnDismissListener(() -> {
+            if (openPopup == popup) openPopup = null;
+            stopAdbDiscovery(nsd, discovery);
+        });
+
+        // Classic ADB (adb tcpip 5555) is open when something accepts a connection on that port.
+        Ticker.EXECUTOR.execute(() -> {
+            boolean open;
+            try (java.net.Socket sock = new java.net.Socket()) {
+                sock.connect(new java.net.InetSocketAddress("127.0.0.1", 5555), 400);
+                open = true;
+            } catch (Exception e) {
+                open = false;
+            }
+            final boolean tcp = open;
+            handler.post(() -> {
+                if (popup.isShowing()) adbStatus.setText(tcp && ip != null ? ip + ":5555" : getString(R.string.settings_menu_off));
+            });
+        });
+
+        dropIn(popup, panel, btnWifi, Gravity.END);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    /** The active network's IPv4 address, or null when offline. */
+    private String ipv4Address() {
+        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+        Network n = cm != null ? cm.getActiveNetwork() : null;
+        LinkProperties lp = n != null ? cm.getLinkProperties(n) : null;
+        if (lp == null) return null;
+        for (LinkAddress a : lp.getLinkAddresses()) {
+            if (a.getAddress() instanceof java.net.Inet4Address) return a.getAddress().getHostAddress();
+        }
+        return null;
+    }
+
+    interface PortFound {
+        void found(int port);
+    }
+
+    /** Browses _adb-tls-connect._tcp and reports the port of the service on this TV's own address. */
+    @SuppressWarnings("deprecation")   // resolveService: the replacement needs API 34, minSdk is 26
+    private NsdManager.DiscoveryListener findAdbPort(NsdManager nsd, String ip, PortFound callback) {
+        if (nsd == null) return null;
+        NsdManager.DiscoveryListener l = new NsdManager.DiscoveryListener() {
+            @Override
+            public void onServiceFound(NsdServiceInfo info) {
+                nsd.resolveService(info, new NsdManager.ResolveListener() {
+                    @Override
+                    public void onServiceResolved(NsdServiceInfo r) {
+                        if (r.getHost() != null && ip.equals(r.getHost().getHostAddress())) {
+                            handler.post(() -> callback.found(r.getPort()));
+                        }
+                    }
+
+                    @Override
+                    public void onResolveFailed(NsdServiceInfo r, int error) {
+                    }
+                });
+            }
+
+            @Override
+            public void onServiceLost(NsdServiceInfo info) {
+            }
+
+            @Override
+            public void onDiscoveryStarted(String type) {
+            }
+
+            @Override
+            public void onDiscoveryStopped(String type) {
+            }
+
+            @Override
+            public void onStartDiscoveryFailed(String type, int error) {
+            }
+
+            @Override
+            public void onStopDiscoveryFailed(String type, int error) {
+            }
+        };
+        try {
+            nsd.discoverServices("_adb-tls-connect._tcp", NsdManager.PROTOCOL_DNS_SD, l);
+        } catch (Exception e) {
+            return null;
+        }
+        return l;
+    }
+
+    private static void stopAdbDiscovery(NsdManager nsd, NsdManager.DiscoveryListener[] holder) {
+        if (nsd == null || holder[0] == null) return;
+        try {
+            nsd.stopServiceDiscovery(holder[0]);
+        } catch (Exception ignored) {
+            // Already stopped.
+        }
+        holder[0] = null;
     }
 
     private View addMenuRow(LinearLayout rows, String title, String status) {
