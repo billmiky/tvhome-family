@@ -27,13 +27,18 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         edge.setColor(0x1FFFFFFF);
     }
 
+    /** Space under the dock row, in dp; negative pulls the first grid row closer to it. */
+    static final int DOCK_BOTTOM_DP = -14;
+
     @Override
     public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent,
                                @NonNull RecyclerView.State state) {
         int pos = parent.getChildAdapterPosition(view);
         if (pos >= 0 && pos < dockSize) {
             outRect.top = (int) (6 * density);
-            outRect.bottom = (int) (12 * density);
+            // Negative: the dock shows no name labels (the top shelf names the app), so pull the next row
+            // up into that unused space; its tops then peek out under the dock.
+            outRect.bottom = (int) (DOCK_BOTTOM_DP * density);
         }
     }
 

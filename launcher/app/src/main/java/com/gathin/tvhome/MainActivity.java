@@ -361,9 +361,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Item height follows the tile size, which follows the column count (AppAdapter.tileWidthPx).
             int inner = (r - l) - grid.getPaddingLeft() - grid.getPaddingRight();
             int itemH = AppAdapter.itemHeightPx(AppAdapter.tileHeightPx(AppAdapter.tileWidthPx(inner, COLUMNS, density)), density);
-            int dockRow = itemH + (int) ((6 + 12) * density);   // item height plus DockDecoration offsets
+            int dockRow = itemH + (int) ((6 + DockDecoration.DOCK_BOTTOM_DP) * density);   // plus DockDecoration offsets
             int gridRows = itemH * rowsBelowDock;
-            int want = Math.max(0, h - dockRow - gridRows - (int) (8 * density));
+            // Leave the top of the next row peeking out at the bottom, so it's clear there are more apps.
+            int peek = rowsBelowDock == 0 ? (int) ((8 + 26) * density) : (int) (8 * density);
+            int want = Math.max(0, h - dockRow - gridRows - peek);
             if (grid.getPaddingTop() != want) {
                 grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
             }
