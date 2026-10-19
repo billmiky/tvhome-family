@@ -144,9 +144,11 @@ case "$OUT" in
 esac
 # Grants for self-update, best effort: "Install unknown apps" (many TVs have no screen for it) and
 # WRITE_SECURE_SETTINGS, which lets the launcher switch its accessibility services back on after updating.
+# Then the notification listener the Now playing card needs to see other apps' media sessions.
 printf '%s\n' \
   "appops set $PKG REQUEST_INSTALL_PACKAGES allow 2>/dev/null && echo install-permission-granted || echo install-permission-not-granted" \
   "pm grant $PKG android.permission.WRITE_SECURE_SETTINGS 2>/dev/null && echo secure-settings-granted || echo secure-settings-not-granted" \
+  "cmd notification allow_listener $PKG/$PKG.NowPlayingListener 2>/dev/null && echo now-playing-granted || echo now-playing-not-granted" \
   "pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>/dev/null; echo location-granted" \
   "cmd package compile -m speed -f com.gathin.tvhome" \
   "am start -W -n com.gathin.tvhome/.MainActivity | grep -E '^(Status|Error)'" \

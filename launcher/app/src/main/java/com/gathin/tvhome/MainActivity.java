@@ -1,7 +1,10 @@
 package com.gathin.tvhome;
 
 import android.app.Activity;
+import android.app.ActivityOptions;
 import android.app.Dialog;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -11,10 +14,17 @@ import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ChangedPackages;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.media.MediaMetadata;
+import android.media.session.MediaController;
+import android.media.session.MediaSessionManager;
+import android.media.session.PlaybackState;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
@@ -34,13 +44,13 @@ import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
-import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.Window;
 import android.view.animation.AnimationUtils;
 import android.view.animation.LayoutAnimationController;
@@ -61,6 +71,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashSet;
@@ -137,6 +148,46 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** The Inputs, Settings or Module cards dropdown while one is open, so onPause can close it. */
     private PopupWindow openPopup;
     private TextView btnSettings;
+    /** Now playing card (NowPlaying): the media session of an app playing in the background. */
+    private boolean nowPlayingOn;
+    private View nowPlaying;
+    private ImageView nowPlayingArt;
+    private ImageView nowPlayingState;
+    private TextView nowPlayingTitle;
+    private TextView nowPlayingSubtitle;
+    private MediaSessionManager sessions;
+    private ComponentName sessionListener;
+    private final List<MediaController> watched = new ArrayList<>();
+    private MediaController shownSession;
+    /** A session to show; the card is on screen when there is one, room for it, and the grid is at its top. */
+    private boolean nowPlayingHasSession;
+    private boolean nowPlayingVisible;
+    private Bitmap nowPlayingSource;
+    private String nowPlayingPkg;
+    private final Runnable nowPlayingRefresh = () -> NowPlaying.run(() -> {
+        refreshNowPlaying();
+        return null;
+    }, null);
+    private final MediaController.Callback sessionCallback = new MediaController.Callback() {
+        @Override
+        public void onPlaybackStateChanged(PlaybackState state) {
+            scheduleNowPlaying();
+        }
+
+        @Override
+        public void onMetadataChanged(MediaMetadata metadata) {
+            scheduleNowPlaying();
+        }
+
+        @Override
+        public void onSessionDestroyed() {
+            scheduleNowPlaying();
+        }
+    };
+    private final MediaSessionManager.OnActiveSessionsChangedListener sessionsChanged = list -> NowPlaying.run(() -> {
+        watch(list);
+        return null;
+    }, null);
     /** self_update (config.xml or a theme's config.json): off, manual or weekly. */
     private String selfUpdate;
     private Dialog updatePrompt;
@@ -356,6 +407,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
+        setUpNowPlaying(cfg.nowPlaying);
 
         // Hide the glass when focus leaves the tiles.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
@@ -430,6 +482,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         updateInputsButton();
         handler.postDelayed(minuteTick, MINUTE_MS);
         startTicker();
+        startNowPlaying();
         Updater.installListener = () -> handler.post(() -> {
             if (updatePrompt != null) updatePrompt.dismiss();
         });
@@ -529,6 +582,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         resumed = false;
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(btcTick);
+        stopNowPlaying();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
         if (updatePrompt != null) updatePrompt.dismiss();
@@ -1203,6 +1257,287 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             default:
                 return getString(R.string.card_state_new);
         }
+    }
+
+    // ---- Now playing ----------------------------------------------------------------------------
+
+    private void setUpNowPlaying(boolean on) {
+        nowPlayingOn = on;
+        nowPlaying = findViewById(R.id.nowPlaying);
+        nowPlayingArt = findViewById(R.id.nowPlayingArt);
+        nowPlayingState = findViewById(R.id.nowPlayingState);
+        nowPlayingTitle = findViewById(R.id.nowPlayingTitle);
+        nowPlayingSubtitle = findViewById(R.id.nowPlayingSubtitle);
+        sessionListener = new ComponentName(this, NowPlayingListener.class);
+        heroName.setEllipsize(TextUtils.TruncateAt.END);
+        nowPlaying.setContentDescription(getString(R.string.now_playing_description));
+        final float artRadius = 14 * density;
+        nowPlayingArt.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline outline) {
+                outline.setRoundRect(0, 0, v.getWidth(), v.getHeight(), artRadius);
+            }
+        });
+        nowPlayingArt.setClipToOutline(true);
+        nowPlaying.setOnClickListener(v -> NowPlaying.run(() -> {
+            MediaController c = shownSession;
+            if (c == null) return null;
+            PlaybackState st = c.getPlaybackState();
+            if (st != null && NowPlaying.isActive(st.getState())) c.getTransportControls().pause();
+            else c.getTransportControls().play();
+            return null;
+        }, null));
+        nowPlaying.setOnLongClickListener(v -> {
+            NowPlaying.run(() -> {
+                openNowPlayingApp();
+                return null;
+            }, null);
+            return true;
+        });
+        nowPlaying.setOnKeyListener((v, keyCode, event) -> {
+            boolean left = keyCode == KeyEvent.KEYCODE_DPAD_LEFT;
+            if (!left && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT && keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return false;
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                focusTile(lastFocused < COLUMNS ? lastFocused : COLUMNS - 1);
+                return true;
+            }
+            if (event.getRepeatCount() > 0) return true;   // one skip per press, not a run of them
+            NowPlaying.run(() -> {
+                MediaController c = shownSession;
+                if (c == null) return null;
+                if (left) c.getTransportControls().skipToPrevious();
+                else c.getTransportControls().skipToNext();
+                return null;
+            }, null);
+            nowPlayingArt.animate().translationX((left ? -6 : 6) * density).setDuration(90)
+                    .withEndAction(() -> nowPlayingArt.animate().translationX(0f).setDuration(160).start()).start();
+            return true;
+        });
+        // The card sits in the space above the dock: keep it there as the layout settles, and out of the
+        // way while the grid is scrolled up over that space.
+        grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> grid.post(this::placeNowPlaying));
+        grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                if (nowPlayingHasSession) placeNowPlaying();
+            }
+        });
+    }
+
+    private void startNowPlaying() {
+        if (!nowPlayingOn || !NowPlaying.working()) return;
+        NowPlaying.run(() -> {
+            if (!listenerGranted()) {
+                nowPlayingHasSession = false;
+                placeNowPlaying();
+                return null;
+            }
+            if (sessions == null) sessions = getSystemService(MediaSessionManager.class);
+            sessions.addOnActiveSessionsChangedListener(sessionsChanged, sessionListener, handler);
+            watch(sessions.getActiveSessions(sessionListener));
+            return null;
+        }, null);
+        if (!NowPlaying.working()) {
+            nowPlayingHasSession = false;
+            placeNowPlaying();
+        }
+    }
+
+    private void stopNowPlaying() {
+        handler.removeCallbacks(nowPlayingRefresh);
+        NowPlaying.run(() -> {
+            if (sessions != null) sessions.removeOnActiveSessionsChangedListener(sessionsChanged);
+            unwatch();
+            return null;
+        }, null);
+    }
+
+    /** Whether the notification listener is enabled, without which Android lists no sessions. */
+    private boolean listenerGranted() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            return nm != null && nm.isNotificationListenerAccessGranted(sessionListener);
+        }
+        String enabled = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
+        return enabled != null && Arrays.asList(enabled.split(":")).contains(sessionListener.flattenToString());
+    }
+
+    /** Follows every active session, so whichever one starts playing can take the card. */
+    private void watch(List<MediaController> list) {
+        unwatch();
+        if (list != null) {
+            for (MediaController c : list) {
+                c.registerCallback(sessionCallback, handler);
+                watched.add(c);
+            }
+        }
+        refreshNowPlaying();
+    }
+
+    private void unwatch() {
+        for (MediaController c : watched) {
+            try {
+                c.unregisterCallback(sessionCallback);
+            } catch (Exception ignored) {
+                // A session that died already has nothing to unregister.
+            }
+        }
+        watched.clear();
+    }
+
+    /** Callbacks can come in bursts (state, then metadata); draw once after them. */
+    private void scheduleNowPlaying() {
+        handler.removeCallbacks(nowPlayingRefresh);
+        handler.postDelayed(nowPlayingRefresh, 120);
+    }
+
+    private void refreshNowPlaying() {
+        int n = watched.size();
+        int[] states = new int[n];
+        String[] packages = new String[n];
+        for (int i = 0; i < n; i++) {
+            PlaybackState st = watched.get(i).getPlaybackState();
+            states[i] = st != null ? st.getState() : NowPlaying.STATE_NONE;
+            packages[i] = watched.get(i).getPackageName();
+        }
+        int pick = NowPlaying.choose(states, packages, getPackageName());
+        shownSession = pick >= 0 ? watched.get(pick) : null;
+        nowPlayingHasSession = shownSession != null;
+        if (nowPlayingHasSession) bindNowPlaying(shownSession, states[pick]);
+        placeNowPlaying();
+    }
+
+    private void bindNowPlaying(MediaController c, int state) {
+        String pkg = c.getPackageName();
+        String appLabel = pkg;
+        try {
+            appLabel = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg, 0)).toString();
+        } catch (Exception ignored) {
+            // A package we can't see keeps its package name.
+        }
+        MediaMetadata md = c.getMetadata();
+        String title = NowPlaying.title(text(md, MediaMetadata.METADATA_KEY_TITLE),
+                text(md, MediaMetadata.METADATA_KEY_DISPLAY_TITLE), appLabel);
+        nowPlayingTitle.setText(title);
+        String sub = NowPlaying.subtitle(text(md, MediaMetadata.METADATA_KEY_ARTIST),
+                text(md, MediaMetadata.METADATA_KEY_ALBUM), appLabel, title);
+        nowPlayingSubtitle.setText(sub);
+        nowPlayingSubtitle.setVisibility(sub.isEmpty() ? View.GONE : View.VISIBLE);
+        nowPlayingState.setImageResource(NowPlaying.isActive(state) ? R.drawable.ic_pause : R.drawable.ic_play);
+
+        Bitmap art = null;
+        if (md != null) {
+            for (String key : new String[]{MediaMetadata.METADATA_KEY_ART, MediaMetadata.METADATA_KEY_ALBUM_ART,
+                    MediaMetadata.METADATA_KEY_DISPLAY_ICON}) {
+                art = md.getBitmap(key);
+                if (art != null) break;
+            }
+        }
+        // Metadata comes again with every state change; decode a new picture only when it changed.
+        if (art != null && (art != nowPlayingSource || !pkg.equals(nowPlayingPkg))) {
+            nowPlayingArt.setImageBitmap(squareThumb(art, (int) (72 * density)));
+        } else if (art == null && (nowPlayingSource != null || !pkg.equals(nowPlayingPkg))) {
+            Drawable icon = null;
+            try {
+                icon = getPackageManager().getApplicationBanner(pkg);
+                if (icon == null) icon = getPackageManager().getApplicationIcon(pkg);
+            } catch (Exception ignored) {
+                // No picture: the card shows the title alone.
+            }
+            nowPlayingArt.setImageDrawable(icon);
+        }
+        nowPlayingSource = art;
+        nowPlayingPkg = pkg;
+    }
+
+    private static String text(MediaMetadata md, String key) {
+        if (md == null) return null;
+        CharSequence t = md.getText(key);
+        return t != null ? t.toString() : null;
+    }
+
+    /** A centre square of the artwork at the card's size, so a 1000 px cover isn't drawn at 72 dp. */
+    private static Bitmap squareThumb(Bitmap src, int size) {
+        int side = Math.min(src.getWidth(), src.getHeight());
+        if (side <= 0) return src;
+        int x = (src.getWidth() - side) / 2;
+        int y = (src.getHeight() - side) / 2;
+        Bitmap square = side == src.getWidth() && side == src.getHeight() ? src : Bitmap.createBitmap(src, x, y, side, side);
+        return side > size ? Bitmap.createScaledBitmap(square, size, size, true) : square;
+    }
+
+    /**
+     * Shows the card right-aligned just above the dock when there is a session, room under the top
+     * bar, and the grid sits at its top; otherwise fades it out. The top shelf name is shortened so
+     * it never runs under the card.
+     */
+    private void placeNowPlaying() {
+        boolean want = nowPlayingOn && nowPlayingHasSession && NowPlaying.working()
+                && !grid.canScrollVertically(-1) && grid.getHeight() > 0;
+        float top = 0;
+        if (want) {
+            if (nowPlaying.getVisibility() != View.VISIBLE) {
+                nowPlaying.measure(View.MeasureSpec.makeMeasureSpec(root.getWidth(), View.MeasureSpec.AT_MOST),
+                        View.MeasureSpec.makeMeasureSpec(root.getHeight(), View.MeasureSpec.AT_MOST));
+            }
+            int h = nowPlaying.getVisibility() == View.VISIBLE && nowPlaying.getHeight() > 0
+                    ? nowPlaying.getHeight() : nowPlaying.getMeasuredHeight();
+            Rect g = new Rect(0, 0, grid.getWidth(), grid.getHeight());
+            root.offsetDescendantRectToMyCoords(grid, g);
+            Rect bar = new Rect(0, 0, btnSettings.getWidth(), btnSettings.getHeight());
+            root.offsetDescendantRectToMyCoords(btnSettings, bar);
+            float dockTop = g.top + grid.getPaddingTop();
+            top = dockTop - 22 * density - h;
+            want = top >= bar.bottom + 14 * density;   // no room with rows under the dock: leave it out
+        }
+        if (want) {
+            nowPlaying.setY(top);
+            if (!nowPlayingVisible) {
+                nowPlayingVisible = true;
+                nowPlaying.setVisibility(View.VISIBLE);
+                nowPlaying.animate().alpha(1f).setDuration(240).start();
+            }
+            nowPlaying.post(() -> {
+                int cardLeft = root.getWidth() - (int) (56 * density) - nowPlaying.getWidth();
+                heroName.setMaxWidth(Math.max(0, cardLeft - heroName.getLeft() - (int) (24 * density)));
+            });
+        } else if (nowPlayingVisible) {
+            nowPlayingVisible = false;
+            if (nowPlaying.hasFocus()) focusTile(lastFocused < COLUMNS ? lastFocused : 0);
+            nowPlaying.animate().alpha(0f).setDuration(180).withEndAction(() -> {
+                if (!nowPlayingVisible) nowPlaying.setVisibility(View.GONE);
+            }).start();
+            heroName.setMaxWidth(Integer.MAX_VALUE);
+        }
+        int down = nowPlayingVisible ? R.id.nowPlaying : R.id.grid;
+        btnWifi.setNextFocusDownId(down);
+        btnSettings.setNextFocusDownId(down);
+    }
+
+    /** Hold OK on the card: the app's own player screen, or failing that its launcher entry. */
+    private void openNowPlayingApp() {
+        MediaController c = shownSession;
+        if (c == null) return;
+        PendingIntent pi = c.getSessionActivity();
+        if (pi != null) {
+            try {
+                if (Build.VERSION.SDK_INT >= 34) {
+                    // Android 14 lets a foreground app start another app's PendingIntent only when it says so.
+                    ActivityOptions o = ActivityOptions.makeBasic()
+                            .setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                    pi.send(this, 0, null, null, null, null, o.toBundle());
+                } else {
+                    pi.send();
+                }
+                return;
+            } catch (PendingIntent.CanceledException ignored) {
+                // Fall back to the app's launcher entry.
+            }
+        }
+        Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(c.getPackageName());
+        if (i == null) i = getPackageManager().getLaunchIntentForPackage(c.getPackageName());
+        if (i != null) open(i);
     }
 
     // ---- Bitcoin line ----------------------------------------------------------------------------

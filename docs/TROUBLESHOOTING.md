@@ -86,6 +86,14 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   script now picks the known stock launcher among the candidates by itself; otherwise choose one on
   the TV or pass `STOCK_LAUNCHER=<package>`.
 
+- **Now playing doesn't show** while music plays: the card needs the launcher's notification listener,
+  which the install script enables. Enable it by hand with
+  `tools/tv.py 'cmd notification allow_listener com.gathin.tvhome/com.gathin.tvhome.NowPlayingListener'`
+  (it survives updates of the launcher, not a reinstall from scratch). The app also has to keep playing
+  once you leave it: YouTube's TV app stops when you press Home, SmartTube and Spotify carry on. The
+  card stays out of the way while the grid is scrolled, and with `rows_below_dock` above 0 there may be
+  no room for it under the top bar. `now_playing` false in `config.xml` or a theme switches it off.
+
 ## Updates
 
 These apply to the official release, which updates itself
