@@ -180,6 +180,9 @@ background services, and no network apart from the weekly update check of the of
 - **Updates**: see [below](#updates).
 - **Clock screensaver**: a drifting clock over the glow, so nothing burns in. Pick "Clock" in the TV's screensaver settings, or over ADB:
   `tools/tv.py 'settings put secure screensaver_components com.gathin.tvhome/.ClockDream; settings put secure screensaver_enabled 1'`
+- **Gallery screensaver**: the Gallery photos with a slow pan and zoom and a small clock, a new one every 30 seconds (`screensaver_interval_s`); the Clock screensaver until there are photos. Pick "Gallery", or over ADB:
+  `tools/tv.py 'settings put secure screensaver_components com.gathin.tvhome/.GalleryDream; settings put secure screensaver_enabled 1'`
+- **Weather**, off by default: an icon and the temperature next to the date, from Open-Meteo (no account). Set `weather_location` in the theme, then switch it on under Settings (hold OK).
 - **Remote keys**: an optional accessibility service keeps the remote's Input button working on Google TV (`INPUT_KEY_SERVICE=1` at install), another fixes sticks whose Home key sends ALL_APPS (`HOME_KEY_SERVICE=1`).
 - **Navigation** is deliberate: Up and Down move one row, the top buttons never fall through to tiles, the last focused app is remembered, and installing or removing an app refreshes the tiles while Home is open.
 

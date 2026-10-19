@@ -86,4 +86,16 @@
          while Home is in front (api.coinbase.com, api.exchange.coinbase.com). Off by default;
          also switched on the TV: hold OK on Settings, then Bitcoin price. -->
     <bool name="btc_ticker">false</bool>
+
+    <!-- Weather next to the date: an icon and the temperature now, from Open-Meteo (no account, no key),
+         refreshed every 30 minutes while Home is in front. Off by default; also switched on the TV: hold OK
+         on Settings, then Weather. weather_location is "lat,lon" (e.g. "1.29,103.85") or a place name
+         ("Singapore"), looked up once on geocoding-api.open-meteo.com. Empty: no weather. -->
+    <bool name="weather">false</bool>
+    <string name="weather_location" translatable="false"></string>
+    <!-- celsius or fahrenheit -->
+    <string name="weather_unit" translatable="false">celsius</string>
+
+    <!-- Gallery screensaver (pick "Gallery" as the screensaver): seconds each photo stays, 10 to 600. -->
+    <integer name="screensaver_interval_s">30</integer>
 </resources>

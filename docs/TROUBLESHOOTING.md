@@ -100,6 +100,12 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   (`tools/tv.py 'pm grant com.gathin.tvhome android.permission.READ_MEDIA_IMAGES'` on Android 13 and newer).
   The Gallery row in the Settings menu says what's missing. New photos are picked up within five
   minutes, or at once when you switch Gallery off and on.
+- **The Gallery screensaver shows the clock**: it has no photos or no permission to read them (same fixes as
+  above), or it isn't the selected screensaver:
+  `tools/tv.py 'settings put secure screensaver_components com.gathin.tvhome/.GalleryDream'`.
+- **No weather next to the date**: Weather needs a place, `weather_location` in the theme (`"lat,lon"` or a
+  place name), and it is switched on under Settings (hold OK); the Weather row says when the place is missing.
+  A place name that isn't found shows nothing; `tools/tv.py 'logcat -d -s TvHomeWeather'` says why.
 
 ## Updates
 

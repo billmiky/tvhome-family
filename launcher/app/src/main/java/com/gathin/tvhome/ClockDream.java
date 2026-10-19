@@ -79,6 +79,11 @@ public class ClockDream extends DreamService {
         super.onDetachedFromWindow();
     }
 
+    /** Stops the drift and the glow shift, for a subclass that replaces the clock with its own view. */
+    protected void stopClock() {
+        handler.removeCallbacks(tick);
+    }
+
     private void moveClock() {
         content.animate().alpha(0f).setDuration(900).withEndAction(() -> {
             placeClock();

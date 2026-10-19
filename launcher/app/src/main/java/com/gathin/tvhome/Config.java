@@ -55,6 +55,14 @@ final class Config {
     final boolean nowPlaying;
     /** Gallery: photos from Pictures/Launcher as the background; the Settings menu can override it on the TV. */
     final boolean gallery;
+    /** Weather next to the date (Weather); the Settings menu can override it on the TV. */
+    final boolean weather;
+    /** Where the weather is for: "lat,lon" or a place name looked up once. Empty: no weather. */
+    final String weatherLocation;
+    /** celsius or fahrenheit. */
+    final String weatherUnit;
+    /** GalleryDream: seconds per photo. */
+    final int screensaverIntervalS;
     /** Background colour behind everything, #RRGGBB; black unless a theme says otherwise. */
     final int backgroundColor;
     /** Full-screen picture behind the launcher, or null for the plain colour. */
@@ -65,7 +73,8 @@ final class Config {
     private Config(List<String> dockApps, List<String> hiddenApps, String liveTvPackage, String liveTvAction,
                    String sourcePanelService, String sourcePanelAction, String inputAction,
                    int columns, int rowsBelowDock,
-                   boolean shamsiDate, boolean moduleCards, String vpnApp, boolean showHomeSettingsShortcut, String selfUpdate, boolean btcTicker, String greetingName, boolean nowPlaying, boolean gallery, int backgroundColor,
+                   boolean shamsiDate, boolean moduleCards, String vpnApp, boolean showHomeSettingsShortcut, String selfUpdate, boolean btcTicker, String greetingName, boolean nowPlaying, boolean gallery,
+                   boolean weather, String weatherLocation, String weatherUnit, int screensaverIntervalS, int backgroundColor,
                    File wallpaper, boolean overlayApplied) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -85,6 +94,10 @@ final class Config {
         this.greetingName = greetingName;
         this.nowPlaying = nowPlaying;
         this.gallery = gallery;
+        this.weather = weather;
+        this.weatherLocation = weatherLocation;
+        this.weatherUnit = weatherUnit;
+        this.screensaverIntervalS = screensaverIntervalS;
         this.backgroundColor = backgroundColor;
         this.wallpaper = wallpaper;
         this.overlayApplied = overlayApplied;
@@ -115,6 +128,10 @@ final class Config {
         String name = res.getString(R.string.greeting_name).trim();
         boolean nowPlaying = res.getBoolean(R.bool.now_playing);
         boolean gallery = res.getBoolean(R.bool.gallery);
+        boolean weather = res.getBoolean(R.bool.weather);
+        String weatherLocation = res.getString(R.string.weather_location).trim();
+        String weatherUnit = res.getString(R.string.weather_unit).trim();
+        int screensaverInterval = res.getInteger(R.integer.screensaver_interval_s);
         int background = 0xFF000000;
         boolean applied = false;
 
@@ -141,6 +158,10 @@ final class Config {
             name = string(json, "greeting_name", name).trim();
             nowPlaying = bool(json, "now_playing", nowPlaying);
             gallery = bool(json, "gallery", gallery);
+            weather = bool(json, "weather", weather);
+            weatherLocation = string(json, "weather_location", weatherLocation).trim();
+            weatherUnit = string(json, "weather_unit", weatherUnit).trim();
+            screensaverInterval = integer(json, "screensaver_interval_s", screensaverInterval, 10, 600);
             background = color(json, "background_color", background);
         }
         File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;
@@ -149,7 +170,9 @@ final class Config {
         if (json != null && json.has("wallpaper") && !bool(json, "wallpaper", true)) wallpaper = null;
 
         return new Config(dock, hidden, liveTv, liveTvAction, panelService, panelAction, inputAction,
-                Math.max(1, columns), Math.max(0, rowsBelow), shamsi, moduleCards, vpn, homeSettings, Updater.mode(selfUpdate), btc, name, nowPlaying, gallery, background,
+                Math.max(1, columns), Math.max(0, rowsBelow), shamsi, moduleCards, vpn, homeSettings, Updater.mode(selfUpdate), btc, name, nowPlaying, gallery,
+                weather, weatherLocation, Weather.FAHRENHEIT.equals(weatherUnit) ? Weather.FAHRENHEIT : Weather.CELSIUS,
+                Math.max(10, Math.min(600, screensaverInterval)), background,
                 wallpaper, applied);
     }
 

@@ -108,21 +108,23 @@
                         android:letterSpacing="0.08"
                         android:textAllCaps="true" />
 
+                    <!-- Separator and the weather/date block are centred on the clock's digits (they sit a
+                         little below the TextClock's centre, hence the top margins). -->
                     <View
                         android:layout_width="1dp"
-                        android:layout_height="26dp"
-                        android:layout_gravity="bottom"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:layout_marginBottom="8dp"
-                        android:background="#33FFFFFF" />
+                        android:layout_height="40dp"
+                        android:layout_gravity="center_vertical"
+                        android:layout_marginStart="18dp"
+                        android:layout_marginEnd="18dp"
+                        android:layout_marginTop="2dp"
+                        android:background="#40FFFFFF" />
 
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_weight="1"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="bottom"
-                        android:layout_marginBottom="9dp"
+                        android:layout_gravity="center_vertical"
+                        android:layout_marginTop="2dp"
                         android:orientation="vertical">
 
                         <!-- Shamsi date ("27 Mehr 1405"), shown when shamsi_date is on. -->
@@ -143,28 +145,54 @@
                             android:includeFontPadding="false"
                             android:visibility="gone" />
 
-                        <TextClock
-                            android:id="@+id/date"
+                        <!-- Weather ("☀ 31°") above the date, when it is on. -->
+                        <TextView
+                            android:id="@+id/weather"
                             android:shadowColor="#B3000000"
                             android:shadowRadius="8"
                             android:shadowDy="1"
-                            android:layout_width="match_parent"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:layout_marginBottom="2dp"
                             android:singleLine="true"
-                            android:ellipsize="end"
-                            android:format12Hour="@string/date_format"
-                            android:format24Hour="@string/date_format"
-                            android:textColor="#A6FFFFFF"
-                            android:textSize="14sp"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="17sp"
                             android:fontFamily="@font/outfit"
                             android:fontVariationSettings="'wght' 400"
-                            android:letterSpacing="0.14"
-                            android:textAllCaps="true" />
+                            android:letterSpacing="0.04"
+                            android:includeFontPadding="false"
+                            android:visibility="gone" />
+
+                        <!-- The date. -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextClock
+                                android:id="@+id/date"
+                                android:shadowColor="#B3000000"
+                                android:shadowRadius="8"
+                                android:shadowDy="1"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:singleLine="true"
+                                android:ellipsize="end"
+                                android:format12Hour="@string/date_format"
+                                android:format24Hour="@string/date_format"
+                                android:textColor="#A6FFFFFF"
+                                android:textSize="14sp"
+                                android:fontFamily="@font/outfit"
+                                android:fontVariationSettings="'wght' 400"
+                                android:letterSpacing="0.14"
+                                android:textAllCaps="true" />
+
+                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Bitcoin price, change and block height (btc_ticker), right-aligned over the top buttons. -->
+            <!-- Bitcoin price and 24 hour change (btc_ticker), right-aligned over the top buttons. -->
             <TextView
                 android:id="@+id/btcTicker"
                 android:shadowColor="#B3000000"
@@ -258,7 +286,7 @@
         android:layout_marginEnd="56dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="12dp"
+        android:padding="8dp"
         android:background="@drawable/now_playing_bg"
         android:focusable="true"
         android:clickable="true"
@@ -269,16 +297,16 @@
 
         <ImageView
             android:id="@+id/nowPlayingArt"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:scaleType="centerCrop"
             android:importantForAccessibility="no" />
 
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
-            android:layout_marginEnd="14dp"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp"
             android:orientation="vertical">
 
             <TextView
@@ -288,12 +316,12 @@
                 android:shadowDy="1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:maxWidth="250dp"
+                android:maxWidth="180dp"
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:duplicateParentState="true"
                 android:textColor="#FFFFFFFF"
-                android:textSize="17sp"
+                android:textSize="14sp"
                 android:fontFamily="@font/outfit"
                 android:fontVariationSettings="'wght' 500" />
 
@@ -304,20 +332,20 @@
                 android:shadowDy="1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:maxWidth="250dp"
+                android:layout_marginTop="1dp"
+                android:maxWidth="180dp"
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:duplicateParentState="true"
                 android:textColor="#B3FFFFFF"
-                android:textSize="13sp"
+                android:textSize="11sp"
                 android:fontFamily="@font/outfit" />
         </LinearLayout>
 
         <ImageView
             android:id="@+id/nowPlayingState"
-            android:layout_width="26dp"
-            android:layout_height="26dp"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
             android:layout_marginEnd="4dp"
             android:duplicateParentState="true"
             android:tint="#FFFFFFFF"

@@ -118,7 +118,8 @@ final class Ticker {
     }
 
 
-    private static String get(String url) throws IOException {
+    /** One GET to a fixed HTTPS URL: no redirects, short timeouts, 8 KB at most. Also used by Weather. */
+    static String get(String url) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         try {
             c.setInstanceFollowRedirects(false);

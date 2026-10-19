@@ -210,9 +210,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean btcOn;
     /** greeting_name: said after the greeting, which is shown in capitals. */
     private String greetingName = "";
-    private static final String PREFS = "home";
+    static final String PREFS = "home";
     private static final String PREF_BTC = "btc_ticker";
-    private static final String PREF_GALLERY = "gallery";
+    /** Weather next to the date: on from the weather key, or from the Settings menu, which wins once used. */
+    static final String PREF_WEATHER = "weather";
+    private TextView weatherView;
+    private boolean weatherOn;
+    private String weatherLocation = "";
+    private String weatherUnit = Weather.CELSIUS;
+    static final String PREF_GALLERY = "gallery";
     private static final int REQUEST_PHOTOS = 7;
     /** Gallery (Gallery.java): on from gallery, or from the Settings menu, which wins once used. */
     private boolean galleryOn;
@@ -283,6 +289,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 return;
             }
             reloadApps(false, true);
+        }
+    };
+    private final Runnable weatherTick = new Runnable() {
+        @Override
+        public void run() {
+            fetchWeather();
+            handler.postDelayed(this, Weather.REFRESH_MS);
         }
     };
     private final Runnable btcTick = new Runnable() {
@@ -418,6 +431,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         greetingName = cfg.greetingName;
         btcTicker = findViewById(R.id.btcTicker);
         btcOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_BTC, cfg.btcTicker);
+        weatherView = findViewById(R.id.weather);
+        weatherOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_WEATHER, cfg.weather);
+        weatherLocation = cfg.weatherLocation;
+        weatherUnit = cfg.weatherUnit;
         galleryOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_GALLERY, cfg.gallery);
         // The first start after a self-update says so (and puts accessibility services back if it can).
         int started = UpdateFeature.run(() -> Updater.afterStart(this), Updater.STARTED_PLAIN);
@@ -454,6 +471,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
+        // Focused, a pill is dark text on white and needs no shadow; unfocused it keeps the style's soft one.
+        View.OnFocusChangeListener pillShadow = (v, focused) -> {
+            TextView t = (TextView) v;
+            if (focused) t.setShadowLayer(0f, 0f, 0f, 0);
+            else t.setShadowLayer(4f, 0f, 1f, 0x80000000);
+        };
+        btnInputs.setOnFocusChangeListener(pillShadow);
+        btnWifi.setOnFocusChangeListener(pillShadow);
+        btnSettings.setOnFocusChangeListener(pillShadow);
         setUpNowPlaying(cfg.nowPlaying);
 
         // Hide the glass when focus leaves the tiles.
@@ -529,6 +555,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         updateInputsButton();
         handler.postDelayed(minuteTick, MINUTE_MS);
         startTicker();
+        startWeather();
         startNowPlaying();
         startGallery();
         Updater.installListener = () -> handler.post(() -> {
@@ -636,6 +663,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(btcTick);
+        handler.removeCallbacks(weatherTick);
         handler.removeCallbacks(galleryTick);
         stopNowPlaying();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
@@ -958,6 +986,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         } catch (Exception ignored) {
         }
+        // Compact pill: the icon says Wi-Fi or Ethernet; only "Offline" is spelled out.
+        if (online) text = "";
         // With a VPN app configured, a VPN that is down matters too: show a red "VPN off" capsule then.
         boolean vpnDown = !vpn && online && !vpnApp.isEmpty();
         if (vpn || vpnDown) {
@@ -971,13 +1001,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             float room = btnWifi.getMaxWidth() - btnWifi.getTotalPaddingStart() - btnWifi.getTotalPaddingEnd()
                     - span.getSize(paint, badge, 0, badge.length(), null) - paint.measureText(" ") - 2 * density;
             text = TextUtils.ellipsize(text, paint, Math.max(0, room), TextUtils.TruncateAt.END).toString();
-            SpannableString label = new SpannableString(text + " " + badge);
-            label.setSpan(span, text.length() + 1, label.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            // A replacement span alone on a line gets no font metrics and isn't drawn: lead with a zero-width space.
+            String lead = text.isEmpty() ? "\u200B" : text + " ";
+            SpannableString label = new SpannableString(lead + badge);
+            label.setSpan(span, lead.length(), label.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             btnWifi.setText(label);
         } else {
             btnWifi.setText(text);
         }
         btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0);
+        // Icon alone: no gap after it and even padding, like the Settings button.
+        boolean iconOnly = btnWifi.getText().length() == 0;
+        // No name: the VPN tag's own margin is gap enough after the icon.
+        btnWifi.setCompoundDrawablePadding(iconOnly || text.isEmpty() ? 0 : (int) (9 * density));
+        int padEnd = (int) ((iconOnly || vpn || vpnDown ? 14 : 20) * density);
+        btnWifi.setPaddingRelative((int) (14 * density), btnWifi.getPaddingTop(), padEnd, btnWifi.getPaddingBottom());
     }
 
     /** The network pill opens the VPN app when one is configured and installed, otherwise Wi-Fi settings. */
@@ -1389,9 +1427,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     .setDuration(focused ? 260 : 180)
                     .setInterpolator(new OvershootInterpolator(focused ? 1.6f : 0f))
                     .start();
-            if (focused) glassTo(v, NOW_PLAYING_SCALE, 24 * density);
+            if (focused) glassTo(v, NOW_PLAYING_SCALE, 16 * density);
         });
-        final float artRadius = 14 * density;
+        final float artRadius = 9 * density;
         nowPlayingArt.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View v, Outline outline) {
@@ -1556,7 +1594,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         // Metadata comes again with every state change; decode a new picture only when it changed.
         if (art != null && (art != nowPlayingSource || !pkg.equals(nowPlayingPkg))) {
-            nowPlayingArt.setImageBitmap(squareThumb(art, (int) (72 * density)));
+            nowPlayingArt.setImageBitmap(squareThumb(art, (int) (44 * density)));
         } else if (art == null && (nowPlayingSource != null || !pkg.equals(nowPlayingPkg))) {
             Drawable icon = null;
             try {
@@ -1880,6 +1918,62 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btcTicker.setVisibility(View.VISIBLE);
     }
 
+    // ---- weather ---------------------------------------------------------------------------------
+
+    /** Shows the cached reading at once, then refreshes now if it's due and every 30 minutes after. */
+    private void startWeather() {
+        if (!weatherOn || weatherLocation.isEmpty()) {
+            weatherView.setVisibility(View.GONE);
+            return;
+        }
+        Weather.Reading r = Weather.cached(this, weatherLocation, weatherUnit);
+        showWeather(r);
+        long age = r == null ? Long.MAX_VALUE : System.currentTimeMillis() - r.at;
+        handler.postDelayed(weatherTick, age >= Weather.REFRESH_MS ? 0 : Weather.REFRESH_MS - age);
+    }
+
+    /** One refresh on the ticker thread; the result is shown if weather is still on. */
+    private void fetchWeather() {
+        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+        if (cm == null || cm.getActiveNetwork() == null) return;
+        if (!Weather.busy.compareAndSet(false, true)) return;
+        final Context app = getApplicationContext();
+        final String location = weatherLocation, unit = weatherUnit;
+        Ticker.EXECUTOR.execute(() -> {
+            Weather.Reading r = null;
+            try {
+                r = Weather.fetch(app, location, unit);
+            } catch (Exception e) {
+                // A failed refresh keeps the last reading on screen.
+            } finally {
+                Weather.busy.set(false);
+            }
+            final Weather.Reading shown = r;
+            handler.post(() -> {
+                if (!isDestroyed() && weatherOn) showWeather(shown);
+            });
+        });
+    }
+
+    /** "☀ 31°"; the icon is left out where the TV's fonts don't have it. Hidden until there is a reading. */
+    private void showWeather(Weather.Reading r) {
+        if (r == null) {
+            weatherView.setVisibility(View.GONE);
+            return;
+        }
+        String icon = Weather.icon(r.code);
+        if (!icon.isEmpty() && !weatherView.getPaint().hasGlyph(icon)) icon = "";
+        weatherView.setText(icon.isEmpty() ? Weather.formatTemp(r.temp) : icon + " " + Weather.formatTemp(r.temp));
+        weatherView.setVisibility(View.VISIBLE);
+    }
+
+    /** The Weather row's status: Off, On, or On without a place to look up. */
+    private String weatherState() {
+        if (!weatherOn) return getString(R.string.settings_menu_off);
+        if (weatherLocation.isEmpty()) return getString(R.string.weather_no_location);
+        return getString(R.string.settings_menu_on);
+    }
+
     private static void append(SpannableStringBuilder sb, String text, int color) {
         int start = sb.length();
         sb.append(text);
@@ -1913,6 +2007,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             btcStatus.setText(btcOn ? R.string.settings_menu_on : R.string.settings_menu_off);
             handler.removeCallbacks(btcTick);
             startTicker();
+        });
+
+        View weatherRow = addMenuRow(rows, getString(R.string.settings_menu_weather), weatherState());
+        final TextView weatherStatus = weatherRow.findViewById(R.id.status);
+        weatherRow.setOnClickListener(v -> {
+            weatherOn = !weatherOn;
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_WEATHER, weatherOn).apply();
+            weatherStatus.setText(weatherState());
+            handler.removeCallbacks(weatherTick);
+            startWeather();
         });
 
         View galleryRow = addMenuRow(rows, getString(R.string.settings_menu_gallery), galleryState());

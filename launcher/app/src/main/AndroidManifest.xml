@@ -99,6 +99,19 @@
             </intent-filter>
         </service>
 
+        <!-- Photo screensaver: the Gallery photos with a slow pan and zoom. `settings put secure
+             screensaver_components com.gathin.tvhome/.GalleryDream` over adb, or pick "Gallery" in Settings. -->
+        <service
+            android:name=".GalleryDream"
+            android:label="@string/gallery_dream_name"
+            android:exported="true"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
         <!-- Result of a self-update install session (Updater.install). Only the package installer's
              PendingIntent reaches it. -->
         <receiver

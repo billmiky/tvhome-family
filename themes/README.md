@@ -34,6 +34,10 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 | `greeting_name` | string | A name after the greeting, e.g. `"Mr. Trịnh"` for GOOD MORNING, MR. TRỊNH; empty for the greeting alone |
 | `gallery` | bool | Photos from `Pictures/Launcher` on the TV as the background, a random one every five minutes, over the theme wallpaper (`false` by default). Hold OK on Settings → Gallery switches it on the TV, and that choice then wins over this key |
 | `now_playing` | bool | The Now playing card above the dock for an app playing in the background (`true`); needs the notification listener the install script enables |
+| `weather` | bool | Weather icon and temperature next to the date, from Open-Meteo, refreshed every 30 minutes while Home is in front (`false` by default). Hold OK on Settings → Weather switches it on the TV, and that choice then wins over this key |
+| `weather_location` | string | Where the weather is for: `"1.29,103.85"` or a place name such as `"Singapore"`, looked up once on Open-Meteo's geocoding service. Empty: no weather |
+| `weather_unit` | string | `celsius` (default) or `fahrenheit` |
+| `screensaver_interval_s` | 10 to 600 | Seconds each photo stays in the Gallery screensaver (30 by default) |
 | `btc_ticker` | bool | Bitcoin price and 24 hour change above the top buttons, refreshed every five minutes while Home is in front (`false` by default). Hold OK on Settings → Bitcoin price switches it on the TV, and that choice then wins over this key |
 | `self_update` | `off`, `manual`, `weekly` | Official release only: check for a new launcher once a week (`weekly`, the default), only from Settings → Check for updates (`manual`), or never contact the update server (`off`). See [`docs/specs/self-update.md`](../docs/specs/self-update.md) |
 | `module_cards` | bool | Look for module cards and ask about them (`true`); `false` turns the feature off |

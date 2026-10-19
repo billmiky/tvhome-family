@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Home</string>
-    <string name="inputs">Inputs</string>
+    <string name="inputs">HDMI</string>
     <string name="wifi">Wi-Fi</string>
     <string name="settings">Settings</string>
     <string name="choose_input">Inputs</string>
@@ -51,6 +51,9 @@
     <string name="settings_menu_off">Off</string>
     <string name="settings_menu_on">On</string>
     <string name="settings_menu_btc">Bitcoin price</string>
+    <string name="settings_menu_weather">Weather</string>
+    <string name="weather_no_location">On · set weather_location in the theme</string>
+    <string name="gallery_dream_name">Gallery</string>
     <string name="net_menu_address">IP address</string>
     <string name="net_menu_offline">Not connected</string>
     <string name="net_menu_adb">ADB</string>
