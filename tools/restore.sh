@@ -4,8 +4,11 @@
 #
 # Usage: TV_HOST=192.168.1.50 tools/restore.sh examples/xiaomi-mi-tv-4a/debloat.txt [stock.launcher.package]
 set -euo pipefail
-cd "$(dirname "$0")/.."
 LIST="${1:?usage: restore.sh <debloat list> [stock launcher package]}"
+# Resolve the list against the caller's directory before moving into the repo.
+LIST_DIR="$(cd "$(dirname "$LIST")" && pwd)"
+LIST="$LIST_DIR/$(basename "$LIST")"
+cd "$(dirname "$0")/.."
 STOCK="${2:-com.google.android.tvlauncher}"
 PY=tools/venv/bin/python
 [ -x "$PY" ] || PY=tools/venv/Scripts/python.exe

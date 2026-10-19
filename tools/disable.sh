@@ -4,8 +4,11 @@
 #
 # Usage: TV_HOST=192.168.1.50 tools/disable.sh examples/xiaomi-mi-tv-4a/debloat.txt
 set -euo pipefail
-cd "$(dirname "$0")/.."
 LIST="${1:?usage: disable.sh <debloat list>}"
+# Resolve the list against the caller's directory before moving into the repo.
+LIST_DIR="$(cd "$(dirname "$LIST")" && pwd)"
+LIST="$LIST_DIR/$(basename "$LIST")"
+cd "$(dirname "$0")/.."
 PY=tools/venv/bin/python
 [ -x "$PY" ] || PY=tools/venv/Scripts/python.exe
 export MSYS_NO_PATHCONV=1
