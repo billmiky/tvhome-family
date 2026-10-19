@@ -37,6 +37,8 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 | `weather` | bool | Weather icon and temperature next to the date, from Open-Meteo, refreshed every 30 minutes while Home is in front (`false` by default). Hold OK on Settings → Weather switches it on the TV, and that choice then wins over this key |
 | `weather_location` | string | Where the weather is for: `"1.29,103.85"` or a place name such as `"Singapore"`, looked up once on Open-Meteo's geocoding service. Empty: no weather |
 | `weather_unit` | string | `celsius` (default) or `fahrenheit` |
+| `web_control` | bool | Phone control page on the home network (`true` by default); `false`: no server at all |
+| `web_port` | 1024 to 65535 | Its port, 8080 by default |
 | `screensaver_interval_s` | 10 to 600 | Seconds each photo stays in the Gallery screensaver (30 by default) |
 | `btc_ticker` | bool | Bitcoin price and 24 hour change above the top buttons, refreshed every five minutes while Home is in front (`false` by default). Hold OK on Settings → Bitcoin price switches it on the TV, and that choice then wins over this key |
 | `self_update` | `off`, `manual`, `weekly` | Official release only: check for a new launcher once a week (`weekly`, the default), only from Settings → Check for updates (`manual`), or never contact the update server (`off`). See [`docs/specs/self-update.md`](../docs/specs/self-update.md) |

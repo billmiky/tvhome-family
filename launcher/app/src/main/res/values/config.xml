@@ -98,4 +98,10 @@
 
     <!-- Gallery screensaver (pick "Gallery" as the screensaver): seconds each photo stays, 10 to 600. -->
     <integer name="screensaver_interval_s">30</integer>
+
+    <!-- Phone control (WebControl): a page on the home network for Gallery photos and a few switches, at
+         http://<TV address>:web_port/ with a 6-digit code (hold OK on the network pill shows the link).
+         Only answers addresses on the local network. false: no server at all. -->
+    <bool name="web_control">true</bool>
+    <integer name="web_port">8080</integer>
 </resources>

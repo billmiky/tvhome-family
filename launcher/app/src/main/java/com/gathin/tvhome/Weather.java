@@ -26,7 +26,7 @@ final class Weather {
     static final String FAHRENHEIT = "fahrenheit";
     static final long REFRESH_MS = 30 * 60_000L;
 
-    private static final String FORECAST = "https://api.open-meteo.com/v1/forecast?current=temperature_2m,weather_code&timezone=auto";
+    private static final String FORECAST = "https://api.open-meteo.com/v1/forecast?current=temperature_2m,weather_code&hourly=precipitation_probability&forecast_hours=3&timezone=auto";
     private static final String GEOCODE = "https://geocoding-api.open-meteo.com/v1/search?count=1&format=json&name=";
     /** The last reading, kept in prefs too so the screensaver can show it after the process restarts. */
     private static final String PREF_LAST = "weather_last";
@@ -36,18 +36,27 @@ final class Weather {
 
     static final AtomicBoolean busy = new AtomicBoolean(false);
 
-    /** One reading: the temperature in the unit asked for, and the WMO weather code. */
+    /**
+     * One reading: the temperature in the unit asked for, the WMO weather code, and the chance of rain in
+     * the next hour and the one after (0–100, or -1 when the forecast didn't say).
+     */
     static final class Reading {
         final double temp;
         final int code;
+        final int rain1h, rain2h;
         final long at;
 
-        Reading(double temp, int code, long at) {
+        Reading(double temp, int code, int rain1h, int rain2h, long at) {
             this.temp = temp;
             this.code = code;
+            this.rain1h = rain1h;
+            this.rain2h = rain2h;
             this.at = at;
         }
     }
+
+    /** Below this chance of rain the line stays short: the forecast is noise at a few percent. */
+    static final int RAIN_SHOWN_FROM = 20;
 
     /** The last reading in this process, and the place and unit it is for. */
     static volatile Reading last;
@@ -80,12 +89,31 @@ final class Weather {
         return parseLatLon(r.getDouble("latitude") + "," + r.getDouble("longitude"));
     }
 
-    /** {"current":{"temperature_2m":31.4,"weather_code":2,…}} */
+    /** {"current":{"temperature_2m":31.4,"weather_code":2,…},"hourly":{"precipitation_probability":[8,40,25]}} */
     static Reading parseForecast(String body, long now) throws Exception {
-        JSONObject cur = new JSONObject(body).getJSONObject("current");
+        JSONObject json = new JSONObject(body);
+        JSONObject cur = json.getJSONObject("current");
         double t = cur.getDouble("temperature_2m");
         if (Double.isNaN(t) || t < -100 || t > 150) throw new IllegalArgumentException("not a temperature: " + t);
-        return new Reading(t, cur.getInt("weather_code"), now);
+        // The hourly list starts at the current hour: [1] is the next hour, [2] the one after.
+        JSONObject hourly = json.optJSONObject("hourly");
+        JSONArray p = hourly != null ? hourly.optJSONArray("precipitation_probability") : null;
+        return new Reading(t, cur.getInt("weather_code"), percent(p, 1), percent(p, 2), now);
+    }
+
+    private static int percent(JSONArray a, int i) {
+        if (a == null || i >= a.length() || a.isNull(i)) return -1;
+        int v = a.optInt(i, -1);
+        return v >= 0 && v <= 100 ? v : -1;
+    }
+
+    /** "Rain: 40% 1h 30% 2h", or "" when both are unknown or below {@link #RAIN_SHOWN_FROM}. */
+    static String formatRain(int in1h, int in2h) {
+        if (Math.max(in1h, in2h) < RAIN_SHOWN_FROM) return "";
+        StringBuilder sb = new StringBuilder("Rain:");
+        if (in1h >= 0) sb.append(' ').append(in1h).append("% 1h");
+        if (in2h >= 0) sb.append(' ').append(in2h).append("% 2h");
+        return sb.toString();
     }
 
     /**
@@ -108,16 +136,33 @@ final class Weather {
         return Math.round(temp) + "°";
     }
 
+    /** "☁ 29°", then the rain chance in smaller, dimmer type when there is one worth showing. */
+    static CharSequence line(Reading r, String icon) {
+        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder(
+                icon.isEmpty() ? formatTemp(r.temp) : icon + " " + formatTemp(r.temp));
+        String rain = formatRain(r.rain1h, r.rain2h);
+        if (!rain.isEmpty()) {
+            sb.append("   ");
+            int start = sb.length();
+            sb.append(rain);
+            int flags = android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
+            sb.setSpan(new android.text.style.RelativeSizeSpan(0.72f), start, sb.length(), flags);
+            sb.setSpan(new android.text.style.ForegroundColorSpan(0xB3FFFFFF), start, sb.length(), flags);
+        }
+        return sb;
+    }
+
     static String encodeLast(Reading r) {
-        return String.format(Locale.US, "%.1f,%d,%d", r.temp, r.code, r.at);
+        return String.format(Locale.US, "%.1f,%d,%d,%d,%d", r.temp, r.code, r.at, r.rain1h, r.rain2h);
     }
 
     static Reading decodeLast(String s) {
         if (s == null) return null;
         String[] p = s.split(",");
-        if (p.length != 3) return null;
+        if (p.length != 3 && p.length != 5) return null;   // 3: saved before the rain chances were kept
         try {
-            return new Reading(Double.parseDouble(p[0]), Integer.parseInt(p[1]), Long.parseLong(p[2]));
+            int r1 = p.length == 5 ? Integer.parseInt(p[3]) : -1, r2 = p.length == 5 ? Integer.parseInt(p[4]) : -1;
+            return new Reading(Double.parseDouble(p[0]), Integer.parseInt(p[1]), r1, r2, Long.parseLong(p[2]));
         } catch (NumberFormatException e) {
             return null;
         }

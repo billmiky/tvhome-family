@@ -170,7 +170,7 @@ The install scripts ask the TV which launcher owns Home and only disable one the
 
 A small native Android TV app (`com.gathin.tvhome`, about 250 KB installed) in plain Java with
 AndroidX RecyclerView and nothing heavier. Built for sets with 1 GB of RAM: no blur, no video, no
-background services, and no network apart from the weekly update check of the official release and the Bitcoin line, if you switch it on. It needs JDK 17 and Android SDK platform 34 to build; on macOS,
+background services, and no network apart from the weekly update check of the official release, the Bitcoin and weather lines if you switch them on, and the phone control page on your home network. It needs JDK 17 and Android SDK platform 34 to build; on macOS,
 `brew install openjdk@17 android-commandlinetools` and `sdkmanager "platforms;android-34" "build-tools;34.0.0"`.
 
 - **Configure** in [`config.xml`](launcher/app/src/main/res/values/config.xml): dock order, hidden apps, the Live TV package, columns (tiles shrink from 5 up), rows under the dock, an optional VPN app for the network pill.
@@ -208,6 +208,21 @@ Moving a TV from a launcher you built to the official one changes the signing ke
 only allows through an uninstall. `CHANNEL=official MIGRATE=1 launcher/build-and-install.sh` saves
 your settings as a theme overlay, asks, swaps the launcher, and puts them back. Your answers to
 module card prompts are not kept; the TV asks again.
+
+## Phone control
+
+Hold OK on the network button: the menu shows a link like `http://192.168.1.13:8080/?k=123456` and the
+same link as a QR code. Open it on a phone on the same Wi-Fi to switch Gallery, Bitcoin price, Weather
+and Now playing, set the greeting name and the weather place, step through the photos, and add or delete
+Gallery photos (they go to Pictures/Launcher; photos copied there from a computer can't be deleted from
+the phone).
+
+- It only answers addresses on the local network (10.x, 172.16-31.x, 192.168.x, link-local), never the
+  internet, and every request needs the six-digit code; the first visit swaps it for a cookie. Ten wrong
+  codes in a minute shut that address out for a minute.
+- **New code** in the same menu makes old links and cookies stop working.
+- Off: `"web_control": false` in a theme's `config.json` (or `web_control` in `config.xml`); the port is
+  `web_port` (8080).
 
 ## Restoring your TV
 

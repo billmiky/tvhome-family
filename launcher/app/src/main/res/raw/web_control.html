@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Home</title>
+<style>
+  :root {
+    --bg: #000; --card: #15171c; --line: #2a2d34; --text: #f2f2f2; --mid: #a3a6ad; --accent: #fff;
+    --ok: #4cd787; --bad: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 "Outfit", ui-rounded, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px 40px;
+  }
+  h1 { font-weight: 300; font-size: 28px; margin: 8px 4px 20px; letter-spacing: -0.02em; }
+  h2 { font-weight: 500; font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--mid); margin: 28px 4px 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .row label { flex: 1; }
+  .row input[type=text] {
+    flex: 1.4; min-width: 0; background: #0b0c0f; color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 11px; font: inherit;
+  }
+  .switch { position: relative; width: 50px; height: 30px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; background: #3a3d44; border-radius: 15px; transition: background .2s; }
+  .switch span::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
+    background: #fff; transition: transform .2s;
+  }
+  .switch input:checked + span { background: var(--ok); }
+  .switch input:checked + span::after { transform: translateX(20px); }
+  button, .button {
+    background: #fff; color: #000; border: 0; border-radius: 22px; padding: 11px 18px; font: inherit;
+    font-weight: 500; cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .45; }
+  .bar { display: flex; gap: 10px; flex-wrap: wrap; padding: 14px 16px; }
+  .bar > * { flex: 1; text-align: center; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; padding: 0 16px 16px; }
+  .tile { position: relative; aspect-ratio: 16 / 9; background: #0b0c0f; border-radius: 10px; overflow: hidden; }
+  .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile button {
+    position: absolute; top: 5px; right: 5px; padding: 3px 9px; font-size: 13px; border-radius: 12px;
+    background: rgba(0,0,0,.6); color: #fff;
+  }
+  .note { color: var(--mid); font-size: 13px; padding: 0 16px 14px; }
+  #status { position: fixed; left: 16px; right: 16px; bottom: 16px; padding: 12px 16px; border-radius: 14px;
+    background: #fff; color: #000; font-weight: 500; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #status.show { opacity: 1; }
+  #status.bad { background: var(--bad); color: #fff; }
+  input[type=file] { display: none; }
+</style>
+</head>
+<body>
+<h1>Home</h1>
+
+<h2>Switches</h2>
+<div class="card">
+  <div class="row"><label for="gallery">Gallery photos</label><span class="switch"><input type="checkbox" id="gallery"><span></span></span></div>
+  <div class="row"><label for="btc">Bitcoin price</label><span class="switch"><input type="checkbox" id="btc"><span></span></span></div>
+  <div class="row"><label for="weather">Weather</label><span class="switch"><input type="checkbox" id="weather"><span></span></span></div>
+  <div class="row"><label for="now_playing">Now playing</label><span class="switch"><input type="checkbox" id="now_playing"><span></span></span></div>
+  <div class="row"><label for="greeting">Greeting name</label><input type="text" id="greeting" maxlength="40" placeholder="Mr. Trịnh" autocomplete="off"></div>
+  <div class="row"><label for="weather_location">Weather place</label><input type="text" id="weather_location" maxlength="80" placeholder="Singapore or 1.29,103.85" autocomplete="off"></div>
+</div>
+
+<h2>Photos</h2>
+<div class="card">
+  <div class="bar">
+    <button class="ghost" id="prev">‹ Previous</button>
+    <button class="ghost" id="next">Next ›</button>
+  </div>
+  <div class="bar">
+    <label class="button" for="files">Add photos</label>
+    <input type="file" id="files" accept="image/jpeg,image/png,image/webp" multiple>
+  </div>
+  <p class="note" id="photoNote"></p>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div id="status"></div>
+
+<script>
+(() => {
+  const H = { 'X-Requested-With': 'tvhome' };
+  const $ = id => document.getElementById(id);
+  let timer;
+
+  function say(text, bad) {
+    const s = $('status');
+    s.textContent = text;
+    s.className = 'show' + (bad ? ' bad' : '');
+    clearTimeout(timer);
+    timer = setTimeout(() => { s.className = ''; }, 2600);
+  }
+
+  async function call(method, path, body, headers) {
+    const r = await fetch(path, { method, body, headers: Object.assign({}, H, headers || {}), credentials: 'same-origin' });
+    let data = {};
+    try { data = await r.json(); } catch (e) {}
+    if (!r.ok) throw new Error(data.error || ('Error ' + r.status));
+    return data;
+  }
+
+  function render(s) {
+    for (const k of ['gallery', 'btc', 'weather', 'now_playing']) $(k).checked = !!s[k];
+    for (const k of ['greeting', 'weather_location']) if (document.activeElement !== $(k)) $(k).value = s[k] || '';
+    $('prev').disabled = $('next').disabled = !s.home;
+    const grid = $('grid');
+    grid.textContent = '';
+    $('photoNote').textContent = s.photos.length
+      ? s.photos.length + ' photo' + (s.photos.length === 1 ? '' : 's') + ' in Pictures/Launcher.'
+        + (s.home ? '' : ' Previous / Next work while Home is on screen.')
+      : 'No photos yet.';
+    for (const p of s.photos) {
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.alt = p.name;
+      img.src = '/thumb?id=' + encodeURIComponent(p.id);
+      tile.appendChild(img);
+      const del = document.createElement('button');
+      del.textContent = '✕';
+      del.title = p.own ? 'Delete' : 'Added from a computer, can\'t delete here';
+      del.addEventListener('click', async () => {
+        if (!p.own) { say('Added from a computer, can\'t delete it here', true); return; }
+        if (!confirm('Delete ' + p.name + '?')) return;
+        try { await call('POST', '/api/delete?id=' + encodeURIComponent(p.id)); say('Deleted'); load(); }
+        catch (e) { say(e.message, true); }
+      });
+      tile.appendChild(del);
+      grid.appendChild(tile);
+    }
+  }
+
+  async function load() {
+    try { render(await call('GET', '/api/state')); } catch (e) { say(e.message, true); }
+  }
+
+  async function save(patch) {
+    try { render(await call('POST', '/api/settings', JSON.stringify(patch), { 'Content-Type': 'application/json' })); say('Saved'); }
+    catch (e) { say(e.message, true); load(); }
+  }
+
+  for (const k of ['gallery', 'btc', 'weather', 'now_playing']) {
+    $(k).addEventListener('change', () => save({ [k]: $(k).checked }));
+  }
+  for (const k of ['greeting', 'weather_location']) {
+    $(k).addEventListener('change', () => save({ [k]: $(k).value }));
+  }
+  for (const [id, dir] of [['prev', 'prev'], ['next', 'next']]) {
+    $(id).addEventListener('click', async () => {
+      try { await call('POST', '/api/photo?dir=' + dir); } catch (e) { say(e.message, true); }
+    });
+  }
+
+  $('files').addEventListener('change', async ev => {
+    const files = Array.from(ev.target.files || []).slice(0, 20);
+    ev.target.value = '';
+    let done = 0;
+    for (const f of files) {
+      if (f.size > 15 * 1024 * 1024) { say(f.name + ' is over 15 MB', true); continue; }
+      say('Uploading ' + (done + 1) + ' of ' + files.length + '…');
+      try {
+        await call('POST', '/api/upload', f, { 'Content-Type': 'application/octet-stream', 'X-Filename': encodeURIComponent(f.name) });
+        done++;
+      } catch (e) { say(f.name + ': ' + e.message, true); }
+    }
+    if (done) say(done + ' photo' + (done === 1 ? '' : 's') + ' added');
+    load();
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

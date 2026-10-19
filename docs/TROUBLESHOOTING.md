@@ -135,3 +135,15 @@ tag `TvHomeUpdate`: `tools/tv.py 'logcat -d -s TvHomeUpdate'`.
   launcher turns them back on itself when the install script granted it `WRITE_SECURE_SETTINGS`. If
   it was installed before that grant existed, run the install script once more with
   `INPUT_KEY_SERVICE=1` / `HOME_KEY_SERVICE=1` as before.
+
+## Phone control
+
+- **The page says "Open the link shown on the TV"**: the code is missing or old (someone chose New code).
+  Hold OK on the network button and open the link or scan the QR code again.
+- **The link doesn't load at all**: the phone must be on the same network as the TV, not on mobile data or a
+  VPN that routes everything elsewhere; addresses outside the private ranges get no answer. Check that
+  `web_control` isn't false and nothing else on the TV uses port 8080 (change `web_port`).
+- **"Too many wrong codes"**: ten wrong codes from that address in a minute; wait a minute.
+- **"Added from a computer, can't delete it here"**: only photos uploaded from the page belong to the
+  launcher. Delete the others with `tools/tv.py 'rm /sdcard/Pictures/Launcher/<name>'`.
+- **Previous / Next are greyed out**: they step the photos on the home screen, so Home has to be in front.

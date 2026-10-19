@@ -62,11 +62,28 @@ public class WeatherTest {
     public void formatsAndRoundTrips() {
         assertEquals("31°", Weather.formatTemp(30.6));
         assertEquals("-2°", Weather.formatTemp(-2.4));
-        Weather.Reading r = Weather.decodeLast(Weather.encodeLast(new Weather.Reading(27.6, 3, 1234L)));
+        Weather.Reading r = Weather.decodeLast(Weather.encodeLast(new Weather.Reading(27.6, 3, 40, 30, 1234L)));
         assertEquals(27.6, r.temp, 1e-9);
         assertEquals(3, r.code);
+        assertEquals(40, r.rain1h);
+        assertEquals(30, r.rain2h);
+        assertEquals(-1, Weather.decodeLast("27.6,3,1234").rain1h);   // saved by an older version
         assertEquals(1234L, r.at);
         assertNull(Weather.decodeLast("garbage"));
         assertNull(Weather.decodeLast(null));
+    }
+
+    @Test
+    public void rainChanceForTheNextTwoHours() throws Exception {
+        String body = "{\"current\":{\"temperature_2m\":28.5,\"weather_code\":3},"
+                + "\"hourly\":{\"precipitation_probability\":[8,40,30,90]}}";
+        Weather.Reading r = Weather.parseForecast(body, 0);
+        assertEquals(40, r.rain1h);
+        assertEquals(30, r.rain2h);
+        assertEquals(-1, Weather.parseForecast("{\"current\":{\"temperature_2m\":28.5,\"weather_code\":3}}", 0).rain1h);
+        assertEquals("Rain: 40% 1h 30% 2h", Weather.formatRain(40, 30));
+        assertEquals("Rain: 5% 1h 25% 2h", Weather.formatRain(5, 25));
+        assertEquals("", Weather.formatRain(10, 5));
+        assertEquals("", Weather.formatRain(-1, -1));
     }
 }

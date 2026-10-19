@@ -11,6 +11,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ChangedPackages;
 import android.content.pm.PackageManager;
@@ -211,7 +212,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** greeting_name: said after the greeting, which is shown in capitals. */
     private String greetingName = "";
     static final String PREFS = "home";
-    private static final String PREF_BTC = "btc_ticker";
+    static final String PREF_BTC = "btc_ticker";
+    /** Overrides set from the phone page (WebControl); the config value is the default. */
+    static final String PREF_NOW_PLAYING = "now_playing";
+    static final String PREF_GREETING = "greeting_name";
+    static final String PREF_WEATHER_LOCATION = "weather_location";
+    /** config.xml with the theme's config.json over it, for the defaults behind those overrides. */
+    private Config config;
     /** Weather next to the date: on from the weather key, or from the Settings menu, which wins once used. */
     static final String PREF_WEATHER = "weather";
     private TextView weatherView;
@@ -323,6 +330,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         density = getResources().getDisplayMetrics().density;
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
+        config = cfg;
+        // The phone page lives as long as the process; a second onCreate finds it running.
+        WebControl.start(this, cfg.webControl, cfg.webPort);
         COLUMNS = cfg.columns;
         liveTvPkg = cfg.liveTvPackage;
         liveTvAction = cfg.liveTvAction;
@@ -544,6 +554,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onResume() {
         super.onResume();
         resumed = true;
+        readOverrides();
         tilesReady = false;
         promptsPaused = false;
         if (wallpaperFile != null && wallView == null) showWallpaper(wallpaperFile);   // dropped by onTrimMemory
@@ -561,6 +572,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         Updater.installListener = () -> handler.post(() -> {
             if (updatePrompt != null) updatePrompt.dismiss();
         });
+        WebControl.remote = new WebControl.Remote() {
+            @Override
+            public void settingsChanged() {
+                handler.post(MainActivity.this::applyRemoteChange);
+            }
+
+            @Override
+            public void step(boolean back) {
+                handler.post(() -> {
+                    if (resumed) stepPhoto(back);
+                });
+            }
+
+            @Override
+            public void photosChanged() {
+                handler.post(() -> {
+                    galleryListedAt = 0;   // list the folder again before the next photo
+                    if (resumed && galleryShownAt == 0) startGallery();
+                });
+            }
+        };
         updateUpdateDot();
         checkWeekly();
     }
@@ -671,6 +703,40 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (updatePrompt != null) updatePrompt.dismiss();
         if (openPopup != null) openPopup.dismiss();
         Updater.installListener = null;
+        WebControl.remote = null;
+    }
+
+    /** The switches and texts the Settings menu or the phone page may have changed since the config was read. */
+    private void readOverrides() {
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        btcOn = p.getBoolean(PREF_BTC, config.btcTicker);
+        weatherOn = p.getBoolean(PREF_WEATHER, config.weather);
+        galleryOn = p.getBoolean(PREF_GALLERY, config.gallery);
+        nowPlayingOn = p.getBoolean(PREF_NOW_PLAYING, config.nowPlaying);
+        greetingName = p.getString(PREF_GREETING, config.greetingName);
+        weatherLocation = p.getString(PREF_WEATHER_LOCATION, config.weatherLocation);
+    }
+
+    /** A change from the phone page while Home is in front: stop what depends on it and start it again. */
+    private void applyRemoteChange() {
+        if (!resumed) return;   // onResume reads the settings anyway
+        handler.removeCallbacks(btcTick);
+        handler.removeCallbacks(weatherTick);
+        handler.removeCallbacks(galleryTick);
+        stopNowPlaying();
+        boolean galleryWas = galleryOn;
+        readOverrides();
+        updateGreeting();
+        startTicker();
+        startWeather();
+        if (nowPlayingOn) {
+            startNowPlaying();
+        } else {
+            nowPlayingHasSession = false;
+            placeNowPlaying();
+        }
+        if (galleryOn != galleryWas && heroShown) ambient.animate().alpha(ambientAlpha()).setDuration(300).start();
+        startGallery();
     }
 
     /**
@@ -1955,7 +2021,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
     }
 
-    /** "☀ 31°"; the icon is left out where the TV's fonts don't have it. Hidden until there is a reading. */
+    /** "☀ 31°  Rain: 40% 1h 30% 2h"; the icon is left out where the TV's fonts don't have it. Hidden until there is a reading. */
     private void showWeather(Weather.Reading r) {
         if (r == null) {
             weatherView.setVisibility(View.GONE);
@@ -1963,7 +2029,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         String icon = Weather.icon(r.code);
         if (!icon.isEmpty() && !weatherView.getPaint().hasGlyph(icon)) icon = "";
-        weatherView.setText(icon.isEmpty() ? Weather.formatTemp(r.temp) : icon + " " + Weather.formatTemp(r.temp));
+        weatherView.setText(Weather.line(r, icon));
         weatherView.setVisibility(View.VISIBLE);
     }
 
@@ -2062,8 +2128,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void showNetworkMenu() {
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
-        final PopupWindow popup = glassPopup(panel, (int) (380 * density));
         final String ip = ipv4Address();
+        final boolean withQr = WebControl.port() > 0 && ip != null;
+        // With the phone page on, its QR code sits in a column beside the rows (the menu doesn't scroll).
+        final PopupWindow popup = glassPopup(panel, (int) ((withQr ? 380 + 186 : 380) * density));
 
         addMenuRow(rows, getString(R.string.net_menu_address), ip != null ? ip : getString(R.string.net_menu_offline));
         final TextView adbStatus = addMenuRow(rows, getString(R.string.net_menu_adb), getString(R.string.net_menu_checking))
@@ -2072,6 +2140,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 .findViewById(R.id.status);
         View toggleRow = addMenuRow(rows, getString(R.string.net_menu_wireless), "");
         final TextView toggleStatus = toggleRow.findViewById(R.id.status);
+        // The phone page: its address with the code, and a way to change the code.
+        final TextView webStatus = addMenuRow(rows, getString(R.string.net_menu_phone), webControlUrl(ip))
+                .findViewById(R.id.status);
+        final ImageView qr = withQr ? new ImageView(this) : null;
+        if (withQr) {
+            qr.setImageBitmap(qrBitmap(webControlUrl(ip)));
+            addMenuRow(rows, getString(R.string.net_menu_new_code), getString(R.string.net_menu_new_code_hint))
+                    .setOnClickListener(v -> {
+                        WebControl.newCode(this);
+                        webStatus.setText(webControlUrl(ip));
+                        qr.setImageBitmap(qrBitmap(webControlUrl(ip)));
+                    });
+        }
         addMenuRow(rows, getString(R.string.net_menu_pair), getString(R.string.net_menu_pair_hint))
                 .setOnClickListener(v -> {
                     popup.dismiss();
@@ -2139,8 +2220,45 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             });
         });
 
+        if (withQr) {
+            // rows | the QR code of the phone page's link, for the phone's camera.
+            LinearLayout outer = (LinearLayout) panel;
+            outer.removeView(rows);
+            LinearLayout columns = new LinearLayout(this);
+            columns.setOrientation(LinearLayout.HORIZONTAL);
+            columns.addView(rows, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            int side = (int) (160 * density);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(side, side);
+            lp.gravity = Gravity.CENTER_VERTICAL;
+            lp.setMargins((int) (12 * density), 0, (int) (8 * density), 0);
+            columns.addView(qr, lp);
+            outer.addView(columns);
+        }
         dropIn(popup, panel, btnWifi, Gravity.END);
         rows.getChildAt(0).requestFocus();
+    }
+
+    /** A QR code of {@code text}, black on white with the four-module quiet zone, one pixel per module. */
+    private static Bitmap qrBitmap(String text) {
+        boolean[][] m = Qr.encode(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        if (m == null) return null;
+        int n = m.length + 8;
+        int[] px = new int[n * n];
+        java.util.Arrays.fill(px, Color.WHITE);
+        for (int y = 0; y < m.length; y++) {
+            for (int x = 0; x < m.length; x++) if (m[y][x]) px[(y + 4) * n + x + 4] = Color.BLACK;
+        }
+        Bitmap small = Bitmap.createBitmap(px, n, n, Bitmap.Config.RGB_565);
+        // Scale up without smoothing so the modules stay sharp.
+        return Bitmap.createScaledBitmap(small, n * 8, n * 8, false);
+    }
+
+    /** http://ip:port/?k=code for the phone page, or Off / Offline. */
+    private String webControlUrl(String ip) {
+        int port = WebControl.port();
+        if (port <= 0) return getString(R.string.settings_menu_off);
+        if (ip == null) return getString(R.string.net_menu_offline);
+        return WebControl.url(ip, port, WebControl.code(this));
     }
 
     /** The active network's IPv4 address, or null when offline. */

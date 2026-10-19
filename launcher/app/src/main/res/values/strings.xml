@@ -65,6 +65,9 @@
     <string name="net_menu_pair">Pair new device…</string>
     <string name="net_menu_pair_hint">Developer options → Wireless debugging shows the code</string>
     <string name="net_menu_wifi_settings">Wi-Fi settings</string>
+    <string name="net_menu_phone">Phone control</string>
+    <string name="net_menu_new_code">New code</string>
+    <string name="net_menu_new_code_hint">Phones with the old link have to open the new one</string>
     <string name="settings_menu_gallery">Gallery</string>
     <string name="gallery_empty">On · no photos in Pictures/Launcher</string>
     <string name="gallery_no_permission">On · allow access to photos</string>
