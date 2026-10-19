@@ -147,6 +147,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Bitcoin line (Ticker): on from btc_ticker, or from the Settings menu, which wins once used. */
     private TextView btcTicker;
     private boolean btcOn;
+    /** greeting_name: said after the greeting, which is shown in capitals. */
+    private String greetingName = "";
     private static final String PREFS = "home";
     private static final String PREF_BTC = "btc_ticker";
 
@@ -329,6 +331,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return true;
         });
         selfUpdate = cfg.selfUpdate;
+        greetingName = cfg.greetingName;
         btcTicker = findViewById(R.id.btcTicker);
         btcOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_BTC, cfg.btcTicker);
         // The first start after a self-update says so (and puts accessibility services back if it can).
@@ -748,7 +751,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         else if (hour < 17) res = R.string.good_afternoon;
         else if (hour < 22) res = R.string.good_evening;
         else res = R.string.good_night;
-        greeting.setText(res);
+        greeting.setText(greetingName.isEmpty() ? getString(res) : getString(res) + ", " + greetingName);
         if (shamsi) shamsiDate.setText(Shamsi.today());
     }
 

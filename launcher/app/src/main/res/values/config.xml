@@ -68,6 +68,9 @@
          and ignores this. -->
     <string name="self_update" translatable="false">weekly</string>
 
+    <!-- A name after the greeting: "Mr. Trịnh" shows GOOD MORNING, MR. TRỊNH. Empty: the greeting alone. -->
+    <string name="greeting_name" translatable="false"></string>
+
     <!-- Bitcoin price, 24 hour change and block height above the top buttons, refreshed every five minutes
          while Home is in front (api.coinbase.com, api.exchange.coinbase.com, mempool.space). Off by default;
          also switched on the TV: hold OK on Settings, then Bitcoin price. -->
