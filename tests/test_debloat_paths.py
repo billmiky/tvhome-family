@@ -26,6 +26,45 @@ class DebloatPathsTest(unittest.TestCase):
             with self.subTest(script=script):
                 self.check_injected_line(script)
 
+    def test_windows_bom_and_crlf_are_normalised(self):
+        # Notepad saves a BOM and CRLF; the list must still yield clean package names (#208).
+        for script in ("disable.sh", "restore.sh"):
+            with self.subTest(script=script):
+                self.check_windows_list(script)
+
+    def check_windows_list(self, script):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            tools = base / "repo" / "tools"
+            tools.mkdir(parents=True)
+            shutil.copy2(ROOT / "tools" / script, tools / script)
+            client = tools / "venv" / "bin" / "python"
+            client.parent.mkdir(parents=True)
+            client.write_text('#!/bin/sh\ncat > "$CAPTURE"\n')
+            client.chmod(0o755)
+
+            package_list = base / "debloat.txt"
+            package_list.write_bytes(
+                b"\xef\xbb\xbf# My TV, saved in Notepad\r\n"
+                b"com.example.one\r\n"
+                b"com.example.two   # a note\r\n"
+            )
+            capture = base / "commands.txt"
+            result = subprocess.run(
+                ["bash", str(tools / script), str(package_list)], cwd=base,
+                env=dict(os.environ, CAPTURE=str(capture)),
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            sent = capture.read_bytes()
+            self.assertNotIn(b"\xef\xbb\xbf", sent, "BOM reached the TV")
+            self.assertNotIn(b"\r", sent, "CR reached the TV")
+            operation = "pm disable-user --user 0" if script == "disable.sh" else "pm enable"
+            self.assertEqual(sent.decode().splitlines()[:2], [
+                f"{operation} com.example.one",
+                f"{operation} com.example.two",
+            ])
+
     def check_injected_line(self, script):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
