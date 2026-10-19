@@ -27,6 +27,8 @@ final class Weather {
     static final long REFRESH_MS = 30 * 60_000L;
 
     private static final String FORECAST = "https://api.open-meteo.com/v1/forecast?current=temperature_2m,weather_code&hourly=precipitation_probability&forecast_hours=3&timezone=auto";
+    /** US AQI from Open-Meteo's air-quality model (CAMS); same host family, no key. */
+    private static final String AIR = "https://air-quality-api.open-meteo.com/v1/air-quality?current=us_aqi";
     private static final String GEOCODE = "https://geocoding-api.open-meteo.com/v1/search?count=1&format=json&name=";
     /** The last reading, kept in prefs too so the screensaver can show it after the process restarts. */
     private static final String PREF_LAST = "weather_last";
@@ -44,15 +46,45 @@ final class Weather {
         final double temp;
         final int code;
         final int rain1h, rain2h;
+        /** US AQI, or -1 when the air-quality request failed. */
+        final int aqi;
         final long at;
 
         Reading(double temp, int code, int rain1h, int rain2h, long at) {
+            this(temp, code, rain1h, rain2h, -1, at);
+        }
+
+        Reading(double temp, int code, int rain1h, int rain2h, int aqi, long at) {
             this.temp = temp;
             this.code = code;
             this.rain1h = rain1h;
             this.rain2h = rain2h;
+            this.aqi = aqi;
             this.at = at;
         }
+
+        Reading withAqi(int aqi) {
+            return new Reading(temp, code, rain1h, rain2h, aqi, at);
+        }
+    }
+
+    /** AQI is shown from this value up: "good" air (0–50) needs no mention. */
+    static final int AQI_SHOWN_ABOVE = 50;
+
+    /** {"current":{"us_aqi":72}} → 72, or -1 when missing or out of range. */
+    static int parseAqi(String body) throws Exception {
+        JSONObject cur = new JSONObject(body).optJSONObject("current");
+        if (cur == null || cur.isNull("us_aqi")) return -1;
+        int v = cur.optInt("us_aqi", -1);
+        return v >= 0 && v <= 999 ? v : -1;
+    }
+
+    /** Yellow above 50 (moderate), orange above 100, red above 150; 0 when not shown. */
+    static int aqiColor(int aqi) {
+        if (aqi > 150) return 0xFFFF453A;
+        if (aqi > 100) return 0xFFFF9F0A;
+        if (aqi > AQI_SHOWN_ABOVE) return 0xFFFFD60A;
+        return 0;
     }
 
     /** Below this chance of rain the line stays short: the forecast is noise at a few percent. */
@@ -149,20 +181,34 @@ final class Weather {
             sb.setSpan(new android.text.style.RelativeSizeSpan(0.72f), start, sb.length(), flags);
             sb.setSpan(new android.text.style.ForegroundColorSpan(0xB3FFFFFF), start, sb.length(), flags);
         }
+        int color = aqiColor(r.aqi);
+        if (color != 0) {
+            // "AQI 120": the label dim like the rain line, the number in its band's colour.
+            int flags = android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
+            sb.append("   ");
+            int start = sb.length();
+            sb.append("AQI ");
+            sb.setSpan(new android.text.style.ForegroundColorSpan(0xB3FFFFFF), start, sb.length(), flags);
+            int num = sb.length();
+            sb.append(String.valueOf(r.aqi));
+            sb.setSpan(new android.text.style.ForegroundColorSpan(color), num, sb.length(), flags);
+            sb.setSpan(new android.text.style.RelativeSizeSpan(0.72f), start, sb.length(), flags);
+        }
         return sb;
     }
 
     static String encodeLast(Reading r) {
-        return String.format(Locale.US, "%.1f,%d,%d,%d,%d", r.temp, r.code, r.at, r.rain1h, r.rain2h);
+        return String.format(Locale.US, "%.1f,%d,%d,%d,%d,%d", r.temp, r.code, r.at, r.rain1h, r.rain2h, r.aqi);
     }
 
     static Reading decodeLast(String s) {
         if (s == null) return null;
         String[] p = s.split(",");
-        if (p.length != 3 && p.length != 5) return null;   // 3: saved before the rain chances were kept
+        if (p.length != 3 && p.length != 5 && p.length != 6) return null;   // older versions kept fewer fields
         try {
-            int r1 = p.length == 5 ? Integer.parseInt(p[3]) : -1, r2 = p.length == 5 ? Integer.parseInt(p[4]) : -1;
-            return new Reading(Double.parseDouble(p[0]), Integer.parseInt(p[1]), r1, r2, Long.parseLong(p[2]));
+            int r1 = p.length >= 5 ? Integer.parseInt(p[3]) : -1, r2 = p.length >= 5 ? Integer.parseInt(p[4]) : -1;
+            int aqi = p.length == 6 ? Integer.parseInt(p[5]) : -1;
+            return new Reading(Double.parseDouble(p[0]), Integer.parseInt(p[1]), r1, r2, aqi, Long.parseLong(p[2]));
         } catch (NumberFormatException e) {
             return null;
         }
@@ -198,6 +244,11 @@ final class Weather {
             String url = FORECAST + String.format(Locale.US, "&latitude=%.4f&longitude=%.4f", at[0], at[1])
                     + (FAHRENHEIT.equals(unit) ? "&temperature_unit=fahrenheit" : "");
             Reading r = parseForecast(Ticker.get(url), System.currentTimeMillis());
+            try {
+                r = r.withAqi(parseAqi(Ticker.get(AIR + String.format(Locale.US, "&latitude=%.4f&longitude=%.4f", at[0], at[1]))));
+            } catch (Exception e) {
+                Log.w(TAG, "air quality: " + e);   // the temperature still shows without it
+            }
             last = r;
             lastFor = key(location, unit);
             prefs.edit().putString(PREF_LAST, encodeLast(r)).putString(PREF_FOR, lastFor).apply();

@@ -34,7 +34,7 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 | `greeting_name` | string | A name after the greeting, e.g. `"Mr. Trịnh"` for GOOD MORNING, MR. TRỊNH; empty for the greeting alone |
 | `gallery` | bool | Photos from `Pictures/Launcher` on the TV as the background, a random one every five minutes, over the theme wallpaper (`false` by default). Hold OK on Settings → Gallery switches it on the TV, and that choice then wins over this key |
 | `now_playing` | bool | The Now playing card above the dock for an app playing in the background (`true`); needs the notification listener the install script enables |
-| `weather` | bool | Weather icon and temperature next to the date, from Open-Meteo, refreshed every 30 minutes while Home is in front (`false` by default). Hold OK on Settings → Weather switches it on the TV, and that choice then wins over this key |
+| `weather` | bool | Weather icon and temperature above the date, plus the chance of rain in the next two hours (from 20%) and the US AQI (above 50, yellow, orange above 100, red above 150), from Open-Meteo, refreshed every 30 minutes while Home is in front (`false` by default). Hold OK on Settings → Weather switches it on the TV, and that choice then wins over this key |
 | `weather_location` | string | Where the weather is for: `"1.29,103.85"` or a place name such as `"Singapore"`, looked up once on Open-Meteo's geocoding service. Empty: no weather |
 | `weather_unit` | string | `celsius` (default) or `fahrenheit` |
 | `web_control` | bool | Phone control page on the home network (`true` by default); `false`: no server at all |

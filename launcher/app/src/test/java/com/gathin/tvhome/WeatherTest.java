@@ -86,4 +86,16 @@ public class WeatherTest {
         assertEquals("", Weather.formatRain(10, 5));
         assertEquals("", Weather.formatRain(-1, -1));
     }
+
+    @Test
+    public void airQuality() throws Exception {
+        assertEquals(120, Weather.parseAqi("{\"current\":{\"time\":\"x\",\"us_aqi\":120}}"));
+        assertEquals(-1, Weather.parseAqi("{\"current\":{\"us_aqi\":null}}"));
+        assertEquals(0, Weather.aqiColor(50));
+        assertEquals(0xFFFFD60A, Weather.aqiColor(51));
+        assertEquals(0xFFFF9F0A, Weather.aqiColor(101));
+        assertEquals(0xFFFF453A, Weather.aqiColor(151));
+        Weather.Reading r = Weather.decodeLast(Weather.encodeLast(new Weather.Reading(27.6, 3, 40, 30, 120, 1L)));
+        assertEquals(120, r.aqi);
+    }
 }
