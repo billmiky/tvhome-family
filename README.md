@@ -69,6 +69,7 @@ Rather not build? `CHANNEL=official` installs the signed release APK instead, an
 - **Three frosted buttons**: Inputs (HDMI ports, AV, Live TV), Wi-Fi or Ethernet with the network name, Settings.
 - **A greeting, a thin clock and the date** in [Outfit](https://fonts.google.com/specimen/Outfit), and a matching Clock screensaver.
 - **Now playing**: a card above the dock for music playing in the background, with play/pause and skip on the remote.
+- **Gallery**, off by default: your own photos from `Pictures/Launcher` on the TV as the background, a random one every five minutes.
 - **Themes** that change colours, wallpaper, dock and columns without a rebuild, and **module cards** that let other apps plug a tile in, only with your say-so.
 
 And a TV that stops working against you: no sponsored rows, no "Discover" nags, no analytics

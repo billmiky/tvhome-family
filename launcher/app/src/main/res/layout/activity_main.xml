@@ -263,7 +263,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:duplicateParentState="true"
-                android:textColor="@drawable/pill_text"
+                android:textColor="#FFFFFFFF"
                 android:textSize="17sp"
                 android:fontFamily="@font/outfit"
                 android:fontVariationSettings="'wght' 500" />
@@ -277,7 +277,7 @@
                 android:singleLine="true"
                 android:ellipsize="end"
                 android:duplicateParentState="true"
-                android:textColor="@drawable/pill_text_mid"
+                android:textColor="#B3FFFFFF"
                 android:textSize="13sp"
                 android:fontFamily="@font/outfit" />
         </LinearLayout>
@@ -288,7 +288,7 @@
             android:layout_height="26dp"
             android:layout_marginEnd="4dp"
             android:duplicateParentState="true"
-            android:tint="@drawable/pill_text"
+            android:tint="#FFFFFFFF"
             android:importantForAccessibility="no" />
     </LinearLayout>
 

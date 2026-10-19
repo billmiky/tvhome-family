@@ -53,6 +53,8 @@ final class Config {
     final String greetingName;
     /** The Now playing card above the dock (NowPlaying); also needs the notification listener granted. */
     final boolean nowPlaying;
+    /** Gallery: photos from Pictures/Launcher as the background; the Settings menu can override it on the TV. */
+    final boolean gallery;
     /** Background colour behind everything, #RRGGBB; black unless a theme says otherwise. */
     final int backgroundColor;
     /** Full-screen picture behind the launcher, or null for the plain colour. */
@@ -63,7 +65,7 @@ final class Config {
     private Config(List<String> dockApps, List<String> hiddenApps, String liveTvPackage, String liveTvAction,
                    String sourcePanelService, String sourcePanelAction, String inputAction,
                    int columns, int rowsBelowDock,
-                   boolean shamsiDate, boolean moduleCards, String vpnApp, boolean showHomeSettingsShortcut, String selfUpdate, boolean btcTicker, String greetingName, boolean nowPlaying, int backgroundColor,
+                   boolean shamsiDate, boolean moduleCards, String vpnApp, boolean showHomeSettingsShortcut, String selfUpdate, boolean btcTicker, String greetingName, boolean nowPlaying, boolean gallery, int backgroundColor,
                    File wallpaper, boolean overlayApplied) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -82,6 +84,7 @@ final class Config {
         this.btcTicker = btcTicker;
         this.greetingName = greetingName;
         this.nowPlaying = nowPlaying;
+        this.gallery = gallery;
         this.backgroundColor = backgroundColor;
         this.wallpaper = wallpaper;
         this.overlayApplied = overlayApplied;
@@ -111,6 +114,7 @@ final class Config {
         boolean btc = res.getBoolean(R.bool.btc_ticker);
         String name = res.getString(R.string.greeting_name).trim();
         boolean nowPlaying = res.getBoolean(R.bool.now_playing);
+        boolean gallery = res.getBoolean(R.bool.gallery);
         int background = 0xFF000000;
         boolean applied = false;
 
@@ -136,6 +140,7 @@ final class Config {
             btc = bool(json, "btc_ticker", btc);
             name = string(json, "greeting_name", name).trim();
             nowPlaying = bool(json, "now_playing", nowPlaying);
+            gallery = bool(json, "gallery", gallery);
             background = color(json, "background_color", background);
         }
         File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;
@@ -144,7 +149,7 @@ final class Config {
         if (json != null && json.has("wallpaper") && !bool(json, "wallpaper", true)) wallpaper = null;
 
         return new Config(dock, hidden, liveTv, liveTvAction, panelService, panelAction, inputAction,
-                Math.max(1, columns), Math.max(0, rowsBelow), shamsi, moduleCards, vpn, homeSettings, Updater.mode(selfUpdate), btc, name, nowPlaying, background,
+                Math.max(1, columns), Math.max(0, rowsBelow), shamsi, moduleCards, vpn, homeSettings, Updater.mode(selfUpdate), btc, name, nowPlaying, gallery, background,
                 wallpaper, applied);
     }
 

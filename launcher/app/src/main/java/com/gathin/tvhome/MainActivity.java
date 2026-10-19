@@ -13,6 +13,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ChangedPackages;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -54,6 +55,7 @@ import android.view.ViewOutlineProvider;
 import android.view.Window;
 import android.view.animation.AnimationUtils;
 import android.view.animation.LayoutAnimationController;
+import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -88,6 +90,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Tiles per row and dock slots (res/values/config.xml, columns). Set in onCreate. */
     static int COLUMNS = 4;
     private static final long MINUTE_MS = 60_000L;
+    /** How far the Now playing card lifts when focused; less than a tile, since it is much wider. */
+    private static final float NOW_PLAYING_SCALE = 1.04f;
     private String liveTvPkg;
     private String liveTvAction;
     private String inputAction;
@@ -202,6 +206,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private String greetingName = "";
     private static final String PREFS = "home";
     private static final String PREF_BTC = "btc_ticker";
+    private static final String PREF_GALLERY = "gallery";
+    private static final int REQUEST_PHOTOS = 7;
+    /** Gallery (Gallery.java): on from gallery, or from the Settings menu, which wins once used. */
+    private boolean galleryOn;
+    /** Two photos for the crossfade and the scrim over them, under everything; null until a photo shows. */
+    private FrameLayout galleryLayer;
+    private ImageView galleryFront;
+    private ImageView galleryBack;
+    private long galleryShownAt;
+    private boolean galleryLoading;
+    // Static so a recreated activity doesn't list the folder again or start a new round of photos.
+    private static volatile List<String> galleryPhotos = Collections.emptyList();
+    private static volatile long galleryListedAt;
+    private static final Gallery.ShuffleBag galleryBag = new Gallery.ShuffleBag(new java.util.Random());
+    private final Runnable galleryTick = new Runnable() {
+        @Override
+        public void run() {
+            nextPhoto();
+            handler.postDelayed(this, Gallery.INTERVAL_MS);
+        }
+    };
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     /** Refreshes the network pill when the connection changes: at boot Wi-Fi often connects after Home is shown. */
@@ -385,6 +410,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         greetingName = cfg.greetingName;
         btcTicker = findViewById(R.id.btcTicker);
         btcOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_BTC, cfg.btcTicker);
+        galleryOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_GALLERY, cfg.gallery);
         // The first start after a self-update says so (and puts accessibility services back if it can).
         int started = UpdateFeature.run(() -> Updater.afterStart(this), Updater.STARTED_PLAIN);
         if (started != Updater.STARTED_PLAIN) {
@@ -411,7 +437,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         // Hide the glass when focus leaves the tiles.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
-            boolean onTile = newF != null && newF.getId() == R.id.card;
+            boolean onTile = newF != null && (newF.getId() == R.id.card || newF.getId() == R.id.nowPlaying);
             if (!onTile) hideGlass();
         });
 
@@ -461,7 +487,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             wall.setImageBitmap(bmp);
             root.addView(wall, 0, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             wallView = wall;
-            root.setBackground(null);   // the picture covers the screen; the colour under it would be overdraw
+            updateBackdrop();
         } catch (Exception | OutOfMemoryError e) {
             // A bad or huge picture must never take the home screen down; the plain colour stays.
         }
@@ -483,6 +509,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         handler.postDelayed(minuteTick, MINUTE_MS);
         startTicker();
         startNowPlaying();
+        startGallery();
         Updater.installListener = () -> handler.post(() -> {
             if (updatePrompt != null) updatePrompt.dismiss();
         });
@@ -582,6 +609,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         resumed = false;
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(btcTick);
+        handler.removeCallbacks(galleryTick);
         stopNowPlaying();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
@@ -610,8 +638,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             wallView.setImageDrawable(null);
             root.removeView(wallView);
             wallView = null;
-            root.setBackgroundColor(backgroundColor);
         }
+        dropGallery();   // the next return to Home shows a new photo
+        updateBackdrop();
     }
 
     @Override
@@ -644,35 +673,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public void onTileFocused(int position, View card) {
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
-        // Tile rect in root coordinates, using layout positions (ignores the scale animation).
-        Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
-        root.offsetDescendantRectToMyCoords(card, r);
+        Rect r = glassTo(card, AppAdapter.FOCUS_SCALE, AppAdapter.cornerRadius(card.getWidth(), density), true);
         float pad = 6f * density;        // matches GlassView's glow inset
-        float w = card.getWidth() * AppAdapter.FOCUS_SCALE + 2 * pad;
-        float h = card.getHeight() * AppAdapter.FOCUS_SCALE + 2 * pad;
-        float x = r.exactCenterX() - w / 2f;
-        float y = r.exactCenterY() - h / 2f;
-
-        ViewGroup.LayoutParams lp = glass.getLayoutParams();
-        if (lp.width != (int) w || lp.height != (int) h) {
-            lp.width = (int) w;
-            lp.height = (int) h;
-            glass.setLayoutParams(lp);
-            glass.setRadius(AppAdapter.cornerRadius(card.getWidth(), density) * AppAdapter.FOCUS_SCALE + pad);
-        }
-        glassTargetX = x;
-        glassTargetY = y;
-        if (!glassShown) {
-            springX.cancel();
-            springY.cancel();
-            glass.setTranslationX(x);
-            glass.setTranslationY(y);
-            glass.animate().alpha(1f).setDuration(180).start();
-            glassShown = true;
-        } else {
-            springX.animateToFinalPosition(x);
-            springY.animateToFinalPosition(y - glassScrollShift);
-        }
         View item = (View) card.getParent();
         if (position < COLUMNS) {
             // Dock: park it at the bottom of the screen and show the top shelf for this app.
@@ -686,6 +688,44 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             Rect want = new Rect(0, -(int) pad * 2, item.getWidth(), item.getHeight() + (int) pad);
             grid.requestChildRectangleOnScreen(item, want, false);
         }
+    }
+
+    /**
+     * Springs the glass highlight onto {@code target} as it looks scaled by {@code scale}, with the
+     * target's unscaled corner {@code radius}. Returns the target's rect in root coordinates, from
+     * layout positions (ignores the scale animation). {@code inGrid}: the target scrolls with the grid.
+     */
+    private Rect glassTo(View target, float scale, float radius, boolean inGrid) {
+        Rect r = new Rect(0, 0, target.getWidth(), target.getHeight());
+        root.offsetDescendantRectToMyCoords(target, r);
+        float pad = 6f * density;        // matches GlassView's glow inset
+        float w = target.getWidth() * scale + 2 * pad;
+        float h = target.getHeight() * scale + 2 * pad;
+        float x = r.exactCenterX() - w / 2f;
+        float y = r.exactCenterY() - h / 2f;
+
+        ViewGroup.LayoutParams lp = glass.getLayoutParams();
+        if (lp.width != (int) w || lp.height != (int) h) {
+            lp.width = (int) w;
+            lp.height = (int) h;
+            glass.setLayoutParams(lp);
+        }
+        glass.setRadius(radius * scale + pad);
+        glassTargetX = x;
+        glassTargetY = y;
+        float shift = inGrid ? glassScrollShift : 0f;
+        if (!glassShown) {
+            springX.cancel();
+            springY.cancel();
+            glass.setTranslationX(x);
+            glass.setTranslationY(y);
+            glass.animate().alpha(1f).setDuration(180).start();
+            glassShown = true;
+        } else {
+            springX.animateToFinalPosition(x);
+            springY.animateToFinalPosition(y - shift);
+        }
+        return r;
     }
 
     // ---- top shelf -------------------------------------------------------------------------------
@@ -1271,6 +1311,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         sessionListener = new ComponentName(this, NowPlayingListener.class);
         heroName.setEllipsize(TextUtils.TruncateAt.END);
         nowPlaying.setContentDescription(getString(R.string.now_playing_description));
+        // Focus looks like a tile's: the card lifts and the glass highlight springs onto it.
+        nowPlaying.setOnFocusChangeListener((v, focused) -> {
+            float s = focused ? NOW_PLAYING_SCALE : 1.0f;
+            v.animate().scaleX(s).scaleY(s)
+                    .setDuration(focused ? 260 : 180)
+                    .setInterpolator(new OvershootInterpolator(focused ? 1.6f : 0f))
+                    .start();
+            if (focused) glassTo(v, NOW_PLAYING_SCALE, 24 * density, false);
+        });
         final float artRadius = 14 * density;
         nowPlayingArt.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -1540,6 +1589,142 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (i != null) open(i);
     }
 
+    // ---- Gallery -----------------------------------------------------------------------------------
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_PHOTOS) {
+            galleryListedAt = 0;
+            startGallery();
+        }
+    }
+
+    private boolean hasPhotoPermission() {
+        return checkSelfPermission(Gallery.permission()) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /** The Gallery row's status: Off, On, or On with what's missing. */
+    private String galleryState() {
+        if (!galleryOn) return getString(R.string.settings_menu_off);
+        if (!hasPhotoPermission()) return getString(R.string.gallery_no_permission);
+        if (galleryListedAt > 0 && galleryPhotos.isEmpty()) return getString(R.string.gallery_empty);
+        return getString(R.string.settings_menu_on);
+    }
+
+    /** Shows a photo now if none is up or the current one is five minutes old, then one every five minutes. */
+    private void startGallery() {
+        handler.removeCallbacks(galleryTick);
+        if (!galleryOn || !Gallery.working() || !hasPhotoPermission()) {
+            dropGallery();
+            updateBackdrop();
+            return;
+        }
+        handler.postDelayed(galleryTick, Gallery.delayUntilNext(galleryShownAt, System.currentTimeMillis()));
+    }
+
+    /** Lists the folder when due, picks the next photo and decodes it on the gallery thread. */
+    private void nextPhoto() {
+        if (galleryLoading || !Gallery.working()) return;
+        galleryLoading = true;
+        final Context app = getApplicationContext();
+        final int w = root.getWidth() > 0 ? root.getWidth() : getResources().getDisplayMetrics().widthPixels;
+        final int h = root.getHeight() > 0 ? root.getHeight() : getResources().getDisplayMetrics().heightPixels;
+        Gallery.EXECUTOR.execute(() -> {
+            Bitmap bmp = Gallery.run(() -> {
+                long now = System.currentTimeMillis();
+                if (Gallery.relistDue(galleryListedAt, now)) {
+                    galleryPhotos = Gallery.list(app);
+                    galleryListedAt = now;
+                }
+                // A photo that can't be read is skipped; give up after a few so a folder of bad files can't spin.
+                for (int tries = 0; tries < 5; tries++) {
+                    String item = galleryBag.next(galleryPhotos);
+                    if (item == null) return null;
+                    Bitmap b = Gallery.decode(app, item, w, h);
+                    if (b != null) return b;
+                }
+                return null;
+            }, null);
+            handler.post(() -> {
+                galleryLoading = false;
+                if (isDestroyed() || !galleryOn) {
+                    if (bmp != null) bmp.recycle();
+                    return;
+                }
+                if (bmp != null) Gallery.run(() -> {
+                    showPhoto(bmp);
+                    return null;
+                }, null);
+            });
+        });
+    }
+
+    /** Crossfades to a new photo over about a second; the one it replaces is let go once covered. */
+    private void showPhoto(Bitmap bmp) {
+        if (galleryLayer == null) {
+            galleryLayer = new FrameLayout(this);
+            FrameLayout.LayoutParams full = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            galleryFront = new ImageView(this);
+            galleryBack = new ImageView(this);
+            for (ImageView v : new ImageView[] {galleryFront, galleryBack}) {
+                v.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                galleryLayer.addView(v, new FrameLayout.LayoutParams(full));
+            }
+            // Darker at the top and bottom so the clock, the header and the dock stay readable on bright photos.
+            View scrim = new View(this);
+            scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[] {0x8C000000, 0x1A000000, 0x26000000, 0xB3000000}));
+            galleryLayer.addView(scrim, new FrameLayout.LayoutParams(full));
+            root.addView(galleryLayer, wallView != null ? 1 : 0, full);
+        }
+        final ImageView incoming = galleryBack;
+        final ImageView outgoing = galleryFront;
+        incoming.animate().cancel();
+        incoming.setImageBitmap(bmp);
+        incoming.setAlpha(0f);
+        galleryLayer.removeView(incoming);
+        galleryLayer.addView(incoming, 1);   // above the current photo, under the scrim
+        galleryFront = incoming;
+        galleryBack = outgoing;
+        galleryShownAt = System.currentTimeMillis();
+        // The wallpaper (or colour) stays under the first photo until it has faded in.
+        incoming.animate().alpha(1f).setDuration(1000).withEndAction(() -> {
+            if (galleryBack == outgoing) release(outgoing);
+            updateBackdrop();
+        }).start();
+    }
+
+    /** Lets go of a photo. Not recycle(): a frame already recorded may still draw it; the collector frees it. */
+    private static void release(ImageView v) {
+        v.setImageDrawable(null);
+    }
+
+    /** Removes the photos (Gallery off, or memory trimmed); the theme wallpaper or colour shows again. */
+    private void dropGallery() {
+        if (galleryLayer == null) return;
+        galleryFront.animate().cancel();
+        galleryBack.animate().cancel();
+        release(galleryFront);
+        release(galleryBack);
+        root.removeView(galleryLayer);
+        galleryLayer = null;
+        galleryFront = null;
+        galleryBack = null;
+        galleryShownAt = 0;
+    }
+
+    /**
+     * Exactly one full-screen layer paints the background: the gallery, else the theme wallpaper, else the
+     * root's colour. The ones underneath would be overdraw.
+     */
+    private void updateBackdrop() {
+        boolean photos = galleryLayer != null;
+        if (wallView != null) wallView.setVisibility(photos ? View.GONE : View.VISIBLE);
+        if (photos || wallView != null) root.setBackground(null);
+        else root.setBackgroundColor(backgroundColor);
+    }
+
     // ---- Bitcoin line ----------------------------------------------------------------------------
 
     /** Shows the last reading at once, then refreshes now if it's over a minute old and every five minutes after. */
@@ -1629,6 +1814,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             btcStatus.setText(btcOn ? R.string.settings_menu_on : R.string.settings_menu_off);
             handler.removeCallbacks(btcTick);
             startTicker();
+        });
+
+        View galleryRow = addMenuRow(rows, getString(R.string.settings_menu_gallery), galleryState());
+        final TextView galleryStatus = galleryRow.findViewById(R.id.status);
+        galleryRow.setOnClickListener(v -> {
+            galleryOn = !galleryOn;
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_GALLERY, galleryOn).apply();
+            galleryStatus.setText(galleryState());
+            if (galleryOn && !hasPhotoPermission()) {
+                popup.dismiss();
+                requestPermissions(new String[] {Gallery.permission()}, REQUEST_PHOTOS);
+                return;
+            }
+            galleryListedAt = 0;   // look at the folder again: the owner may just have added photos
+            startGallery();
         });
 
         View checkRow = addMenuRow(rows, getString(R.string.update_menu_check, BuildConfig.VERSION_NAME), updateState());

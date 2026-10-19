@@ -14,6 +14,9 @@
     <!-- Network: the updater (docs/specs/self-update.md) and, only when switched on, the Bitcoin line
          (Ticker). The install permission is removed again from builds without a feed (src/noFeed). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Gallery: read the owner's photos in Pictures/Launcher. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Never asked for: only `pm grant` over adb gives it. Puts the launcher's accessibility services
          back on after a self-update, if Android switched them off. -->

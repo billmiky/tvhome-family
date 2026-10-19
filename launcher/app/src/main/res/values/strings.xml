@@ -51,6 +51,9 @@
     <string name="settings_menu_off">Off</string>
     <string name="settings_menu_on">On</string>
     <string name="settings_menu_btc">Bitcoin price</string>
+    <string name="settings_menu_gallery">Gallery</string>
+    <string name="gallery_empty">On · no photos in Pictures/Launcher</string>
+    <string name="gallery_no_permission">On · allow access to photos</string>
     <string name="now_playing_description">Now playing: OK plays or pauses, left and right skip, hold OK to open the app</string>
     <string name="btc_block">BLOCK %1$s</string>
     <string name="update_menu_check">Check for updates · %1$s</string>

@@ -93,6 +93,13 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   once you leave it: YouTube's TV app stops when you press Home, SmartTube and Spotify carry on. The
   card stays out of the way while the grid is scrolled, and with `rows_below_dock` above 0 there may be
   no room for it under the top bar. `now_playing` false in `config.xml` or a theme switches it off.
+- **Gallery shows no photos**: put them in `Pictures/Launcher` on the TV, by USB copy or
+  `adb push photos/. /sdcard/Pictures/Launcher/` (JPEG, PNG or WebP; HEIC isn't read). Big photos work,
+  but resized to about 1920 px they load faster and fill less storage. The launcher needs permission to
+  read photos: the TV asks when you switch Gallery on, and the install script grants it
+  (`tools/tv.py 'pm grant com.gathin.tvhome android.permission.READ_MEDIA_IMAGES'` on Android 13 and newer).
+  The Gallery row in the Settings menu says what's missing. New photos are picked up within five
+  minutes, or at once when you switch Gallery off and on.
 
 ## Updates
 
