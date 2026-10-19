@@ -673,7 +673,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public void onTileFocused(int position, View card) {
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
-        Rect r = glassTo(card, AppAdapter.FOCUS_SCALE, AppAdapter.cornerRadius(card.getWidth(), density), true);
+        Rect r = glassTo(card, AppAdapter.FOCUS_SCALE, AppAdapter.cornerRadius(card.getWidth(), density));
         float pad = 6f * density;        // matches GlassView's glow inset
         View item = (View) card.getParent();
         if (position < COLUMNS) {
@@ -693,11 +693,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /**
      * Springs the glass highlight onto {@code target} as it looks scaled by {@code scale}, with the
      * target's unscaled corner {@code radius}. Returns the target's rect in root coordinates, from
-     * layout positions (ignores the scale animation). {@code inGrid}: the target scrolls with the grid.
+     * layout positions (ignores the scale animation).
      */
-    private Rect glassTo(View target, float scale, float radius, boolean inGrid) {
+    private Rect glassTo(View target, float scale, float radius) {
         Rect r = new Rect(0, 0, target.getWidth(), target.getHeight());
         root.offsetDescendantRectToMyCoords(target, r);
+        // The Now playing card is placed with setY (placeNowPlaying), which the layout rect leaves out.
+        if (target == nowPlaying) r.offset(Math.round(target.getTranslationX()), Math.round(target.getTranslationY()));
         float pad = 6f * density;        // matches GlassView's glow inset
         float w = target.getWidth() * scale + 2 * pad;
         float h = target.getHeight() * scale + 2 * pad;
@@ -713,7 +715,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glass.setRadius(radius * scale + pad);
         glassTargetX = x;
         glassTargetY = y;
-        float shift = inGrid ? glassScrollShift : 0f;
         if (!glassShown) {
             springX.cancel();
             springY.cancel();
@@ -723,7 +724,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             glassShown = true;
         } else {
             springX.animateToFinalPosition(x);
-            springY.animateToFinalPosition(y - shift);
+            // The spring works in grid content coordinates; a target outside the grid simply doesn't scroll.
+            springY.animateToFinalPosition(y - glassScrollShift);
         }
         return r;
     }
@@ -796,7 +798,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return position % COLUMNS == COLUMNS - 1 || position == count - 1;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            if (position < COLUMNS) return false;          // dock row: let focus move to the top bar
+            if (position < COLUMNS) {
+                if (!nowPlayingVisible) return false;      // dock row: let focus move to the top bar
+                // With the Now playing card up, only the last dock tile goes to it; the others go to
+                // the top button above them, as without the card.
+                if (position == COLUMNS - 1) nowPlaying.requestFocus();
+                else topButtonAbove(position).requestFocus();
+                return true;
+            }
             target = position - COLUMNS;
         } else {
             int lastRowStart = ((count - 1) / COLUMNS) * COLUMNS;
@@ -805,6 +814,30 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         focusTile(target);
         return true;
+    }
+
+    /** The visible top button nearest horizontally to the dock tile at {@code position}. */
+    private View topButtonAbove(int position) {
+        RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(position);
+        float x = 0;
+        if (vh != null) {
+            Rect r = new Rect(0, 0, vh.itemView.getWidth(), vh.itemView.getHeight());
+            root.offsetDescendantRectToMyCoords(vh.itemView, r);
+            x = r.exactCenterX();
+        }
+        View best = btnSettings;
+        float bestD = Float.MAX_VALUE;
+        for (View b : new View[]{btnInputs, btnWifi, btnSettings}) {
+            if (b.getVisibility() != View.VISIBLE) continue;
+            Rect r = new Rect(0, 0, b.getWidth(), b.getHeight());
+            root.offsetDescendantRectToMyCoords(b, r);
+            float d = Math.abs(r.exactCenterX() - x);
+            if (d < bestD) {
+                bestD = d;
+                best = b;
+            }
+        }
+        return best;
     }
 
     private void focusTile(int position) {
@@ -1318,7 +1351,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     .setDuration(focused ? 260 : 180)
                     .setInterpolator(new OvershootInterpolator(focused ? 1.6f : 0f))
                     .start();
-            if (focused) glassTo(v, NOW_PLAYING_SCALE, 24 * density, false);
+            if (focused) glassTo(v, NOW_PLAYING_SCALE, 24 * density);
         });
         final float artRadius = 14 * density;
         nowPlayingArt.setOutlineProvider(new ViewOutlineProvider() {
@@ -1348,7 +1381,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (!left && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT && keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return false;
             if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                focusTile(lastFocused < COLUMNS ? lastFocused : COLUMNS - 1);
+                focusTile(COLUMNS - 1);                      // back to the tile it is entered from
                 return true;
             }
             if (event.getRepeatCount() > 0) return true;   // one skip per press, not a run of them
@@ -1489,8 +1522,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         } else if (art == null && (nowPlayingSource != null || !pkg.equals(nowPlayingPkg))) {
             Drawable icon = null;
             try {
-                icon = getPackageManager().getApplicationBanner(pkg);
-                if (icon == null) icon = getPackageManager().getApplicationIcon(pkg);
+                // The square icon: a wide banner cropped to a square cuts the app's name off.
+                icon = getPackageManager().getApplicationIcon(pkg);
             } catch (Exception ignored) {
                 // No picture: the card shows the title alone.
             }
@@ -1559,9 +1592,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }).start();
             heroName.setMaxWidth(Integer.MAX_VALUE);
         }
-        int down = nowPlayingVisible ? R.id.nowPlaying : R.id.grid;
-        btnWifi.setNextFocusDownId(down);
-        btnSettings.setNextFocusDownId(down);
+        // The card is reached only from Settings (Down) and the last dock tile (Up, onTileVerticalKey).
+        btnWifi.setNextFocusDownId(R.id.grid);
+        btnSettings.setNextFocusDownId(nowPlayingVisible ? R.id.nowPlaying : R.id.grid);
     }
 
     /** Hold OK on the card: the app's own player screen, or failing that its launcher entry. */
