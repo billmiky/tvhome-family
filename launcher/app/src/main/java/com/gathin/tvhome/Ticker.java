@@ -17,8 +17,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * The Bitcoin line above the top buttons: spot price, change since 24 hours ago and the latest block
- * height. Off unless the owner turns it on (btc_ticker, or the Settings menu). Three fixed HTTPS
+ * The Bitcoin line above the top buttons: spot price and change since 24 hours ago. Off unless the
+ * owner turns it on (btc_ticker, or the Settings menu). Two fixed HTTPS
  * requests, no redirects, no identifiers; only while Home is in front, at most every five minutes.
  * Parsing and formatting are plain Java so they can be tested on the JVM.
  */
@@ -28,7 +28,6 @@ final class Ticker {
     static final String SPOT_URL = "https://api.coinbase.com/v2/prices/BTC-USD/spot";
     /** 24 hour open and last trade; the change is last price against open. */
     static final String STATS_URL = "https://api.exchange.coinbase.com/products/BTC-USD/stats";
-    static final String HEIGHT_URL = "https://mempool.space/api/blocks/tip/height";
 
     /** How often the line refreshes while Home is in front, and how old a value may be on return. */
     static final long REFRESH_MS = 5 * 60_000L;
@@ -42,13 +41,11 @@ final class Ticker {
     static final class Quote {
         final double price;
         final double changePct;
-        final long height;
         final long at;
 
-        Quote(double price, double changePct, long height, long at) {
+        Quote(double price, double changePct, long at) {
             this.price = price;
             this.changePct = changePct;
-            this.height = height;
             this.at = at;
         }
 
@@ -67,7 +64,6 @@ final class Ticker {
     static Quote fetch(Quote previous) {
         double price = Double.NaN;
         double open = Double.NaN;
-        long height = -1;
         try {
             price = parseSpot(get(SPOT_URL));
         } catch (Exception e) {
@@ -78,16 +74,10 @@ final class Ticker {
         } catch (Exception e) {
             Log.w(TAG, "stats: " + e);
         }
-        try {
-            height = parseHeight(get(HEIGHT_URL));
-        } catch (Exception e) {
-            Log.w(TAG, "height: " + e);
-        }
         if (Double.isNaN(price) && previous != null) price = previous.price;
         double change = change(price, open);
         if (Double.isNaN(change) && previous != null) change = previous.changePct;
-        if (height < 0 && previous != null) height = previous.height;
-        return new Quote(price, change, height, System.currentTimeMillis());
+        return new Quote(price, change, System.currentTimeMillis());
     }
 
     /** {"data":{"amount":"81002.12","base":"BTC","currency":"USD"}} */
@@ -104,14 +94,6 @@ final class Ticker {
         return positive(Double.parseDouble(new JSONObject(body).getString("open")));
     }
 
-    /** A bare decimal number, the height of the latest block. */
-    static long parseHeight(String body) {
-        String s = body.trim();
-        if (s.isEmpty() || s.length() > 9 || !s.chars().allMatch(Character::isDigit)) {
-            throw new IllegalArgumentException("not a block height");
-        }
-        return Long.parseLong(s);
-    }
 
     static double change(double price, double open) {
         if (Double.isNaN(price) || Double.isNaN(open) || open <= 0) return Double.NaN;
@@ -135,10 +117,6 @@ final class Ticker {
         return (pct < 0 ? "▼ " : "▲ ") + n;
     }
 
-    /** "972,026" */
-    static String formatHeight(long height) {
-        return NumberFormat.getIntegerInstance(Locale.US).format(height);
-    }
 
     private static String get(String url) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();

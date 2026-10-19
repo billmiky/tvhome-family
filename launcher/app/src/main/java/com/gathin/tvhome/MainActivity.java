@@ -1800,7 +1800,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
     }
 
-    /** "₿ $81,002  ▼ 0.3%  BLOCK 972,026"; hidden until there is a price. */
+    /** "₿ $81,002  ▼ 0.3%"; hidden until there is a price. */
     private void showTicker(Ticker.Quote q) {
         if (q == null || !q.hasPrice()) {
             btcTicker.setVisibility(View.GONE);
@@ -1814,10 +1814,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!Double.isNaN(q.changePct)) {
             sb.append("   ");
             append(sb, Ticker.formatChange(q.changePct), q.changePct < 0 ? 0xFFFF6B6B : 0xFF4CD787);
-        }
-        if (q.height >= 0) {
-            sb.append("   ");
-            append(sb, getString(R.string.btc_block, Ticker.formatHeight(q.height)), 0xB3FFFFFF);
         }
         btcTicker.setText(sb);
         btcTicker.setVisibility(View.VISIBLE);

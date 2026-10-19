@@ -21,7 +21,7 @@
         android:layout_marginStart="68dp"
         android:alpha="0"
         android:textColor="#FFFFFFFF"
-        android:textSize="48sp"
+        android:textSize="34sp"
         android:fontFamily="@font/outfit"
         android:fontVariationSettings="'wght' 300"
         android:letterSpacing="-0.02"
@@ -84,6 +84,7 @@
 
                     <TextClock
                         android:id="@+id/ampm"
+                        android:visibility="gone"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="6dp"
@@ -198,7 +199,10 @@
                 <TextView
                     android:id="@+id/btnSettings"
                     style="@style/TopButton"
-                    android:text="@string/settings"
+                    android:contentDescription="@string/settings"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:drawablePadding="0dp"
                     android:drawableStart="@drawable/ic_settings"
                     android:nextFocusLeft="@+id/btnWifi"
                     android:nextFocusDown="@+id/grid" />

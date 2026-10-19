@@ -39,18 +39,6 @@ public class TickerTest {
         assertTrue(Double.isNaN(Ticker.change(1, 0)));
     }
 
-    @Test
-    public void parsesHeight() {
-        assertEquals(972150, Ticker.parseHeight("972150\n"));
-        for (String body : new String[] {"", "-1", "12a", "<html>", "1234567890"}) {
-            try {
-                Ticker.parseHeight(body);
-                fail(body);
-            } catch (IllegalArgumentException expected) {
-                // refused
-            }
-        }
-    }
 
     @Test
     public void formats() {
@@ -58,6 +46,5 @@ public class TickerTest {
         assertEquals("▼ 0.3%", Ticker.formatChange(-0.31));
         assertEquals("▲ 1.3%", Ticker.formatChange(1.25));
         assertEquals("0.0%", Ticker.formatChange(-0.04));
-        assertEquals("972,026", Ticker.formatHeight(972026));
     }
 }

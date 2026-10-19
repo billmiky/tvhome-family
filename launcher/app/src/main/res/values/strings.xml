@@ -18,7 +18,7 @@
     <string name="offline">Offline</string>
     <string name="not_available">Not available on this TV</string>
     <string name="cant_open">Can\'t open %1$s</string>
-    <string name="date_format">EEEE  d MMMM</string>
+    <string name="date_format">EEE d MMM</string>
     <string name="dream_name">Clock</string>
     <string name="vpn">VPN</string>
     <string name="vpn_off">VPN off</string>
@@ -66,7 +66,6 @@
     <string name="gallery_empty">On · no photos in Pictures/Launcher</string>
     <string name="gallery_no_permission">On · allow access to photos</string>
     <string name="now_playing_description">Now playing: OK plays or pauses, left and right skip, hold OK to open the app</string>
-    <string name="btc_block">BLOCK %1$s</string>
     <string name="update_menu_check">Check for updates · %1$s</string>
     <string name="update_checking">Checking…</string>
     <string name="update_up_to_date">Up to date</string>

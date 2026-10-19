@@ -9,14 +9,12 @@ import android.text.style.ReplacementSpan;
 import androidx.annotation.NonNull;
 
 /**
- * The green "VPN" capsule drawn inside the network pill while a VPN is up: a lock and the word VPN, dark on
- * green, so it reads on both the frosted and the focused (white) pill. With a VPN app configured and no VPN
- * up, the same capsule turns red, without the lock, so a dropped VPN is noticed.
+ * The small "VPN" tag drawn inside the network pill while a VPN is up: the word in a thin outline, both in
+ * the pill's own text colour, so it is white on the frosted pill and dark on the focused (white) one. With a
+ * VPN app configured and no VPN up, it becomes a filled red capsule, so a dropped VPN is noticed.
  */
 final class VpnBadge extends ReplacementSpan {
 
-    private static final int GREEN = 0xFF30D158;
-    private static final int INK = 0xFF06290F;
     private static final int RED = 0xFFFF453A;
     private static final int INK_OFF = 0xFFFFFFFF;
 
@@ -27,15 +25,15 @@ final class VpnBadge extends ReplacementSpan {
 
     /** @param lock the lock icon for the "up" badge, or null for the red "off" badge */
     VpnBadge(Drawable lock, float density) {
-        this.fill = lock != null ? GREEN : RED;
-        this.ink = lock != null ? INK : INK_OFF;
-        this.lock = lock != null ? lock.mutate() : null;
-        if (this.lock != null) this.lock.setTint(ink);
+        // "Up" is the outline tag in the paint's colour (fill 0); the lock is no longer drawn.
+        this.fill = lock != null ? 0 : RED;
+        this.ink = lock != null ? 0 : INK_OFF;
+        this.lock = null;
         this.density = density;
     }
 
     private float textSize(Paint p) {
-        return p.getTextSize() * 0.78f;
+        return p.getTextSize() * (fill == 0 ? 0.62f : 0.78f);
     }
 
     private float lockSize(Paint p) {
@@ -68,8 +66,20 @@ final class VpnBadge extends ReplacementSpan {
         rect.set(left, cy - h / 2f, right, cy + h / 2f);
 
         int oldColor = paint.getColor();
-        paint.setColor(fill);
-        c.drawRoundRect(rect, h / 2f, h / 2f, paint);
+        Paint.Style oldStyle = paint.getStyle();
+        float oldStroke = paint.getStrokeWidth();
+        if (fill == 0) {
+            float hh = base * 1.05f;
+            rect.set(left, cy - hh / 2f, right, cy + hh / 2f);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(1f, density));
+            c.drawRoundRect(rect, hh / 2f, hh / 2f, paint);
+            paint.setStyle(oldStyle);
+            paint.setStrokeWidth(oldStroke);
+        } else {
+            paint.setColor(fill);
+            c.drawRoundRect(rect, h / 2f, h / 2f, paint);
+        }
 
         int lx = (int) (left + 7 * density);
         if (lock != null) {
@@ -77,7 +87,7 @@ final class VpnBadge extends ReplacementSpan {
             lock.draw(c);
         }
 
-        paint.setColor(ink);
+        paint.setColor(fill == 0 ? oldColor : ink);
         paint.setTextSize(textSize(paint));
         Paint.FontMetrics fm = paint.getFontMetrics();
         float ty = cy - (fm.ascent + fm.descent) / 2f;
