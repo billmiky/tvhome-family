@@ -70,9 +70,12 @@ final class VpnBadge extends ReplacementSpan {
         float oldStroke = paint.getStrokeWidth();
         if (fill == 0) {
             float hh = base * 1.05f;
-            rect.set(left, cy - hh / 2f, right, cy + hh / 2f);
+            float sw = Math.max(1f, density);
+            // Inset by half the stroke (plus a pixel) so the outline stays inside the span's width; the
+            // TextView clips anything past it.
+            rect.set(left + sw / 2f, cy - hh / 2f, right - sw / 2f - 1f, cy + hh / 2f);
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(Math.max(1f, density));
+            paint.setStrokeWidth(sw);
             c.drawRoundRect(rect, hh / 2f, hh / 2f, paint);
             paint.setStyle(oldStyle);
             paint.setStrokeWidth(oldStroke);
