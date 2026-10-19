@@ -170,6 +170,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** A session to show; the card is on screen when there is one, room for it, and the grid is at its top. */
     private boolean nowPlayingHasSession;
     private boolean nowPlayingVisible;
+    /** Up on the top bar slid the dock (the whole grid) off the bottom, to see the background. */
+    private boolean dockHidden;
     private Bitmap nowPlayingSource;
     private String nowPlayingPkg;
     private final Runnable nowPlayingRefresh = () -> NowPlaying.run(() -> {
@@ -428,7 +430,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // jump to a tile far below when there is nothing in that direction.
         View.OnKeyListener pillKeys = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
+            // Up from the top bar, which has nothing above it, slides the dock away to show the background;
+            // Down brings it back (the next Down then moves into it as usual).
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                if (!dockHidden) setDockHidden(true);
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && dockHidden) {
+                setDockHidden(false);
+                return true;
+            }
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                 // The left end is Inputs, or Wi-Fi on a box without inputs; there Left steps back a photo.
                 boolean end = v.getId() == R.id.btnInputs
@@ -617,6 +628,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        // Back from an app, Home looks as usual.
+        if (dockHidden) {
+            dockHidden = false;
+            grid.animate().cancel();
+            grid.setTranslationY(0f);
+        }
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(btcTick);
         handler.removeCallbacks(galleryTick);
@@ -674,7 +691,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     public void onBackPressed() {
-        // Home screen: Back goes nowhere.
+        // Home screen: Back goes nowhere, except to bring a hidden dock back.
+        if (dockHidden) setDockHidden(false);
     }
 
     // ---- glass highlight -------------------------------------------------------------------------
@@ -1574,8 +1592,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * bar, and the grid sits at its top; otherwise fades it out. The top shelf name is shortened so
      * it never runs under the card.
      */
+    /** Slides the grid below the screen's bottom edge (or back), with the top shelf and Now playing card. */
+    private void setDockHidden(boolean hide) {
+        dockHidden = hide;
+        float dy = 0;
+        if (hide) {
+            Rect g = new Rect(0, 0, grid.getWidth(), grid.getHeight());
+            root.offsetDescendantRectToMyCoords(grid, g);
+            dy = root.getHeight() - (g.top + grid.getPaddingTop()) + 24 * density;
+            hideHero();
+        }
+        grid.animate().translationY(dy).setDuration(hide ? 340 : 280)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f))
+                .withEndAction(this::placeNowPlaying).start();
+        placeNowPlaying();
+    }
+
     private void placeNowPlaying() {
-        boolean want = nowPlayingOn && nowPlayingHasSession && NowPlaying.working()
+        boolean want = nowPlayingOn && nowPlayingHasSession && NowPlaying.working() && !dockHidden
                 && !grid.canScrollVertically(-1) && grid.getHeight() > 0;
         float top = 0;
         if (want) {
