@@ -24,7 +24,7 @@ import java.util.Locale;
  */
 final class GreetingIntro {
 
-    static final long WAIT_MS = 2000;
+    static final long WAIT_MS = 3000;
     static final long TYPE_MS = 2000;
     private static final long BLINK_MS = 500;
     static final long HOLD_MS = 5000;
