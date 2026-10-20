@@ -671,6 +671,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         updateGreeting();
         cycle.reset();
         cycle.start();
+        poke();
         playIntroWhenReady();
         updateWifiLabel();
         updateInputsButton();
@@ -798,6 +799,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onPause();
         resumed = false;
         intro.finish();
+        handler.removeCallbacks(goIdle);
+        setIdle(false, 0);   // back from an app, Home is all there
         cycle.reset();
         handler.removeCallbacks(tidyUp);
         if (!tidy) setTidy(true, false);   // back from an app, Home is tidy
@@ -1202,8 +1205,55 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     };
 
+    // ---- idle ------------------------------------------------------------------------------------
+
+    /**
+     * Left alone for IDLE_MS, Home fades to the photo and the clock corner: the dock, the rows, the top
+     * bar, the Now playing card and the app name go. Any key brings them back.
+     */
+    private static final long IDLE_MS = 5 * 60_000L, IDLE_FADE_MS = 1500, IDLE_WAKE_MS = 300;
+    private boolean idle;
+    private Tween idleFade;
+    private View[] idleViews;
+    private float[] idleAlpha;
+    private final Runnable goIdle = () -> setIdle(true, IDLE_FADE_MS);
+
+    /** Starts the idle countdown again (a key, Home coming back). */
+    private void poke() {
+        handler.removeCallbacks(goIdle);
+        if (resumed) handler.postDelayed(goIdle, IDLE_MS);
+    }
+
+    private void setIdle(boolean on, long ms) {
+        if (on == idle) return;
+        idle = on;
+        if (idleViews == null) {
+            idleViews = new View[] {grid, findViewById(R.id.topButtons), nowPlaying, heroName, glass, ambient};
+        }
+        final int n = idleViews.length;
+        final float[] from = new float[n], to = new float[n];
+        if (on) idleAlpha = new float[n];
+        for (int i = 0; i < n; i++) {
+            from[i] = idleViews[i].getAlpha();
+            if (on) idleAlpha[i] = from[i];
+            to[i] = on ? 0f : idleAlpha[i];
+        }
+        if (idleFade != null) idleFade.cancel();
+        idleFade = new Tween(0f, t -> {
+            for (int i = 0; i < n; i++) idleViews[i].setAlpha(from[i] + (to[i] - from[i]) * t);
+        });
+        idleFade.to(1f, ms);
+    }
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // Idle: the first key only brings everything back (its key-up is ignored by the views too).
+        if (idle) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) setIdle(false, IDLE_WAKE_MS);
+            poke();
+            return true;
+        }
+        poke();
         // The first key during the intro sends the greeting to its corner instead of moving focus.
         if (intro != null && intro.running()) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) intro.skip();
