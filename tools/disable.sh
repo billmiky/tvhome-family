@@ -5,8 +5,10 @@
 # Usage: TV_HOST=192.168.1.50 tools/disable.sh examples/xiaomi-mi-tv-4a/debloat.txt
 set -euo pipefail
 LIST="${1:?usage: disable.sh <debloat list>}"
-# Resolve the list against the caller's directory before moving into the repo.
-LIST_DIR="$(cd "$(dirname "$LIST")" && pwd)"
+# Resolve the list against the caller's directory before moving into the repo. Git Bash's pwd says
+# /c/Users/..., which the Windows Python cannot open with MSYS_NO_PATHCONV=1 set; pwd -W gives
+# C:/Users/..., the same path (and so the same record) as the PowerShell scripts.
+LIST_DIR="$(cd "$(dirname "$LIST")" && { pwd -W 2>/dev/null || pwd; })"
 LIST="$LIST_DIR/$(basename "$LIST")"
 cd "$(dirname "$0")/.."
 PY=tools/venv/bin/python
@@ -50,6 +52,34 @@ fi
 # On firmware with ro.adb.secure=0, port 5555 gives a shell to any device on the network without the
 # "Allow" prompt. Read it now and say so once the list is done; a failed read only skips the note.
 ADB_SECURE="$("$PY" -I tools/tv.py "getprop ro.adb.secure" 2>/dev/null | tr -d '[:space:]')" || ADB_SECURE=""
+
+# Home guard (#239): a list that disables the app owning Home leaves the TV with nothing to start the
+# next time Home is pressed, and on Google TV the setup wizard can take the category instead and
+# crash-loop system_server (docs/TROUBLESHOOTING.md). Skip the owner while nothing else on the TV can
+# answer HOME; FORCE_HOME=1 disables it anyway, for a TV reachable another way.
+# The extra query is worth it only when the list holds Home's own package, which is how a list that
+# leaves the TV without a launcher looks before anything is disabled.
+HOME_QUERY='cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME'
+HOME_PKG=$("$PY" -I tools/tv.py "$HOME_QUERY" 2>/dev/null | tail -n 1 | tr -d '\r' | cut -d/ -f1 || true)
+# grep without -q: an early exit could SIGPIPE printf and fail open under pipefail (see above).
+if [ -n "$HOME_PKG" ] && printf '%s\n' "$PKGS" | grep -xF "$HOME_PKG" >/dev/null && [ -z "${FORCE_HOME:-}" ]; then
+  # Every package with a HOME activity the TV can start now: disabled packages do not answer, so this
+  # is "what could take Home if the list went through".
+  CLAIMS=$("$PY" -I tools/tv.py 'cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME' 2>/dev/null \
+    | tr -d '\r' | grep -o '^ *[A-Za-z0-9_.]*/' | tr -d ' /' | sort -u || true)
+  # Nothing left to answer Home once the list is applied, or the TV could not say who does: either
+  # way the owner is the only Home this run knows about, so it stays enabled.
+  # The setup wizard and the settings apps answer HOME too, but they are not launchers: on Google TV,
+  # setupwraith taking Home is the crash loop this guard exists to prevent. They don't count.
+  OTHERS=$(printf '%s\n' "$CLAIMS" | grep -vxF "$HOME_PKG" | grep -vxF "$PKGS" \
+    | grep -vxF -e com.google.android.tungsten.setupwraith -e com.android.tv.settings -e com.android.settings -e com.android.provision || true)
+  if [ -z "$OTHERS" ]; then
+    echo "Skipping $HOME_PKG: it owns Home, and no other app that can answer Home is installed and" >&2
+    echo "staying enabled. Make the new launcher Home first (launcher/build-and-install.sh), then run" >&2
+    echo "this list again to disable the old one; or set FORCE_HOME=1 if you can still reach the TV." >&2
+    PKGS="$(printf '%s\n' "$PKGS" | grep -vxF "$HOME_PKG" || true)"
+  fi
+fi
 
 # The state undo needs goes to disk before the first command reaches the TV, and a failed save stops
 # here with the TV untouched: a record written afterwards would describe a TV that is already broken,
