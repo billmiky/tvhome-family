@@ -225,6 +225,8 @@
                 <TextView
                     android:id="@+id/btnInputs"
                     style="@style/TopButton"
+                    android:singleLine="true"
+                    android:contentDescription="@string/inputs"
                     android:text="@string/inputs"
                     android:drawableStart="@drawable/ic_input"
                     android:nextFocusRight="@+id/btnWifi"
@@ -302,7 +304,9 @@
             android:scaleType="centerCrop"
             android:importantForAccessibility="no" />
 
+        <!-- Title and artist: folded away while the card is tidy (see cardFold), back when it is focused. -->
         <LinearLayout
+            android:id="@+id/nowPlayingText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"

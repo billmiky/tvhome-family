@@ -196,6 +196,7 @@ final class GreetingIntro {
 
     /** Leaving Home or the screen going off: straight to the small line, no animation. */
     void finish() {
+        boolean was = big != null;
         handler.removeCallbacks(blink);
         handler.removeCallbacks(type);
         handler.removeCallbacks(shrink);
@@ -208,5 +209,9 @@ final class GreetingIntro {
             big = null;
         }
         small.setAlpha(1f);
+        if (was && onDone != null) onDone.run();
     }
+
+    /** Called once the intro has handed over to the small line, however it ended. */
+    Runnable onDone;
 }

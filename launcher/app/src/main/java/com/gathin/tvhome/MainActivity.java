@@ -114,7 +114,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int ambientColor;
     private boolean heroShown;
     private TextView greeting;
-    private View btnInputs;
+    private TextView btnInputs;
     private TextView btnWifi;
     private TextView shamsiDate;
     private boolean shamsi;
@@ -307,6 +307,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             reloadApps(false, true);
         }
     };
+    /**
+     * Tidy: a while after the greeting intro, the top bar folds to its icons (HDMI and the VPN tag go, the
+     * Bitcoin change goes) and the Now playing card to its artwork. A focused pill or card unfolds while it
+     * has focus. Each fold is 1 for shown, 0 for folded away.
+     */
+    private boolean tidy = true;
+    private static final long TIDY_DELAY_MS = 5000;
+    private static final long FOLD_MS = 450;
+    private Tween inputsFold, wifiFold, tickerFold, cardFold;
+    private final FoldSpan inputsSpan = new FoldSpan(null, 0);
+    private FoldSpan wifiBadgeFold, tickerChangeFold;
+    private CharSequence wifiText, tickerText;
+    private View nowPlayingText;
+    private final Runnable tidyUp = () -> setTidy(true, true);
+
     /** The big greeting that types itself out when the TV comes on (GreetingIntro). */
     private GreetingIntro intro;
     /** When the TV last came on (elapsedRealtime), until Home shows the intro for it; 0 when shown. */
@@ -382,6 +397,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 ambientGlow.setGradientRadius((r - l) * 0.62f));
         greeting = findViewById(R.id.greeting);
         intro = new GreetingIntro(root, greeting, handler);
+        intro.onDone = () -> {
+            if (resumed) handler.postDelayed(tidyUp, TIDY_DELAY_MS);
+            else setTidy(true, false);
+        };
         introDueAt = android.os.SystemClock.elapsedRealtime();   // a cold start is the TV coming on too
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
@@ -514,7 +533,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             TextView t = (TextView) v;
             if (focused) t.setShadowLayer(0f, 0f, 0f, 0);
             else t.setShadowLayer(4f, 0f, 1f, 0x80000000);
+            // A tidy pill unfolds while it has focus.
+            Tween fold = v == btnInputs ? inputsFold : v == btnWifi ? wifiFold : null;
+            if (fold != null) fold.to(focused || !tidy ? 1f : 0f, FOLD_MS * 2 / 3);
         };
+        inputsFold = new Tween(0f, this::foldInputs);
+        wifiFold = new Tween(0f, v -> {
+            if (wifiBadgeFold == null) return;
+            wifiBadgeFold.fraction = v;
+            btnWifi.setText(wifiText);
+        });
+        tickerFold = new Tween(0f, v -> {
+            if (tickerChangeFold == null) return;
+            tickerChangeFold.fraction = v;
+            btcTicker.setText(tickerText);
+        });
+        foldInputs(0f);
         btnInputs.setOnFocusChangeListener(pillShadow);
         btnWifi.setOnFocusChangeListener(pillShadow);
         btnSettings.setOnFocusChangeListener(pillShadow);
@@ -522,7 +556,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         // Hide the glass when focus leaves the tiles.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
-            boolean onTile = newF != null && (newF.getId() == R.id.card || newF.getId() == R.id.nowPlaying);
+            boolean onTile = newF != null && newF.getId() == R.id.card;
             if (!onTile) hideGlass();
         });
 
@@ -720,6 +754,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onPause();
         resumed = false;
         intro.finish();
+        handler.removeCallbacks(tidyUp);
+        if (!tidy) setTidy(true, false);   // back from an app, Home is tidy
         // Back from an app, Home looks as usual.
         if (dockHidden) {
             dockHidden = false;
@@ -1064,6 +1100,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 return;
             }
             introDueAt = 0;
+            handler.removeCallbacks(tidyUp);
+            setTidy(false, false);
             intro.play(LastUse.line(MainActivity.this));
         }
     };
@@ -1098,6 +1136,35 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             greeting.setText(greeting.getPaint().hasGlyph(emoji) ? line + " " + emoji : line);
         }
         if (shamsi) shamsiDate.setText(Shamsi.today());
+    }
+
+    /** Folds the top bar and the Now playing card to their icons (true) or opens them out; focused ones stay open. */
+    private void setTidy(boolean on, boolean animate) {
+        tidy = on;
+        long ms = animate ? FOLD_MS : 0;
+        float v = on ? 0f : 1f;
+        if (!btnInputs.isFocused()) inputsFold.to(v, ms);
+        if (!btnWifi.isFocused()) wifiFold.to(v, ms);
+        tickerFold.to(v, ms);
+        if (!nowPlaying.isFocused()) cardFold.to(v, ms);
+    }
+
+    /** The HDMI pill at a fold: its word narrows and fades, and the paddings close to the icon's. */
+    private void foldInputs(float v) {
+        String label = getString(R.string.inputs);
+        if (v >= 1f) {
+            btnInputs.setText(label);
+        } else if (v <= 0f) {
+            btnInputs.setText("");
+        } else {
+            SpannableString s = new SpannableString(label);
+            inputsSpan.fraction = v;
+            s.setSpan(inputsSpan, 0, s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            btnInputs.setText(s);
+        }
+        btnInputs.setCompoundDrawablePadding(Math.round(9 * density * v));
+        btnInputs.setPaddingRelative(Math.round((14 + 2 * v) * density), btnInputs.getPaddingTop(),
+                Math.round((14 + 6 * v) * density), btnInputs.getPaddingBottom());
     }
 
     /** Shows the Wi-Fi network name on the button when we can read it, otherwise the connection type. */
@@ -1156,9 +1223,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // A replacement span alone on a line gets no font metrics and isn't drawn: lead with a zero-width space.
             String lead = text.isEmpty() ? "\u200B" : text + " ";
             SpannableString label = new SpannableString(lead + badge);
-            label.setSpan(span, lead.length(), label.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            // The green tag folds away when tidy; a red "VPN off" is a warning and stays.
+            Object shown = span;
+            wifiBadgeFold = null;
+            if (vpn) {
+                wifiBadgeFold = new FoldSpan(span, 0);
+                wifiBadgeFold.fraction = wifiFold.value();
+                shown = wifiBadgeFold;
+            }
+            label.setSpan(shown, lead.length(), label.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            wifiText = label;
             btnWifi.setText(label);
         } else {
+            wifiBadgeFold = null;
             btnWifi.setText(text);
         }
         btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0);
@@ -1572,14 +1649,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         sessionListener = new ComponentName(this, NowPlayingListener.class);
         heroName.setEllipsize(TextUtils.TruncateAt.END);
         nowPlaying.setContentDescription(getString(R.string.now_playing_description));
-        // Focus looks like a tile's: the card lifts and the glass highlight springs onto it.
+        // Tidy, the card is its artwork and state icon; focused, it opens out on solid black to be read,
+        // and lifts a little.
+        nowPlayingText = findViewById(R.id.nowPlayingText);
+        final android.graphics.drawable.Drawable cardGlass = nowPlaying.getBackground();
+        final GradientDrawable cardSolid = new GradientDrawable();
+        cardSolid.setColor(0xFF000000);
+        cardSolid.setCornerRadius(16 * density);
+        cardSolid.setStroke(Math.max(1, Math.round(density)), 0x59FFFFFF);
+        cardFold = new Tween(0f, this::foldCard);
+        foldCard(0f);
         nowPlaying.setOnFocusChangeListener((v, focused) -> {
             float s = focused ? NOW_PLAYING_SCALE : 1.0f;
-            v.animate().scaleX(s).scaleY(s)
-                    .setDuration(focused ? 260 : 180)
-                    .setInterpolator(new OvershootInterpolator(focused ? 1.6f : 0f))
-                    .start();
-            if (focused) glassTo(v, NOW_PLAYING_SCALE, 16 * density);
+            v.setScaleX(s);
+            v.setScaleY(s);
+            v.setBackground(focused ? cardSolid : cardGlass);
+            cardFold.to(focused || !tidy ? 1f : 0f, FOLD_MS * 2 / 3);
         });
         final float artRadius = 9 * density;
         nowPlayingArt.setOutlineProvider(new ViewOutlineProvider() {
@@ -1804,6 +1889,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f))
                 .withEndAction(this::placeNowPlaying).start();
         placeNowPlaying();
+    }
+
+    /** The card's title and artist at a fold: 1 their full width, 0 none (the artwork and state icon stay). */
+    private void foldCard(float v) {
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) nowPlayingText.getLayoutParams();
+        if (v >= 1f) {
+            lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+        } else {
+            nowPlayingText.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+            lp.width = Math.round(nowPlayingText.getMeasuredWidth() * v);
+        }
+        int margin = Math.round(10 * density * v);
+        lp.setMarginStart(margin);
+        lp.setMarginEnd(margin);
+        nowPlayingText.setLayoutParams(lp);
+        nowPlayingText.setAlpha(v * v);
     }
 
     private void placeNowPlaying() {
@@ -2150,10 +2251,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         String sign = btcTicker.getPaint().hasGlyph("\u20BF") ? "\u20BF" : "BTC";
         append(sb, sign, 0xFFF7931A);
         sb.append("  ").append(Ticker.formatPrice(q.price));
+        tickerChangeFold = null;
         if (!Double.isNaN(q.changePct)) {
-            sb.append("   ");
-            append(sb, Ticker.formatChange(q.changePct), q.changePct < 0 ? 0xFFFF6B6B : 0xFF4CD787);
+            // The change folds away when tidy, the price stays.
+            int at = sb.length();
+            sb.append("   ").append(Ticker.formatChange(q.changePct));
+            tickerChangeFold = new FoldSpan(null, q.changePct < 0 ? 0xFFFF6B6B : 0xFF4CD787);
+            tickerChangeFold.fraction = tickerFold.value();
+            sb.setSpan(tickerChangeFold, at, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
+        tickerText = sb;
         btcTicker.setText(sb);
         btcTicker.setVisibility(View.VISIBLE);
     }
