@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Color;
 import android.os.Handler;
 import android.util.TypedValue;
+import android.view.Choreographer;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -95,34 +96,53 @@ final class GreetingIntro {
         }
     };
 
-    /** Glides the big text onto the small line: same top-left corner, scaled to its size. */
+    /**
+     * Glides the big text onto the small line: same top-left corner, scaled to its size. Driven frame by
+     * frame rather than by an Animator, so it still moves on a TV with system animations turned off.
+     */
     private final Runnable shrink = this::shrink;
+    private final PathInterpolator ease = new PathInterpolator(0.3f, 0f, 0.2f, 1f);
+    private boolean moving;
+    private long moveStart;
+    private float dx, dy, endScale, endAlpha;
 
     private void shrink() {
-        if (big == null) return;
+        if (big == null || moving) return;
         handler.removeCallbacks(type);
         big.setText(text);
         int[] from = new int[2], to = new int[2];
         big.getLocationInWindow(from);
         small.getLocationInWindow(to);
-        float scale = small.getTextSize() / big.getTextSize();
-        final TextView view = big;
-        view.animate()
-                .translationX(to[0] + small.getTotalPaddingLeft() - from[0])
-                .translationY(to[1] + small.getTotalPaddingTop() - from[1])
-                .scaleX(scale).scaleY(scale)
-                .alpha(Color.alpha(small.getCurrentTextColor()) / 255f)
-                .setDuration(MOVE_MS)
-                .setInterpolator(new PathInterpolator(0.3f, 0f, 0.2f, 1f))
-                .withEndAction(() -> {
-                    if (big == view) finish();
-                })
-                .start();
+        dx = to[0] + small.getTotalPaddingLeft() - from[0];
+        dy = to[1] + small.getTotalPaddingTop() - from[1];
+        endScale = small.getTextSize() / big.getTextSize();
+        endAlpha = Color.alpha(small.getCurrentTextColor()) / 255f;
+        moving = true;
+        moveStart = 0;
+        Choreographer.getInstance().postFrameCallback(frame);
     }
+
+    private final Choreographer.FrameCallback frame = new Choreographer.FrameCallback() {
+        @Override
+        public void doFrame(long now) {
+            if (big == null || !moving) return;
+            if (moveStart == 0) moveStart = now;
+            float t = Math.min(1f, (now - moveStart) / 1e6f / MOVE_MS);
+            float e = ease.getInterpolation(t);
+            big.setTranslationX(dx * e);
+            big.setTranslationY(dy * e);
+            float scale = 1f + (endScale - 1f) * e;
+            big.setScaleX(scale);
+            big.setScaleY(scale);
+            big.setAlpha(1f + (endAlpha - 1f) * e);
+            if (t < 1f) Choreographer.getInstance().postFrameCallback(this);
+            else finish();
+        }
+    };
 
     /** A key press while typing or holding: move along to the small line now. */
     void skip() {
-        if (big == null || big.getScaleX() != 1f) return;
+        if (big == null || moving) return;
         handler.removeCallbacks(type);
         handler.removeCallbacks(shrink);
         shrink.run();
@@ -132,8 +152,9 @@ final class GreetingIntro {
     void finish() {
         handler.removeCallbacks(type);
         handler.removeCallbacks(shrink);
+        Choreographer.getInstance().removeFrameCallback(frame);
+        moving = false;
         if (big != null) {
-            big.animate().cancel();
             root.removeView(big);
             big = null;
         }

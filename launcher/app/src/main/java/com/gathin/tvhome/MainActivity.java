@@ -1091,7 +1091,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         updateOccasionCard(config == null ? null : Occasions.play(today, occasions, holidaysOn,
                 config.christmasVideo, config.newYearVideo, config.tetVideo));
         if (!occasion.isEmpty()) greeting.setText(occasion);
-        else greeting.setText(greetingName.isEmpty() ? getString(res) : getString(res) + ", " + greetingName);
+        else {
+            String line = greetingName.isEmpty() ? getString(res) : getString(res) + ", " + greetingName;
+            String emoji = "👋";
+            greeting.setText(greeting.getPaint().hasGlyph(emoji) ? line + " " + emoji : line);
+        }
         if (shamsi) shamsiDate.setText(Shamsi.today());
     }
 
