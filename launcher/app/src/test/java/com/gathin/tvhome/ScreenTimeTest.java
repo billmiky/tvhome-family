@@ -31,7 +31,10 @@ public class ScreenTimeTest {
         assertEquals(30 * M, r.buckets[0]);
         assertEquals(40 * M, r.buckets[1]);
         assertEquals(60 * M, (long) r.apps.get("yt"));
-        assertNull(r.apps.get("home"));        // Home is not an app in the list
+        assertEquals(30 * M, r.appBuckets.get("yt")[0]);   // its own chart
+        assertEquals(30 * M, r.appBuckets.get("yt")[1]);
+        assertNull(r.apps.get("home"));
+        assertNull(r.appBuckets.get("home"));        // Home is not an app in the list
         assertEquals(70 * M, r.total);         // but the TV was on
     }
 
@@ -53,6 +56,16 @@ public class ScreenTimeTest {
         ScreenTime.Report r = ScreenTime.count(events, bounds, new String[] {"1"}, 100 * M, "home");
         assertEquals(40 * M, (long) r.apps.get("nf"));
         assertEquals(40 * M, r.total);
+    }
+
+    @Test
+    public void settingsCountInTheTotalButAreNotListed() {
+        List<ScreenTime.Event> events = Arrays.asList(
+                ev(0, ScreenTime.RESUMED, "com.android.tv.settings"),
+                ev(10, ScreenTime.PAUSED, "com.android.tv.settings"));
+        ScreenTime.Report r = ScreenTime.count(events, TWO_HOURS, LABELS, 120 * M, "home");
+        assertNull(r.apps.get("com.android.tv.settings"));
+        assertEquals(10 * M, r.total);
     }
 
     @Test
@@ -83,5 +96,9 @@ public class ScreenTimeTest {
         assertEquals("0m", ScreenTime.format(0));
         assertEquals("42m", ScreenTime.format(42 * M));
         assertEquals("3h 05m", ScreenTime.format(185 * M));
+        assertEquals("1h24m", ScreenTime.formatShort(84 * M));
+        assertEquals("1h", ScreenTime.formatShort(60 * M));
+        assertEquals("45m", ScreenTime.formatShort(45 * M));
+        assertEquals("", ScreenTime.formatShort(30_000L));
     }
 }

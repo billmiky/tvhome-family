@@ -10,6 +10,8 @@
     <string name="report_7d">7 days</string>
     <string name="report_sub_24h">TV on in the last 24 hours</string>
     <string name="report_sub_7d">TV on in the last 7 days</string>
+    <string name="report_app_24h">%1$s in the last 24 hours</string>
+    <string name="report_app_7d">%1$s in the last 7 days</string>
     <string name="report_no_access">Needs usage access: run build-and-install.sh again</string>
     <string name="choose_input">Inputs</string>
     <string name="connected">Connected</string>

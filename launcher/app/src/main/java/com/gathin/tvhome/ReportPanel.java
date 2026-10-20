@@ -18,7 +18,8 @@ import java.util.Map;
 
 /**
  * The Screen time panel the Report pill opens: 24 hours or 7 days (two tabs, switched by focus), the
- * total, a bar per hour or day, and the apps watched most with a bar each.
+ * total, a bar per hour or day, and the apps watched most with a bar each. Focus on an app row turns the
+ * total and the chart into that app's own.
  */
 final class ReportPanel {
 
@@ -33,6 +34,8 @@ final class ReportPanel {
     private final TextView total, sub;
     private final Bars bars;
     private final LinearLayout apps;
+    private ScreenTime.Report report;
+    private boolean week;
 
     ReportPanel(Context c, Tabs tabs) {
         this.c = c;
@@ -56,8 +59,6 @@ final class ReportPanel {
         tab7.setId(View.generateViewId());
         tab24.setNextFocusRightId(tab7.getId());
         tab7.setNextFocusLeftId(tab24.getId());
-        tab24.setNextFocusDownId(tab24.getId());   // nothing below takes focus: stay on the tabs
-        tab7.setNextFocusDownId(tab7.getId());
         tab24.setOnFocusChangeListener((v, f) -> {
             if (f) tabs.chose(false);
         });
@@ -76,7 +77,7 @@ final class ReportPanel {
         view.addView(sub);
 
         bars = new Bars(c, d);
-        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(96));
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(110));
         bl.topMargin = px(10);
         view.addView(bars, bl);
 
@@ -89,34 +90,76 @@ final class ReportPanel {
     }
 
     void loading(boolean week) {
+        this.week = week;
         sub.setText(week ? R.string.report_sub_7d : R.string.report_sub_24h);
     }
 
     /** Fills the panel; a null report means no usage access. */
     void bind(ScreenTime.Report r, boolean week) {
+        this.report = r;
+        this.week = week;
         apps.removeAllViews();
         sub.setText(week ? R.string.report_sub_7d : R.string.report_sub_24h);
         if (r == null) {
             total.setText("—");
             sub.setText(R.string.report_no_access);
-            bars.set(null, null, week);
+            bars.set(null, null, week, 0xFFFFFFFF);
             return;
         }
-        total.setText(ScreenTime.format(r.total));
-        bars.set(r.buckets, r.labels, week);
+        showAll();
         List<Map.Entry<String, Long>> ranked = r.ranked();
         long top = ranked.isEmpty() ? 1 : Math.max(1, ranked.get(0).getValue());
         for (int i = 0; i < Math.min(5, ranked.size()); i++) {
             Map.Entry<String, Long> e = ranked.get(i);
             if (e.getValue() < 60_000L) break;   // under a minute: not worth a row
-            apps.addView(appRow(e.getKey(), e.getValue(), (float) e.getValue() / top));
+            View row = appRow(e.getKey(), e.getValue(), (float) e.getValue() / top);
+            // Up from the first row goes back to the tab that is showing, not always the first one.
+            if (apps.getChildCount() == 0) row.setNextFocusUpId(week ? tab7.getId() : tab24.getId());
+            apps.addView(row);
         }
+        // Left and right stay on the rows; down from the last one goes nowhere.
+        for (int i = 0; i < apps.getChildCount(); i++) {
+            View row = apps.getChildAt(i);
+            row.setId(View.generateViewId());
+            row.setNextFocusLeftId(row.getId());
+            row.setNextFocusRightId(row.getId());
+            if (i == apps.getChildCount() - 1) row.setNextFocusDownId(row.getId());
+        }
+    }
+
+    /** The whole TV: total and chart for every app. */
+    private void showAll() {
+        if (report == null) return;
+        total.setText(ScreenTime.format(report.total));
+        sub.setText(week ? R.string.report_sub_7d : R.string.report_sub_24h);
+        bars.set(report.buckets, report.labels, week, 0xFFFFFFFF);
+    }
+
+    /** One app: its time and its own chart, in the row's green. */
+    private void showApp(String pkg, String name) {
+        if (report == null) return;
+        Long ms = report.apps.get(pkg);
+        total.setText(ScreenTime.format(ms == null ? 0 : ms));
+        sub.setText(c.getString(week ? R.string.report_app_7d : R.string.report_app_24h, name));
+        bars.set(report.appBuckets.get(pkg), report.labels, week, 0xFF4CD787);
     }
 
     private View appRow(String pkg, long ms, float share) {
         LinearLayout row = new LinearLayout(c);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, px(3), 0, px(3));
+        row.setPadding(px(8), px(3), px(8), px(3));
+        row.setFocusable(true);
+        android.graphics.drawable.GradientDrawable lit = new android.graphics.drawable.GradientDrawable();
+        lit.setColor(0x24FFFFFF);
+        lit.setCornerRadius(px(10));
+        android.graphics.drawable.StateListDrawable bg = new android.graphics.drawable.StateListDrawable();
+        bg.addState(new int[] {android.R.attr.state_focused}, lit);
+        row.setBackground(bg);
+        final String appName = ScreenTime.label(c, pkg);
+        row.setOnFocusChangeListener((v, f) -> {
+            if (f) showApp(pkg, appName);
+            else if (!apps.hasFocus()) showAll();
+        });
         ImageView icon = new ImageView(c);
         try {
             Drawable dr = c.getPackageManager().getApplicationIcon(pkg);
@@ -127,7 +170,7 @@ final class ReportPanel {
         row.addView(icon, new LinearLayout.LayoutParams(px(26), px(26)));
         TextView name = text(15, 0xFFFFFFFF, 400);
         name.setSingleLine(true);
-        name.setText(ScreenTime.label(c, pkg));
+        name.setText(appName);
         LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(px(190), ViewGroup.LayoutParams.WRAP_CONTENT);
         nl.leftMargin = px(12);
         row.addView(name, nl);
@@ -193,11 +236,13 @@ final class ReportPanel {
     private static final class Bars extends View {
         private final Paint bar = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint top = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rect = new RectF();
         private final float d;
         private long[] values;
         private String[] labels;
         private boolean week;
+        private int color = 0xFFFFFFFF;
 
         Bars(Context c, float d) {
             super(c);
@@ -206,9 +251,13 @@ final class ReportPanel {
             label.setTextSize(11 * c.getResources().getDisplayMetrics().scaledDensity);
             label.setTextAlign(Paint.Align.CENTER);
             label.setTypeface(c.getResources().getFont(R.font.outfit));
+            top.setColor(0xCCFFFFFF);
+            top.setTextAlign(Paint.Align.CENTER);
+            top.setTypeface(c.getResources().getFont(R.font.outfit));
         }
 
-        void set(long[] values, String[] labels, boolean week) {
+        void set(long[] values, String[] labels, boolean week, int color) {
+            this.color = color;
             this.values = values;
             this.labels = labels;
             this.week = week;
@@ -220,13 +269,24 @@ final class ReportPanel {
             if (values == null || values.length == 0) return;
             long max = 1;
             for (long v : values) max = Math.max(max, v);
-            float labelH = 18 * d, h = getHeight() - labelH, w = getWidth();
+            // Room under the bars for the hour or day, and over them for each bar's time.
+            float labelH = 18 * d, topH = 14 * d, h = getHeight() - labelH, w = getWidth();
+            float room = h - topH;
             float slot = w / values.length, gap = week ? slot * 0.3f : slot * 0.22f, r = Math.min(4 * d, (slot - gap) / 2f);
             for (int i = 0; i < values.length; i++) {
-                float x = i * slot + gap / 2f, bh = Math.max(2 * d, h * values[i] / max);
+                float x = i * slot + gap / 2f, bh = Math.max(2 * d, room * values[i] / max);
                 rect.set(x, h - bh, x + slot - gap, h);
-                bar.setColor(values[i] == max && values[i] > 0 ? 0xFFFFFFFF : 0xB3FFFFFF);
+                // The longest bar full strength, the rest a little dimmer.
+                bar.setColor(values[i] == max && values[i] > 0 ? color : (color & 0xFFFFFF) | 0xB3000000);
                 canvas.drawRoundRect(rect, r, r, bar);
+                // Its time on top, shrunk to the bar's slot (the 24 hour chart's are narrow).
+                String t = ScreenTime.formatShort(values[i]);
+                if (!t.isEmpty()) {
+                    top.setTextSize((week ? 11 : 8.5f) * getResources().getDisplayMetrics().scaledDensity);
+                    float tw = top.measureText(t);
+                    if (tw > slot - d) top.setTextSize(top.getTextSize() * (slot - d) / tw);
+                    canvas.drawText(t, i * slot + slot / 2f, h - bh - 4 * d, top);
+                }
                 if (week || i % 3 == 0) canvas.drawText(labels[i], i * slot + slot / 2f, getHeight() - 3 * d, label);
             }
         }

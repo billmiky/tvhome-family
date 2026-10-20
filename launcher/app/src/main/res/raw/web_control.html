@@ -76,10 +76,16 @@
   .total { padding: 14px 16px 4px; font-size: 34px; font-weight: 300; letter-spacing: -0.02em; }
   .total small { display: block; font-size: 13px; color: var(--mid); letter-spacing: 0; }
   .chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; padding: 8px 16px 0; }
-  .chart div { flex: 1; background: #fff; border-radius: 3px 3px 0 0; min-height: 2px; opacity: .85; }
+  .chart { padding-top: 22px; }
+  .chart div { flex: 1; background: #fff; border-radius: 3px 3px 0 0; min-height: 2px; opacity: .85; position: relative; }
+  .chart div span { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px;
+    font-size: 10px; color: var(--mid); white-space: nowrap; }
+  .chart.hours div span { font-size: 7px; letter-spacing: -0.03em; }
   .ticks { display: flex; gap: 3px; padding: 4px 16px 12px; color: var(--mid); font-size: 11px; }
   .ticks span { flex: 1; text-align: center; overflow: hidden; }
-  .app { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .app.on { background: #1f2229; }
+  .chart.one div { background: var(--ok); }
+  .app { cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
   .app .len { color: var(--mid); font-variant-numeric: tabular-nums; }
   .app .fill { grid-column: 1 / -1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .app .fill i { display: block; height: 100%; background: var(--ok); }
@@ -300,27 +306,45 @@
     }
     const total = document.createElement('div');
     total.className = 'total';
-    total.textContent = dur(r.total);
+    const sum = document.createElement('span');
     const sub = document.createElement('small');
-    sub.textContent = range === '24h' ? 'TV on in the last 24 hours' : 'TV on in the last 7 days';
-    total.appendChild(sub);
+    total.append(sum, sub);
     box.appendChild(total);
-    const max = Math.max(1, ...r.buckets);
     const chart = document.createElement('div');
     chart.className = 'chart';
     const ticks = document.createElement('div');
     ticks.className = 'ticks';
-    r.buckets.forEach((v, i) => {
-      const b = document.createElement('div');
-      b.style.height = Math.round(v / max * 100) + '%';
-      b.title = r.labels[i] + ': ' + dur(v);
-      chart.appendChild(b);
+    r.labels.forEach((l, i) => {
       const t = document.createElement('span');
-      t.textContent = range === '7d' || i % 3 === 0 ? r.labels[i] : '';
+      t.textContent = range === '7d' || i % 3 === 0 ? l : '';
       ticks.appendChild(t);
     });
     box.appendChild(chart);
     box.appendChild(ticks);
+    const span = range === '24h' ? 'in the last 24 hours' : 'in the last 7 days';
+    // The whole TV, or one app (tap its row; tap again for the whole TV).
+    function show(app) {
+      const buckets = app ? app.buckets : r.buckets;
+      sum.textContent = dur(app ? app.ms : r.total);
+      sub.textContent = (app ? app.name : 'TV on') + ' ' + span;
+      chart.className = (app ? 'chart one' : 'chart') + (range === '24h' ? ' hours' : '');
+      chart.textContent = '';
+      const max = Math.max(1, ...buckets);
+      buckets.forEach((v, i) => {
+        const b = document.createElement('div');
+        b.style.height = Math.round(v / max * 100) + '%';
+        b.title = r.labels[i] + ': ' + dur(v);
+        const m = Math.floor(v / 60000);
+        if (m > 0) {
+          const t = document.createElement('span');
+          t.textContent = m < 60 ? m + 'm' : Math.floor(m / 60) + 'h' + (m % 60 ? (m % 60) + 'm' : '');
+          b.appendChild(t);
+        }
+        chart.appendChild(b);
+      });
+    }
+    show(null);
+    let picked = null;
     const top = Math.max(1, ...r.apps.map(a => a.ms));
     for (const a of r.apps) {
       const row = document.createElement('div');
@@ -336,6 +360,12 @@
       bar.style.width = Math.round(a.ms / top * 100) + '%';
       fill.appendChild(bar);
       row.append(name, len, fill);
+      row.addEventListener('click', () => {
+        picked = picked === a ? null : a;
+        for (const el of box.querySelectorAll('.app')) el.classList.remove('on');
+        if (picked) row.classList.add('on');
+        show(picked);
+      });
       box.appendChild(row);
     }
   }

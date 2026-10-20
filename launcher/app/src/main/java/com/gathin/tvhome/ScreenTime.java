@@ -34,6 +34,13 @@ final class ScreenTime {
     // UsageEvents.Event types, spelled out so the counting below is plain Java and testable.
     static final int RESUMED = 1, PAUSED = 2, SCREEN_ON = 15, SCREEN_OFF = 16, SHUTDOWN = 26;
 
+    /**
+     * Counted in the total but not listed: the TV's settings and its own TV app (Sony's tuner and HDMI
+     * screen), which are not something anyone sits down to watch as an app.
+     */
+    static final java.util.Set<String> UNLISTED = new java.util.HashSet<>(java.util.Arrays.asList(
+            "com.android.tv.settings", "com.sony.dtv.tvlin"));
+
     /** One usage event: when, what kind, which app. */
     static final class Event {
         final long time;
@@ -53,6 +60,8 @@ final class ScreenTime {
         final long[] buckets;
         final String[] labels;
         final Map<String, Long> apps = new HashMap<>();
+        /** Each app's time per bucket, for its own chart. */
+        final Map<String, long[]> appBuckets = new HashMap<>();
         long total;
 
         Report(long[] bounds, String[] labels) {
@@ -119,12 +128,20 @@ final class ScreenTime {
         from = Math.max(from, b[0]);
         to = Math.min(to, b[b.length - 1]);
         if (to <= from) return;
+        long[] own = null;
+        boolean listed = !pkg.equals(self) && !UNLISTED.contains(pkg);
+        if (listed) {
+            own = r.appBuckets.get(pkg);
+            if (own == null) r.appBuckets.put(pkg, own = new long[r.buckets.length]);
+        }
         for (int i = 0; i < r.buckets.length; i++) {
             long s = Math.max(from, b[i]), e = Math.min(to, b[i + 1]);
-            if (e > s) r.buckets[i] += e - s;
+            if (e <= s) continue;
+            r.buckets[i] += e - s;
+            if (own != null) own[i] += e - s;
         }
         r.total += to - from;
-        if (!pkg.equals(self)) {
+        if (listed) {
             Long had = r.apps.get(pkg);
             r.apps.put(pkg, (had == null ? 0 : had) + (to - from));
         }
@@ -172,6 +189,14 @@ final class ScreenTime {
         return (min / 60) + "h " + String.format(Locale.ROOT, "%02dm", min % 60);
     }
 
+    /** For the top of a chart bar: "1h24m", "1h", "45m"; "" under a minute. */
+    static String formatShort(long ms) {
+        long min = ms / 60_000L;
+        if (min <= 0) return "";
+        if (min < 60) return min + "m";
+        return (min / 60) + "h" + (min % 60 == 0 ? "" : (min % 60) + "m");
+    }
+
     // ---- Android -----------------------------------------------------------------------------------
 
     static boolean allowed(Context ctx) {
@@ -216,7 +241,10 @@ final class ScreenTime {
             Map.Entry<String, Long> e = ranked.get(i);
             if (e.getValue() < 60_000L) break;
             sb.append(i > 0 ? "," : "").append("{\"name\":").append(WebHttp.json(label(ctx, e.getKey())))
-                    .append(",\"ms\":").append(e.getValue()).append('}');
+                    .append(",\"ms\":").append(e.getValue()).append(",\"buckets\":[");
+            long[] own = r.appBuckets.get(e.getKey());
+            for (int k = 0; own != null && k < own.length; k++) sb.append(k > 0 ? "," : "").append(own[k]);
+            sb.append("]}");
         }
         return sb.append("]}").toString();
     }
