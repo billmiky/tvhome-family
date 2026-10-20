@@ -521,8 +521,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             // Up from the top bar, which has nothing above it, slides the dock away to show the background;
             // Down brings it back (the next Down then moves into it as usual).
+            // It also folds the bar back to the chevron and Settings, which keeps the focus.
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                 if (!dockHidden) setDockHidden(true);
+                if (v != btnSettings) btnSettings.requestFocus();
+                setBarOpen(false);
+                return true;
+            }
+            // Left from Settings on the folded bar slides the pills out again, onto Wi-Fi.
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && v == btnSettings && !barExpanded) {
+                setBarOpen(true);
+                // Once it has some width: a pill folded to nothing can't take focus.
+                handler.postDelayed(() -> {
+                    if (btnSettings.isFocused()) btnWifi.requestFocus();
+                }, 120);
                 return true;
             }
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && dockHidden) {
