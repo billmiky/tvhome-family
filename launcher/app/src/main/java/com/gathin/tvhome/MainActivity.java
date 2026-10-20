@@ -323,6 +323,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private View nowPlayingText;
     private final Runnable tidyUp = () -> setTidy(true, true);
 
+    /** The greeting line's turns: greeting, date, Bitcoin price (TextCycle). */
+    private TextCycle cycle;
+    private CharSequence greetingLine = "", btcLine;
+
     /** The big greeting that types itself out when the TV comes on (GreetingIntro). */
     private GreetingIntro intro;
     /** When the TV last came on (elapsedRealtime), until Home shows the intro for it; 0 when shown. */
@@ -399,9 +403,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         greeting = findViewById(R.id.greeting);
         intro = new GreetingIntro(root, greeting, handler);
         intro.onDone = () -> {
-            if (resumed) handler.postDelayed(tidyUp, TIDY_DELAY_MS);
-            else setTidy(true, false);
+            if (resumed) {
+                handler.postDelayed(tidyUp, TIDY_DELAY_MS);
+                cycle.start();
+            } else {
+                setTidy(true, false);
+            }
         };
+        // The greeting line takes turns with the date and the Bitcoin price, which have no lines of their own.
+        cycle = new TextCycle(greeting, handler, () -> java.util.Arrays.asList(greetingLine,
+                new java.text.SimpleDateFormat(getString(R.string.date_format), Locale.getDefault()).format(new java.util.Date()),
+                btcOn ? btcLine : null));
+        ((View) findViewById(R.id.date).getParent()).setVisibility(View.GONE);
         introDueAt = android.os.SystemClock.elapsedRealtime();   // a cold start is the TV coming on too
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
@@ -637,6 +650,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         boolean changed = packagesChanged();
         reloadApps(true, changed || tilesStale);
         updateGreeting();
+        cycle.reset();
+        cycle.start();
         playIntroWhenReady();
         updateWifiLabel();
         updateInputsButton();
@@ -764,6 +779,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onPause();
         resumed = false;
         intro.finish();
+        cycle.reset();
         handler.removeCallbacks(tidyUp);
         if (!tidy) setTidy(true, false);   // back from an app, Home is tidy
         // Back from an app, Home looks as usual.
@@ -1163,6 +1179,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             introDueAt = 0;
             handler.removeCallbacks(tidyUp);
             setTidy(false, false);
+            cycle.reset();   // the intro types the greeting, so the line shows it
             intro.play(LastUse.line(MainActivity.this));
         }
     };
@@ -1190,12 +1207,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         String occasion = Occasions.on(today, occasions, holidaysOn);
         updateOccasionCard(config == null ? null : Occasions.play(today, occasions, holidaysOn,
                 config.christmasVideo, config.newYearVideo, config.tetVideo));
-        if (!occasion.isEmpty()) greeting.setText(occasion);
+        if (!occasion.isEmpty()) greetingLine = occasion;
         else {
             String line = greetingName.isEmpty() ? getString(res) : getString(res) + ", " + greetingName;
             String emoji = "👋";
-            greeting.setText(greeting.getPaint().hasGlyph(emoji) ? line + " " + emoji : line);
+            greetingLine = greeting.getPaint().hasGlyph(emoji) ? line + " " + emoji : line;
         }
+        if (cycle != null) cycle.refresh();
+        else greeting.setText(greetingLine);
         if (shamsi) shamsiDate.setText(Shamsi.today());
     }
 
@@ -2344,7 +2363,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         tickerText = sb;
         btcTicker.setText(sb);
-        btcTicker.setVisibility(View.VISIBLE);
+        // Shown in turn on the greeting line instead of a line of its own.
+        SpannableStringBuilder line = new SpannableStringBuilder();
+        append(line, sign, 0xFFF7931A);
+        line.append("  ").append(Ticker.formatPrice(q.price));
+        if (!Double.isNaN(q.changePct)) {
+            line.append("   ");
+            append(line, Ticker.formatChange(q.changePct), q.changePct < 0 ? 0xFFFF6B6B : 0xFF4CD787);
+        }
+        btcLine = line;
+        if (cycle != null) cycle.refresh();
     }
 
     // ---- weather ---------------------------------------------------------------------------------
