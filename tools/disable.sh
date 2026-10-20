@@ -66,12 +66,16 @@ if [ -n "$HOME_PKG" ] && printf '%s\n' "$PKGS" | grep -xF "$HOME_PKG" >/dev/null
   # Every package with a HOME activity the TV can start now: disabled packages do not answer, so this
   # is "what could take Home if the list went through".
   CLAIMS=$("$PY" -I tools/tv.py 'cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME' 2>/dev/null \
-    | tr -d '\r' | grep -o '^ *[A-Za-z0-9_.]*/' | tr -d ' /' | sort -u || true)
+    | tr -d '\r' | grep -oE '^ *[A-Za-z0-9_.]+/[A-Za-z0-9_.$]+' | sed -E 's/^ +//' | sort -u || true)
   # Nothing left to answer Home once the list is applied, or the TV could not say who does: either
   # way the owner is the only Home this run knows about, so it stays enabled.
   # The setup wizard and the settings apps answer HOME too, but they are not launchers: on Google TV,
   # setupwraith taking Home is the crash loop this guard exists to prevent. They don't count.
-  OTHERS=$(printf '%s\n' "$CLAIMS" | grep -vxF "$HOME_PKG" | grep -vxF "$PKGS" \
+  # A vendor's own fallback does not count either: TCL Android TV sets register
+  # com.tcl.keycustomfunctionservice/.FallbackHome (and com.android.tv.settings/.system.FallbackHome),
+  # a placeholder the firmware shows when no launcher is enabled, not a home the viewer can use.
+  OTHERS=$(printf '%s\n' "$CLAIMS" | grep -vE '/[^ ]*FallbackHome$' | cut -d/ -f1 | sort -u \
+    | grep -vxF "$HOME_PKG" | grep -vxF "$PKGS" \
     | grep -vxF -e com.google.android.tungsten.setupwraith -e com.android.tv.settings -e com.android.settings -e com.android.provision || true)
   if [ -z "$OTHERS" ]; then
     echo "Skipping $HOME_PKG: it owns Home, and no other app that can answer Home is installed and" >&2

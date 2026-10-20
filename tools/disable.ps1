@@ -58,7 +58,11 @@ if (-not $env:FORCE_HOME) {
         # Every package with a HOME activity the TV can start now; a disabled one does not answer.
         $claimQuery = 'cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME'
         $claims = @(& $py -I (Join-Path $repo 'tools\tv.py') $claimQuery | ForEach-Object {
-            if ($_ -match '^\s*([A-Za-z0-9_.]+)/') { $Matches[1] }
+            # Keep the class: a vendor fallback is named FallbackHome and is not a usable launcher
+            # (TCL Android TV sets register com.tcl.keycustomfunctionservice/.FallbackHome).
+            if ($_ -match '^\s*([A-Za-z0-9_.]+)/([A-Za-z0-9_.$]+)$') {
+                if ($Matches[2] -notmatch 'FallbackHome$') { $Matches[1] }
+            }
         } | Sort-Object -Unique)
         # The setup wizard and the settings apps answer HOME too, but they are not launchers (disable.sh).
         $notLaunchers = @('com.google.android.tungsten.setupwraith', 'com.android.tv.settings', 'com.android.settings', 'com.android.provision')
