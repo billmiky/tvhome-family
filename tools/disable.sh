@@ -40,6 +40,11 @@ if printf '%s\n' "$PKGS" | grep -x "$SETUP" >/dev/null && [ -z "${FORCE_SETUPWRA
   fi
 fi
 
+# The state undo needs goes to disk before the first command reaches the TV, and a failed save stops
+# here with the TV untouched: a record written afterwards would describe a TV that is already broken,
+# and a retry must not overwrite the one taken before the first change (#239).
+"$PY" -I tools/recovery.py --save "$LIST"
+
 {
   [ -n "$PKGS" ] && printf '%s\n' "$PKGS" | sed 's/^/pm disable-user --user 0 /'
   echo "pm list packages -d"
