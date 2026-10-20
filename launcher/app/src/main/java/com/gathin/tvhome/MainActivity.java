@@ -307,6 +307,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             reloadApps(false, true);
         }
     };
+    /** The big greeting that types itself out when the TV comes on (GreetingIntro). */
+    private GreetingIntro intro;
+    /** When the TV last came on (elapsedRealtime), until Home shows the intro for it; 0 when shown. */
+    private long introDueAt;
+    private static final long INTRO_WINDOW_MS = 2 * 60_000L;
+    private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                intro.finish();
+                return;
+            }
+            introDueAt = android.os.SystemClock.elapsedRealtime();
+            if (resumed) playIntroWhenReady();
+        }
+    };
     private final Runnable weatherTick = new Runnable() {
         @Override
         public void run() {
@@ -364,6 +380,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambient.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
                 ambientGlow.setGradientRadius((r - l) * 0.62f));
         greeting = findViewById(R.id.greeting);
+        intro = new GreetingIntro(root, greeting, handler);
+        introDueAt = android.os.SystemClock.elapsedRealtime();   // a cold start is the TV coming on too
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
         shamsi = cfg.shamsiDate;
@@ -518,6 +536,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         } else {
             registerReceiver(packageReceiver, packageFilter);
         }
+        IntentFilter screenFilter = new IntentFilter(Intent.ACTION_SCREEN_ON);
+        screenFilter.addAction(Intent.ACTION_SCREEN_OFF);
+        registerReceiver(screenReceiver, screenFilter);
 
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
@@ -571,6 +592,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         boolean changed = packagesChanged();
         reloadApps(true, changed || tilesStale);
         updateGreeting();
+        playIntroWhenReady();
         updateWifiLabel();
         updateInputsButton();
         handler.postDelayed(minuteTick, MINUTE_MS);
@@ -696,6 +718,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        intro.finish();
         // Back from an app, Home looks as usual.
         if (dockHidden) {
             dockHidden = false;
@@ -787,6 +810,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onDestroy() {
         super.onDestroy();
         unregisterReceiver(packageReceiver);
+        unregisterReceiver(screenReceiver);
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) tim.unregisterCallback(inputCallback);
@@ -1014,6 +1038,44 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     // ---- top bar ---------------------------------------------------------------------------------
+
+    /**
+     * Plays the greeting intro once per TV start, when Home is in front within a couple of minutes of it;
+     * a TV that wakes into an app and comes Home later gets the plain line.
+     */
+    private void playIntroWhenReady() {
+        if (introDueAt == 0) return;
+        if (android.os.SystemClock.elapsedRealtime() - introDueAt > INTRO_WINDOW_MS) {
+            introDueAt = 0;
+            return;
+        }
+        handler.removeCallbacks(introStart);
+        handler.postDelayed(introStart, 150);
+    }
+
+    /** Waits for the first layout (a cold start resumes before it), then plays. */
+    private final Runnable introStart = new Runnable() {
+        @Override
+        public void run() {
+            if (!resumed || introDueAt == 0) return;
+            if (greeting.getWidth() == 0 || root.getWidth() == 0) {
+                handler.postDelayed(this, 150);
+                return;
+            }
+            introDueAt = 0;
+            intro.play();
+        }
+    };
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        // The first key during the intro sends the greeting to its corner instead of moving focus.
+        if (intro != null && intro.running()) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) intro.skip();
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
 
     private void updateGreeting() {
         int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
