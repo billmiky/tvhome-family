@@ -2328,7 +2328,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         final ImageView incoming = galleryBack;
         final ImageView outgoing = galleryFront;
-        incoming.animate().cancel();
+        if (galleryFade != null) galleryFade.cancel();
         incoming.setImageBitmap(bmp);
         incoming.setAlpha(0f);
         galleryLayer.removeView(incoming);
@@ -2336,12 +2336,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         galleryFront = incoming;
         galleryBack = outgoing;
         galleryShownAt = System.currentTimeMillis();
-        // The wallpaper (or colour) stays under the first photo until it has faded in.
-        incoming.animate().alpha(1f).setDuration(1000).withEndAction(() -> {
-            if (galleryBack == outgoing) release(outgoing);
-            updateBackdrop();
-        }).start();
+        // The wallpaper (or colour) stays under the first photo until it has faded in. Frame by frame, so
+        // the crossfade shows on TVs with system animations off.
+        galleryFade = new Tween(0f, v -> {
+            incoming.setAlpha(v);
+            if (v >= 1f) {
+                if (galleryBack == outgoing) release(outgoing);
+                updateBackdrop();
+            }
+        });
+        galleryFade.to(1f, 1200);
     }
+
+    private Tween galleryFade;
 
     /** Lets go of a photo. Not recycle(): a frame already recorded may still draw it; the collector frees it. */
     private static void release(ImageView v) {
