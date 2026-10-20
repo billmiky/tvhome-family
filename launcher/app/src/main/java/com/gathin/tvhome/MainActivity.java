@@ -549,6 +549,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             TextView t = (TextView) v;
             if (focused) t.setShadowLayer(0f, 0f, 0f, 0);
             else t.setShadowLayer(4f, 0f, 1f, 0x80000000);
+            if (focused) setBarOpen(true);
             // A tidy pill unfolds while it has focus.
             Tween fold = v == btnInputs ? inputsFold : v == btnReport ? reportFold : v == btnWifi ? wifiFold : null;
             if (fold != null) fold.to(focused || !tidy ? 1f : 0f, FOLD_MS * 2 / 3);
@@ -565,6 +566,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             tickerChangeFold.fraction = v;
             btcTicker.setText(tickerText);
         });
+        topChevron = findViewById(R.id.topChevron);
+        barOpen = new Tween(0f, this::openBar);
+        for (View pill : barPills()) pill.setFocusable(false);
+        openBar(0f);
         foldPill(btnInputs, R.string.inputs, inputsSpan, 0f);
         foldPill(btnReport, R.string.report, reportSpan, 0f);
         btnInputs.setOnFocusChangeListener(pillShadow);
@@ -579,6 +584,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (!onTile) {
                 hideGlass();
                 magnify(-1);
+            }
+            if (newF != btnInputs && newF != btnReport && newF != btnWifi && newF != btnSettings) {
+                setBarOpen(false);   // focus left the top bar: back to the chevron and Settings
             }
         });
 
@@ -1110,7 +1118,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View best = btnSettings;
         float bestD = Float.MAX_VALUE;
         for (View b : new View[]{btnInputs, btnReport, btnWifi, btnSettings}) {
-            if (b.getVisibility() != View.VISIBLE) continue;
+            if (b.getVisibility() != View.VISIBLE || !b.isFocusable()) continue;   // folded away: not a target
             Rect r = new Rect(0, 0, b.getWidth(), b.getHeight());
             root.offsetDescendantRectToMyCoords(b, r);
             float d = Math.abs(r.exactCenterX() - x);
@@ -1177,7 +1185,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
             introDueAt = 0;
             handler.removeCallbacks(tidyUp);
-            setTidy(false, false);
             cycle.reset();   // the intro types the greeting, so the line shows it
             intro.play(LastUse.line(MainActivity.this));
         }
@@ -1215,6 +1222,53 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (cycle != null) cycle.refresh();
         else greeting.setText(greetingLine);
         if (shamsi) shamsiDate.setText(Shamsi.today());
+    }
+
+    // ---- folded top bar ----------------------------------------------------------------------------
+
+    private View topChevron;
+    private Tween barOpen;
+    private boolean barExpanded;
+
+    /** The pills that fold away behind the chevron; Settings always shows. */
+    private View[] barPills() {
+        return new View[] {btnInputs, btnReport, btnWifi};
+    }
+
+    /** Slides the pills out (focus came to the top bar) or back behind the chevron. */
+    private void setBarOpen(boolean open) {
+        if (open == barExpanded) return;
+        barExpanded = open;
+        for (View pill : barPills()) pill.setFocusable(open);
+        barOpen.to(open ? 1f : 0f, FOLD_MS);
+    }
+
+    /** The bar at an opening: 0 the chevron and Settings, 1 every pill; widths and margins grow from nothing. */
+    private void openBar(float e) {
+        int h = View.MeasureSpec.makeMeasureSpec((int) (42 * density), View.MeasureSpec.EXACTLY);
+        int free = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        for (View pill : barPills()) {
+            if (pill.getVisibility() == View.GONE) continue;
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) pill.getLayoutParams();
+            if (e >= 1f) {
+                lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            } else {
+                pill.measure(free, h);
+                lp.width = Math.round(pill.getMeasuredWidth() * e);
+            }
+            lp.setMarginStart(Math.round(10 * density * e));
+            pill.setLayoutParams(lp);
+            pill.setAlpha(e);
+        }
+        ViewGroup.LayoutParams cl = topChevron.getLayoutParams();
+        if (e <= 0f) {
+            cl.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+        } else {
+            topChevron.measure(free, h);
+            cl.width = Math.round(topChevron.getMeasuredWidth() * (1f - e));
+        }
+        topChevron.setLayoutParams(cl);
+        topChevron.setAlpha(0.8f * (1f - e));
     }
 
     /** Folds the top bar and the Now playing card to their icons (true) or opens them out; focused ones stay open. */

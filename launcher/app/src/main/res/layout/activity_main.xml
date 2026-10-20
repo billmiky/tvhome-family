@@ -224,6 +224,17 @@
                 android:layout_marginBottom="6dp"
                 android:orientation="horizontal">
 
+                <!-- Folded top bar: this chevron and Settings; the other pills slide out when the bar has focus. -->
+                <ImageView
+                    android:id="@+id/topChevron"
+                    android:layout_width="wrap_content"
+                    android:layout_height="42dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="4dp"
+                    android:src="@drawable/ic_chevron_left"
+                    android:alpha="0.8"
+                    android:importantForAccessibility="no" />
+
                 <TextView
                     android:id="@+id/btnInputs"
                     style="@style/TopButton"
