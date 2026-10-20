@@ -16,6 +16,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Gallery: read the owner's photos in Pictures/Launcher. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Gallery videos in Pictures/Launcher, granted over adb by the install script. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Never asked for: only `pm grant` over adb gives it. Puts the launcher's accessibility services

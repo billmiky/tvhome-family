@@ -143,6 +143,7 @@ if ("$out" -match 'Error') { throw 'could not set the new launcher as home; the 
     "appops set $pkg GET_USAGE_STATS allow 2>/dev/null && echo usage-access-granted || echo usage-access-not-granted",
     "{ pm grant $pkg android.permission.READ_MEDIA_IMAGES || pm grant $pkg android.permission.READ_EXTERNAL_STORAGE; } 2>/dev/null && echo photos-granted || echo photos-not-granted",
     'pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>/dev/null; echo location-granted',
+    "pm grant $pkg android.permission.READ_MEDIA_VIDEO 2>/dev/null && echo videos-granted || echo videos-not-granted",
     'cmd package compile -m speed -f com.gathin.tvhome',
     "am start -W -n com.gathin.tvhome/.MainActivity | grep -E '^(Status|Error)'",
     $disableStock,

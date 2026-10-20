@@ -99,4 +99,22 @@ public class GalleryTest {
         String fourth = bag.next(all);
         assertFalse(Arrays.asList(first, second, third).contains(fourth));
     }
+
+    @Test
+    public void newItemsJoinTheCurrentRound() {
+        Gallery.ShuffleBag bag = new Gallery.ShuffleBag(new java.util.Random(7));
+        java.util.List<String> all = new java.util.ArrayList<>(java.util.Arrays.asList("a", "b", "c", "d"));
+        bag.next(all);
+        all.add("video.mov");
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (int i = 0; i < 4; i++) seen.add(bag.next(all));   // the rest of this round
+        assertTrue(seen.contains("video.mov"));
+    }
+
+    @Test
+    public void videosAreListedOnlyWhenAskedFor() {
+        String[] names = {"a.jpg", "b.mov", "c.mp4", ".d.mov", "e.txt"};
+        assertEquals(java.util.Arrays.asList("a.jpg"), Gallery.photos(names));
+        assertEquals(java.util.Arrays.asList("a.jpg", "b.mov", "c.mp4"), Gallery.photos(names, true));
+    }
 }

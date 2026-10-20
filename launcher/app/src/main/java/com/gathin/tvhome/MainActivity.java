@@ -798,6 +798,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        stopVideo();   // the decoder goes back to the app being opened
         intro.finish();
         handler.removeCallbacks(goIdle);
         setIdle(false, 0);   // back from an app, Home is all there
@@ -2332,13 +2333,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             Bitmap bmp = Gallery.run(() -> {
                 long now = System.currentTimeMillis();
                 if (Gallery.relistDue(galleryListedAt, now)) {
-                    galleryPhotos = Gallery.list(app);
+                    galleryPhotos = Gallery.list(app, true);
                     galleryListedAt = now;
                 }
                 // A photo that can't be read is skipped; give up after a few so a folder of bad files can't spin.
                 for (int tries = 0; tries < 5; tries++) {
                     String item = back ? galleryBag.previous(galleryPhotos) : galleryBag.next(galleryPhotos);
                     if (item == null) return null;
+                    if (Gallery.isVideo(item)) {
+                        handler.post(() -> playVideo(item));   // played on the main thread, not decoded
+                        return null;
+                    }
                     Bitmap b = Gallery.decode(app, item, w, h);
                     if (b != null) return b;
                 }
@@ -2360,6 +2365,157 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Crossfades to a new photo over about a second; the one it replaces is let go once covered. */
     private void showPhoto(Bitmap bmp) {
+        ensureGalleryLayer();
+        final ImageView incoming = galleryBack;
+        final ImageView outgoing = galleryFront;
+        if (galleryFade != null) galleryFade.cancel();
+        incoming.setImageBitmap(bmp);
+        incoming.setAlpha(0f);
+        galleryLayer.removeView(incoming);
+        galleryLayer.addView(incoming, galleryLayer.getChildCount() - 1);   // above the rest, under the scrim
+        galleryFront = incoming;
+        galleryBack = outgoing;
+        galleryShownAt = System.currentTimeMillis();
+        // A photo stays INTERVAL_MS; a video before it was playing on, untimed.
+        handler.removeCallbacks(galleryTick);
+        handler.postDelayed(galleryTick, Gallery.INTERVAL_MS);
+        // The wallpaper (or colour) stays under the first photo until it has faded in; a video under it stops
+        // once it is covered. Frame by frame, so the crossfade shows on TVs with system animations off.
+        galleryFade = new Tween(0f, v -> {
+            incoming.setAlpha(v);
+            if (v >= 1f) {
+                if (galleryBack == outgoing) release(outgoing);
+                outgoing.setAlpha(1f);
+                stopVideo();
+                updateBackdrop();
+            }
+        });
+        galleryFade.to(1f, 1200);
+    }
+
+    // ---- gallery videos ----------------------------------------------------------------------------
+
+    /** The video playing under the photos (a SurfaceView, so the TV's video plane does the work), or null. */
+    private android.media.MediaPlayer videoPlayer;
+    private android.view.SurfaceView videoSurface;
+    private String videoPending;
+
+    /**
+     * Plays a gallery video muted, to its end, then moves on. It plays on a surface under the photos; the
+     * photo on top fades away once the first frame is up, so nothing flashes black.
+     */
+    private void playVideo(String item) {
+        if (isDestroyed() || !galleryOn || !resumed) return;
+        ensureGalleryLayer();
+        handler.removeCallbacks(galleryTick);   // a video is not timed
+        galleryShownAt = System.currentTimeMillis();
+        if (videoSurface == null) {
+            videoSurface = new android.view.SurfaceView(this);
+            videoSurface.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
+                @Override
+                public void surfaceCreated(@NonNull android.view.SurfaceHolder h) {
+                    if (videoPending != null) {
+                        String p = videoPending;
+                        videoPending = null;
+                        startPlayer(p);
+                    }
+                }
+
+                @Override
+                public void surfaceChanged(@NonNull android.view.SurfaceHolder h, int f, int w, int hh) {
+                }
+
+                @Override
+                public void surfaceDestroyed(@NonNull android.view.SurfaceHolder h) {
+                    stopVideo();
+                }
+            });
+            galleryLayer.addView(videoSurface, 0, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER));
+        }
+        if (videoSurface.getHolder().getSurface().isValid()) startPlayer(item);
+        else videoPending = item;
+    }
+
+    private void startPlayer(String item) {
+        releasePlayer();
+        android.media.MediaPlayer mp = new android.media.MediaPlayer();
+        videoPlayer = mp;
+        try {
+            if (item.startsWith("content:")) mp.setDataSource(this, android.net.Uri.parse(item));
+            else mp.setDataSource(item);
+            mp.setSurface(videoSurface.getHolder().getSurface());
+            mp.setVolume(0f, 0f);
+            mp.setOnVideoSizeChangedListener((p, vw, vh) -> coverWith(vw, vh));
+            mp.setOnInfoListener((p, what, extra) -> {
+                if (what == android.media.MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START && p == videoPlayer) {
+                    revealVideo();
+                }
+                return false;
+            });
+            mp.setOnCompletionListener(p -> {
+                if (p == videoPlayer) nextPhoto();
+            });
+            mp.setOnErrorListener((p, what, extra) -> {
+                Log.w(Gallery.TAG, "video failed " + what + "/" + extra + ": " + item);
+                if (p == videoPlayer) {
+                    stopVideo();
+                    nextPhoto();
+                }
+                return true;
+            });
+            mp.setOnPreparedListener(android.media.MediaPlayer::start);
+            mp.prepareAsync();
+        } catch (Exception e) {
+            Log.w(Gallery.TAG, "video skipped " + item + ": " + e);
+            stopVideo();
+            handler.post(this::nextPhoto);
+        }
+    }
+
+    /** Sizes the surface to cover the screen at the video's own shape, centred; the overflow is cut off. */
+    private void coverWith(int vw, int vh) {
+        if (videoSurface == null || vw <= 0 || vh <= 0 || root.getWidth() == 0) return;
+        float sw = root.getWidth(), sh = root.getHeight();
+        float scale = Math.max(sw / vw, sh / vh);
+        ViewGroup.LayoutParams lp = videoSurface.getLayoutParams();
+        lp.width = Math.round(vw * scale);
+        lp.height = Math.round(vh * scale);
+        videoSurface.setLayoutParams(lp);
+    }
+
+    /** The first frame is up: fade the photo above away so the video shows. */
+    private void revealVideo() {
+        if (galleryFront == null) return;
+        final ImageView top = galleryFront;
+        if (galleryFade != null) galleryFade.cancel();
+        galleryFade = new Tween(top.getAlpha(), v -> top.setAlpha(v));
+        galleryFade.to(0f, 1200);
+    }
+
+    private void releasePlayer() {
+        if (videoPlayer == null) return;
+        try {
+            videoPlayer.release();
+        } catch (Exception ignored) {
+            // already gone
+        }
+        videoPlayer = null;
+    }
+
+    /**
+     * Stops the video and gives the decoder back (leaving Home, a photo covering it). The photo it was
+     * hiding shows again, and leaving mid-video means a new item on the way back.
+     */
+    private void stopVideo() {
+        videoPending = null;
+        if (videoPlayer == null) return;
+        releasePlayer();
+        if (galleryFront != null) galleryFront.setAlpha(1f);
+        if (!resumed) galleryShownAt = 0;
+    }
+
+    private void ensureGalleryLayer() {
         if (galleryLayer == null) {
             galleryLayer = new FrameLayout(this);
             FrameLayout.LayoutParams full = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
@@ -2376,26 +2532,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             galleryLayer.addView(scrim, new FrameLayout.LayoutParams(full));
             root.addView(galleryLayer, wallView != null ? 1 : 0, full);
         }
-        final ImageView incoming = galleryBack;
-        final ImageView outgoing = galleryFront;
-        if (galleryFade != null) galleryFade.cancel();
-        incoming.setImageBitmap(bmp);
-        incoming.setAlpha(0f);
-        galleryLayer.removeView(incoming);
-        galleryLayer.addView(incoming, 1);   // above the current photo, under the scrim
-        galleryFront = incoming;
-        galleryBack = outgoing;
-        galleryShownAt = System.currentTimeMillis();
-        // The wallpaper (or colour) stays under the first photo until it has faded in. Frame by frame, so
-        // the crossfade shows on TVs with system animations off.
-        galleryFade = new Tween(0f, v -> {
-            incoming.setAlpha(v);
-            if (v >= 1f) {
-                if (galleryBack == outgoing) release(outgoing);
-                updateBackdrop();
-            }
-        });
-        galleryFade.to(1f, 1200);
     }
 
     private Tween galleryFade;
@@ -2407,6 +2543,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Removes the photos (Gallery off, or memory trimmed); the theme wallpaper or colour shows again. */
     private void dropGallery() {
+        stopVideo();
+        videoSurface = null;
         if (galleryLayer == null) return;
         galleryFront.animate().cancel();
         galleryBack.animate().cancel();

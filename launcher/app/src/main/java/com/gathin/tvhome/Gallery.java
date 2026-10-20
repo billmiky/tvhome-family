@@ -29,8 +29,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Gallery: the owner's photos from Pictures/Launcher on the TV as the Home background, one at random
- * every five minutes. Off unless switched on (gallery, or the Settings menu). Listing, order and timing
+ * Gallery: the owner's photos and videos from Pictures/Launcher on the TV as the Home background, in
+ * random order: a photo stays half a minute, a video plays to its end. Off unless switched on (gallery, or the Settings menu). Listing, order and timing
  * are plain Java so they can be tested on the JVM; decoding runs on {@link #EXECUTOR}, never on the main
  * thread. Like {@link CardFeature}, the first failure switches Gallery off for the session.
  */
@@ -38,9 +38,9 @@ final class Gallery {
     static final String TAG = "TvHomeGallery";
     /** Under the shared Pictures folder: /sdcard/Pictures/Launcher. */
     static final String FOLDER = "Launcher";
-    static final long INTERVAL_MS = 5 * 60_000L;
-    /** How often the folder is listed again on a return to Home. */
-    static final long RELIST_MS = 5 * 60_000L;
+    static final long INTERVAL_MS = 30_000L;
+    /** How often the folder is listed again, so photos added (from the phone, over adb) join soon. */
+    static final long RELIST_MS = 60_000L;
     static final int MAX_FILES = 2000;
 
     /** One thread that ends when idle, so a TV that never uses Gallery keeps no thread for it. */
@@ -60,12 +60,24 @@ final class Gallery {
         return n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") || n.endsWith(".webp");
     }
 
+    /** A video Home plays muted to its end: mp4, mov, m4v, mkv or webm, not hidden. */
+    static boolean isVideo(String name) {
+        if (name == null || name.isEmpty() || name.startsWith(".")) return false;
+        String n = name.toLowerCase(Locale.ROOT);
+        return n.endsWith(".mp4") || n.endsWith(".mov") || n.endsWith(".m4v") || n.endsWith(".mkv") || n.endsWith(".webm");
+    }
+
     /** Photo file names from a directory listing, sorted, capped at {@link #MAX_FILES}. */
     static List<String> photos(String[] names) {
+        return photos(names, false);
+    }
+
+    /** Photo (and, with videos, video) file names from a directory listing, sorted, capped at {@link #MAX_FILES}. */
+    static List<String> photos(String[] names, boolean videos) {
         List<String> out = new ArrayList<>();
         if (names == null) return out;
         for (String n : names) {
-            if (isPhoto(n)) out.add(n);
+            if (isPhoto(n) || (videos && isVideo(n))) out.add(n);
         }
         Collections.sort(out);
         return out.size() > MAX_FILES ? new ArrayList<>(out.subList(0, MAX_FILES)) : out;
@@ -90,6 +102,8 @@ final class Gallery {
         static final int HISTORY = 50;
         private final Random random;
         private final List<String> left = new ArrayList<>();
+        /** Drawn in this round, so a listing that grew can tell the new items from the shown ones. */
+        private final Set<String> drawn = new HashSet<>();
         private final List<String> history = new ArrayList<>();
         /** Index in {@link #history} of the photo on screen; below the end after stepping back. */
         private int pos = -1;
@@ -125,7 +139,18 @@ final class Gallery {
                 }
             }
             left.retainAll(present);
+            // Items new since the round began join it at random places, rather than waiting for the next round.
+            if (!left.isEmpty()) {
+                Set<String> waiting = new HashSet<>(left);
+                for (String item : all) {
+                    if (!waiting.contains(item) && !drawn.contains(item)) {
+                        left.add(random.nextInt(left.size() + 1), item);
+                        waiting.add(item);
+                    }
+                }
+            }
             if (left.isEmpty()) {
+                drawn.clear();
                 left.addAll(all);
                 Collections.shuffle(left, random);
                 if (left.size() > 1 && left.get(0).equals(last)) {
@@ -133,6 +158,7 @@ final class Gallery {
                 }
             }
             last = left.remove(0);
+            drawn.add(last);
             history.add(last);
             if (history.size() > HISTORY) history.remove(0);
             pos = history.size() - 1;
@@ -176,9 +202,14 @@ final class Gallery {
      * other way round, depending on how it got there).
      */
     static List<String> list(Context ctx) {
+        return list(ctx, false);
+    }
+
+    /** As {@link #list(Context)}, with the folder's videos too (Home plays them; the screensaver doesn't). */
+    static List<String> list(Context ctx, boolean videos) {
         File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), FOLDER);
         List<String> out = new ArrayList<>();
-        for (String name : photos(dir.list())) out.add(new File(dir, name).getPath());
+        for (String name : photos(dir.list(), videos)) out.add(new File(dir, name).getPath());
         if (!out.isEmpty()) return out;
         if (Build.VERSION.SDK_INT < 29) return out;
         ContentResolver cr = ctx.getContentResolver();
