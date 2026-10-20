@@ -80,6 +80,10 @@ final class GreetingIntro {
         }
         box = new LinearLayout(c);
         box.setOrientation(LinearLayout.VERTICAL);
+        // The move transforms the whole box (the big line is its top-left child): moving the line alone
+        // would take it outside the box, where the parent clips it away.
+        box.setPivotX(0f);
+        box.setPivotY(0f);
         box.addView(big, new LinearLayout.LayoutParams((int) Math.ceil(full) + 2, ViewGroup.LayoutParams.WRAP_CONTENT));
         note = new TextView(c);
         note.setTypeface(small.getTypeface());
@@ -173,11 +177,11 @@ final class GreetingIntro {
             if (moveStart == 0) moveStart = now;
             float t = Math.min(1f, (now - moveStart) / 1e6f / MOVE_MS);
             float e = ease.getInterpolation(t);
-            big.setTranslationX(dx * e);
-            big.setTranslationY(dy * e);
+            box.setTranslationX(dx * e);
+            box.setTranslationY(dy * e);
             float scale = 1f + (endScale - 1f) * e;
-            big.setScaleX(scale);
-            big.setScaleY(scale);
+            box.setScaleX(scale);
+            box.setScaleY(scale);
             big.setAlpha(1f + (endAlpha - 1f) * e);
             note.setAlpha(Math.max(0f, 1f - t * 2.5f));   // gone in the first part of the move
             if (t < 1f) Choreographer.getInstance().postFrameCallback(this);
