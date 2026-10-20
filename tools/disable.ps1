@@ -38,6 +38,14 @@ if ($pkgs -contains $setup -and -not $env:FORCE_SETUPWRAITH) {
         $pkgs = @($pkgs | Where-Object { $_ -ne $setup })
     }
 }
+# Same as disable.sh: on firmware with ro.adb.secure=0, port 5555 gives a shell to any device on the
+# network without the "Allow" prompt. Read it now and say so once the list is done; a failed read only
+# skips the note. Windows PowerShell turns redirected stderr into an error that 'Stop' would throw.
+$ErrorActionPreference = 'Continue'
+$adbSecure = ((& $py -I (Join-Path $repo 'tools\tv.py') 'getprop ro.adb.secure' 2>$null) -join '').Trim()
+if ($LASTEXITCODE -ne 0) { $adbSecure = '' }
+$ErrorActionPreference = 'Stop'
+
 # Same as disable.sh: the state undo needs is recorded before the first command reaches the TV, and
 # a failed save leaves the TV untouched (#239).
 & $py -I (Join-Path $repo 'tools\recovery.py') --save $List
@@ -45,3 +53,7 @@ if ($LASTEXITCODE -ne 0) { throw 'no recovery record was written, so nothing was
 
 $cmds = @($pkgs | ForEach-Object { "pm disable-user --user 0 $_" }) + 'pm list packages -d'
 $cmds | & $py -I (Join-Path $repo 'tools\tv.py') --batch
+
+if ($adbSecure -eq '0') {
+    Write-Warning "This TV reports ro.adb.secure=0, so network ADB on port 5555 accepts any device on your network without the `"Allow`" prompt. When you are done, turn USB debugging and Network/ADB debugging off on the TV and reboot it (README: `"Isn't ADB access a security hole?`")."
+}

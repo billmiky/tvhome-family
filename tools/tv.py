@@ -60,7 +60,8 @@ def main():
     dev = connect()
     if not args or args == ["--probe"]:
         for p in ("ro.product.model", "ro.product.device", "ro.build.version.release",
-                  "ro.build.version.sdk", "ro.build.display.id", "ro.product.manufacturer"):
+                  "ro.build.version.sdk", "ro.build.display.id", "ro.product.manufacturer",
+                  "ro.adb.secure", "service.adb.tcp.port"):
             print(f"{p} = {dev.shell(f'getprop {p}').strip()}")
     elif args[0] == "--push" and len(args) == 3:
         dev.push(args[1], args[2], transport_timeout_s=300.0, read_timeout_s=300.0)

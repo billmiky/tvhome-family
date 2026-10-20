@@ -47,6 +47,10 @@ if printf '%s\n' "$PKGS" | grep -x "$SETUP" >/dev/null && [ -z "${FORCE_SETUPWRA
   fi
 fi
 
+# On firmware with ro.adb.secure=0, port 5555 gives a shell to any device on the network without the
+# "Allow" prompt. Read it now and say so once the list is done; a failed read only skips the note.
+ADB_SECURE="$("$PY" -I tools/tv.py "getprop ro.adb.secure" 2>/dev/null | tr -d '[:space:]')" || ADB_SECURE=""
+
 # The state undo needs goes to disk before the first command reaches the TV, and a failed save stops
 # here with the TV untouched: a record written afterwards would describe a TV that is already broken,
 # and a retry must not overwrite the one taken before the first change (#239).
@@ -56,3 +60,9 @@ fi
   [ -n "$PKGS" ] && printf '%s\n' "$PKGS" | sed 's/^/pm disable-user --user 0 /'
   echo "pm list packages -d"
 } | "$PY" -I tools/tv.py --batch
+
+if [ "$ADB_SECURE" = "0" ]; then
+  echo "Warning: this TV reports ro.adb.secure=0, so network ADB on port 5555 accepts any device on" >&2
+  echo "your network without the \"Allow\" prompt. When you are done, turn USB debugging and" >&2
+  echo "Network/ADB debugging off on the TV and reboot it (README: \"Isn't ADB access a security hole?\")." >&2
+fi
