@@ -16,14 +16,17 @@ import android.widget.TextView;
 import java.util.Locale;
 
 /**
- * When the TV comes on, the greeting types itself out large in the middle of the screen (TYPE_MS), stays
+ * When the TV comes on, a caret blinks large in the middle of the screen while the picture settles
+ * (WAIT_MS), then the greeting types itself out there in the middle of the screen (TYPE_MS), stays
  * there a while (HOLD_MS), then shrinks and glides into the small greeting line, which it hands over to.
  * The big copy is laid out once at its full width, so the typed text never shifts as it grows. A small
  * note under it (when the TV was last on) fades in with the typing and out early in the move.
  */
 final class GreetingIntro {
 
+    static final long WAIT_MS = 2000;
     static final long TYPE_MS = 2000;
+    private static final long BLINK_MS = 500;
     static final long HOLD_MS = 5000;
     private static final long MOVE_MS = 800;
     private static final float MAX_SP = 72f;
@@ -98,9 +101,28 @@ final class GreetingIntro {
                 ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         small.setAlpha(0f);
         typed = 0;
+        blinks = 0;
         big.setText(CARET);
-        handler.postDelayed(type, TYPE_MS / Math.max(1, stops.length));
+        handler.postDelayed(blink, BLINK_MS);
     }
+
+    private int blinks;
+
+    /** The caret blinks in place for WAIT_MS (a TV's picture takes about that long to come up), then typing starts. */
+    private final Runnable blink = new Runnable() {
+        @Override
+        public void run() {
+            if (big == null) return;
+            blinks++;
+            if (blinks * BLINK_MS < WAIT_MS) {
+                big.setText(blinks % 2 == 1 ? " " : CARET);
+                handler.postDelayed(this, BLINK_MS);
+            } else {
+                big.setText(CARET);
+                handler.postDelayed(type, TYPE_MS / Math.max(1, stops.length));
+            }
+        }
+    };
 
     private final Runnable type = new Runnable() {
         @Override
@@ -166,6 +188,7 @@ final class GreetingIntro {
     /** A key press while typing or holding: move along to the small line now. */
     void skip() {
         if (big == null || moving) return;
+        handler.removeCallbacks(blink);
         handler.removeCallbacks(type);
         handler.removeCallbacks(shrink);
         shrink.run();
@@ -173,6 +196,7 @@ final class GreetingIntro {
 
     /** Leaving Home or the screen going off: straight to the small line, no animation. */
     void finish() {
+        handler.removeCallbacks(blink);
         handler.removeCallbacks(type);
         handler.removeCallbacks(shrink);
         Choreographer.getInstance().removeFrameCallback(frame);
