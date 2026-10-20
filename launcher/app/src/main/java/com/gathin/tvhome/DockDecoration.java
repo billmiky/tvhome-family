@@ -21,7 +21,7 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     DockDecoration(int dockSize, float density) {
         this.dockSize = dockSize;
         this.density = density;
-        band.setColor(0xFF141416);
+        band.setColor(0x99141416);   // 60%: the photo behind shows through a little
         edge.setStyle(Paint.Style.STROKE);
         edge.setStrokeWidth(density);
         edge.setColor(0x1FFFFFFF);
