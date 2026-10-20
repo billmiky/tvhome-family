@@ -564,7 +564,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Hide the glass when focus leaves the tiles.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
             boolean onTile = newF != null && newF.getId() == R.id.card;
-            if (!onTile) hideGlass();
+            if (!onTile) {
+                hideGlass();
+                magnify(-1);
+            }
         });
 
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -872,9 +875,59 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     // ---- glass highlight -------------------------------------------------------------------------
 
+    // ---- magnification ---------------------------------------------------------------------------
+
+    private Tween magnifier;
+    private final java.util.ArrayList<View> magCards = new java.util.ArrayList<>();
+    private float[] magFrom = new float[0], magTo = new float[0];
+
+    /**
+     * Grows the focused tile and, less, its neighbours in the row; every other tile on screen settles back
+     * to its resting size. focusedPos -1: none (focus left the grid). Frame by frame, like the folds.
+     */
+    private void magnify(int focusedPos) {
+        magCards.clear();
+        java.util.ArrayList<Float> from = new java.util.ArrayList<>(), to = new java.util.ArrayList<>();
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            View child = grid.getChildAt(i);
+            int pos = grid.getChildAdapterPosition(child);
+            View card = child.findViewById(R.id.card);
+            if (pos == RecyclerView.NO_POSITION || card == null) continue;
+            float target = 1f;
+            if (focusedPos >= 0 && pos / COLUMNS == focusedPos / COLUMNS) {
+                int d = Math.abs(pos - focusedPos);
+                target = d == 0 ? AppAdapter.FOCUS_SCALE : d == 1 ? AppAdapter.NEAR_SCALE : 1f;
+            }
+            if (card.getScaleX() == target) continue;
+            magCards.add(card);
+            from.add(card.getScaleX());
+            to.add(target);
+        }
+        if (magCards.isEmpty()) return;
+        magFrom = new float[from.size()];
+        magTo = new float[to.size()];
+        for (int i = 0; i < magFrom.length; i++) {
+            magFrom[i] = from.get(i);
+            magTo[i] = to.get(i);
+        }
+        if (magnifier == null) {
+            magnifier = new Tween(1f, v -> {
+                for (int i = 0; i < magCards.size() && i < magFrom.length; i++) {
+                    float s = magFrom[i] + (magTo[i] - magFrom[i]) * v;
+                    magCards.get(i).setScaleX(s);
+                    magCards.get(i).setScaleY(s);
+                }
+            });
+        }
+        magnifier.cancel();
+        magnifier.to(0f, 0);
+        magnifier.to(1f, 220);
+    }
+
     @Override
     public void onTileFocused(int position, View card) {
         lastFocused = position;
+        magnify(position);
         lastFocusedKey = adapter.keyAt(position);
         Rect r = glassTo(card, AppAdapter.FOCUS_SCALE, AppAdapter.cornerRadius(card.getWidth(), density));
         float pad = 6f * density;        // matches GlassView's glow inset
@@ -884,7 +937,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             int decoratedTop = item.getTop() - (int) (6 * density);
             int dy = decoratedTop - grid.getPaddingTop();
             if (Math.abs(dy) > 1) grid.smoothScrollBy(0, dy);
-            showHero(position, r.top - dy);
+            // The hero name keeps its gap above the tile as magnified.
+            showHero(position, r.top - dy - card.getHeight() * (AppAdapter.FOCUS_SCALE - 1.1f) / 2f);
         } else {
             hideHero();
             // Scroll just enough so the whole glass (not only the tile) is visible.

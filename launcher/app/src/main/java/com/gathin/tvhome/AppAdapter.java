@@ -19,7 +19,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
-import android.view.animation.OvershootInterpolator;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -79,7 +78,16 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         }
     }
 
-    static final float FOCUS_SCALE = 1.10f;
+    /**
+     * Magnification: tiles rest at REST of the size their cell allows and the focused one grows by
+     * FOCUS_SCALE (about the old focused size), its row neighbours by NEAR_SCALE (MainActivity.magnify).
+     * Smaller resting tiles leave more of the photo behind them in view.
+     */
+    static final float REST = 0.8f;
+    static final float FOCUS_SCALE = 1.30f;
+    static final float NEAR_SCALE = 1.08f;
+    /** The focus zoom the cell sizes were designed around. */
+    private static final float CELL_ZOOM = 1.10f;
     /** Design size of a tile (dp); tiles shrink from here when the columns don't fit, see tileWidthPx. */
     static final float DESIGN_W_DP = 180f, DESIGN_H_DP = 101f;
 
@@ -91,8 +99,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         int design = Math.round(DESIGN_W_DP * density);
         if (innerWidthPx <= 0 || columns <= 0) return design;
         int cell = innerWidthPx / columns;
-        int fit = (int) ((cell - 12 * density) / FOCUS_SCALE);
-        return Math.max(Math.round(80 * density), Math.min(design, fit));
+        int fit = (int) ((cell - 12 * density) / CELL_ZOOM);
+        return Math.round(Math.max(80 * density, Math.min(design, fit)) * REST);
     }
 
     static int tileHeightPx(int tileWidthPx) {
@@ -372,13 +380,10 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             });
 
             card.setOnFocusChangeListener((view, focused) -> {
-                float s = focused ? FOCUS_SCALE : 1.0f;
-                view.animate().scaleX(s).scaleY(s)
-                        .setDuration(focused ? 260 : 180)
-                        .setInterpolator(new OvershootInterpolator(focused ? 1.6f : 0f))
-                        .start();
+                // The scale is MainActivity's magnification; the name drops clear of the grown tile.
+                float grown = view.getHeight() * (FOCUS_SCALE - 1f) / 2f;
                 name.animate().alpha(focused ? 1f : 0f)
-                        .translationY(focused ? density * 4f : -density * 6f)
+                        .translationY(focused ? grown + density * 2f : -density * 6f)
                         .setDuration(220).start();
                 int pos = getBindingAdapterPosition();
                 if (focused && listener != null && pos != RecyclerView.NO_POSITION) {
