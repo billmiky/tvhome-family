@@ -316,6 +316,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                LastUse.record(context);
                 intro.finish();
                 return;
             }
@@ -1063,7 +1064,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 return;
             }
             introDueAt = 0;
-            intro.play();
+            intro.play(LastUse.line(MainActivity.this));
         }
     };
 

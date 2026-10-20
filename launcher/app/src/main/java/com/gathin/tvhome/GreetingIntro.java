@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.util.Locale;
@@ -17,7 +18,8 @@ import java.util.Locale;
 /**
  * When the TV comes on, the greeting types itself out large in the middle of the screen (TYPE_MS), stays
  * there a while (HOLD_MS), then shrinks and glides into the small greeting line, which it hands over to.
- * The big copy is laid out once at its full width, so the typed text never shifts as it grows.
+ * The big copy is laid out once at its full width, so the typed text never shifts as it grows. A small
+ * note under it (when the TV was last on) fades in with the typing and out early in the move.
  */
 final class GreetingIntro {
 
@@ -30,7 +32,8 @@ final class GreetingIntro {
     private final FrameLayout root;
     private final TextView small;
     private final Handler handler;
-    private TextView big;
+    private LinearLayout box;   // the big line and, under it, the note
+    private TextView big, note;
     private String text;
     private int[] stops;   // char offsets after each code point
     private int typed;
@@ -46,7 +49,7 @@ final class GreetingIntro {
     }
 
     /** Starts over with the greeting line's current text; nothing happens before the line is laid out. */
-    void play() {
+    void play(String noteText) {
         if (running() || small.getWidth() == 0 || small.getText().length() == 0) return;
         Context c = root.getContext();
         text = small.getText().toString().toUpperCase(Locale.getDefault());
@@ -72,9 +75,27 @@ final class GreetingIntro {
             big.setTextSize(TypedValue.COMPLEX_UNIT_PX, big.getTextSize() * room / full);
             full = big.getPaint().measureText(text + CARET);
         }
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams((int) Math.ceil(full) + 2,
-                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
-        root.addView(big, lp);
+        box = new LinearLayout(c);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.addView(big, new LinearLayout.LayoutParams((int) Math.ceil(full) + 2, ViewGroup.LayoutParams.WRAP_CONTENT));
+        note = new TextView(c);
+        note.setTypeface(small.getTypeface());
+        note.setFontVariationSettings(small.getFontVariationSettings());
+        note.setLetterSpacing(0.12f);
+        note.setTextColor(0xD9FFFFFF);
+        note.setShadowLayer(10f, 0f, 1f, 0xB3000000);
+        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+        note.setSingleLine(true);
+        note.setText(noteText);
+        note.setAlpha(0f);
+        note.setVisibility(noteText.isEmpty() ? View.GONE : View.VISIBLE);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        nlp.topMargin = Math.round(8 * c.getResources().getDisplayMetrics().density);
+        nlp.leftMargin = Math.round(big.getTextSize() * 0.04f);   // under the first letter, not its side bearing
+        box.addView(note, nlp);
+        root.addView(box, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         small.setAlpha(0f);
         typed = 0;
         big.setText(CARET);
@@ -86,6 +107,7 @@ final class GreetingIntro {
         public void run() {
             if (big == null) return;
             typed++;
+            note.setAlpha(Math.min(1f, (float) typed / stops.length));
             if (typed < stops.length) {
                 big.setText(text.substring(0, stops[typed - 1]) + CARET);
                 handler.postDelayed(this, TYPE_MS / stops.length);
@@ -135,6 +157,7 @@ final class GreetingIntro {
             big.setScaleX(scale);
             big.setScaleY(scale);
             big.setAlpha(1f + (endAlpha - 1f) * e);
+            note.setAlpha(Math.max(0f, 1f - t * 2.5f));   // gone in the first part of the move
             if (t < 1f) Choreographer.getInstance().postFrameCallback(this);
             else finish();
         }
@@ -155,7 +178,9 @@ final class GreetingIntro {
         Choreographer.getInstance().removeFrameCallback(frame);
         moving = false;
         if (big != null) {
-            root.removeView(big);
+            root.removeView(box);
+            box = null;
+            note = null;
             big = null;
         }
         small.setAlpha(1f);

@@ -2,7 +2,10 @@ package com.gathin.tvhome;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 
@@ -15,6 +18,29 @@ import android.view.accessibility.AccessibilityEvent;
 public class InputKeyService extends AccessibilityService {
 
     private static final String ACTION_VIEW_INPUTS = "com.android.tv.action.VIEW_INPUTS";
+
+    /** Notes when the TV goes off (LastUse); this service outlives Home while other apps are in front. */
+    private final BroadcastReceiver screenOff = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            LastUse.record(context);
+        }
+    };
+
+    @Override
+    protected void onServiceConnected() {
+        registerReceiver(screenOff, new IntentFilter(Intent.ACTION_SCREEN_OFF));
+    }
+
+    @Override
+    public void onDestroy() {
+        try {
+            unregisterReceiver(screenOff);
+        } catch (IllegalArgumentException ignored) {
+            // never connected
+        }
+        super.onDestroy();
+    }
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
