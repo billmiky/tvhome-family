@@ -414,7 +414,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         cycle = new TextCycle(greeting, handler, () -> java.util.Arrays.asList(greetingLine,
                 new java.text.SimpleDateFormat(getString(R.string.date_format), Locale.getDefault()).format(new java.util.Date()),
                 btcOn ? btcLine : null));
-        ((View) findViewById(R.id.date).getParent()).setVisibility(View.GONE);
         introDueAt = android.os.SystemClock.elapsedRealtime();   // a cold start is the TV coming on too
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
