@@ -1,7 +1,6 @@
 package com.gathin.tvhome;
 
 import android.os.Handler;
-import android.text.SpannableStringBuilder;
 import android.widget.TextView;
 
 import java.util.ArrayList;
@@ -10,22 +9,19 @@ import java.util.function.Supplier;
 
 /**
  * One line that takes turns showing a few texts (greeting, date, Bitcoin price): each stays HOLD_MS,
- * then is quickly erased back into a caret, and the next one types out from it. Spans (colours) survive,
- * since partial texts are subSequences. Handler-driven, so it runs with system animations off.
+ * then fades into the next. Frame by frame (Tween), so it runs with system animations off.
  */
 final class TextCycle {
 
     static final long HOLD_MS = 6000;
-    private static final long ERASE_MS = 18, TYPE_MS = 28, CARET_MS = 160;
-    private static final String CARET = "|";
+    private static final long FADE_MS = 700;
 
     private final TextView view;
     private final Handler handler;
     private final Supplier<List<CharSequence>> items;
     private int index;
     private boolean running, moving;
-    private CharSequence from, to;
-    private int at;
+    private CharSequence to;
 
     TextCycle(TextView view, Handler handler, Supplier<List<CharSequence>> items) {
         this.view = view;
@@ -50,7 +46,10 @@ final class TextCycle {
         running = false;
         moving = false;
         handler.removeCallbacks(next);
-        handler.removeCallbacks(step);
+        if (fade != null) fade.cancel();
+        to = null;
+        view.setAlpha(1f);
+        view.setTranslationY(0f);
     }
 
     /** The current text again, when it changed (the minute, a new price) and nothing is moving. */
@@ -69,53 +68,41 @@ final class TextCycle {
     }
 
     private final Runnable next = this::advance;
+    private Tween fade;
 
+    /** A quiet change: the old text fades out drifting up a little, the new one fades in from just below. */
     private void advance() {
         List<CharSequence> list = live();
         if (list.size() < 2) {
             if (running) handler.postDelayed(next, HOLD_MS);
             return;
         }
-        from = view.getText();
         index = (index + 1) % list.size();
         to = list.get(index);
-        at = from.length();
         moving = true;
-        handler.post(step);
-    }
-
-    /** Erase one character at a time down to the caret, pause, then type the next text out. */
-    private final Runnable step = new Runnable() {
-        @Override
-        public void run() {
-            if (!moving) return;
-            if (from != null) {
-                at = Math.max(0, at - 1);
-                // Don't leave half a surrogate pair (an emoji) behind.
-                if (at > 0 && Character.isHighSurrogate(from.charAt(at - 1))) at--;
-                view.setText(withCaret(from, at));
-                if (at == 0) {
-                    from = null;
-                    handler.postDelayed(this, CARET_MS);
+        final float drift = 4 * view.getResources().getDisplayMetrics().density;
+        if (fade == null) {
+            fade = new Tween(0f, v -> {
+                if (v < 0.5f) {
+                    float t = v * 2f;
+                    view.setAlpha(1f - t);
+                    view.setTranslationY(-drift * t);
                 } else {
-                    handler.postDelayed(this, ERASE_MS);
+                    if (to != null) {
+                        view.setText(to);
+                        to = null;
+                    }
+                    float t = (v - 0.5f) * 2f;
+                    view.setAlpha(t);
+                    view.setTranslationY(drift * (1f - t));
                 }
-                return;
-            }
-            at = Math.min(to.length(), at + 1);
-            if (at < to.length() && Character.isHighSurrogate(to.charAt(at - 1))) at++;
-            if (at >= to.length()) {
-                view.setText(to);
-                moving = false;
-                if (running) handler.postDelayed(next, HOLD_MS);
-            } else {
-                view.setText(withCaret(to, at));
-                handler.postDelayed(this, TYPE_MS);
-            }
+                if (v >= 1f) {
+                    moving = false;
+                    if (running) handler.postDelayed(next, HOLD_MS);
+                }
+            });
         }
-    };
-
-    private static CharSequence withCaret(CharSequence s, int n) {
-        return new SpannableStringBuilder(s.subSequence(0, n)).append(CARET);
+        fade.to(0f, 0);
+        fade.to(1f, FADE_MS);
     }
 }

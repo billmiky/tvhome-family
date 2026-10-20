@@ -155,6 +155,7 @@
 
                             <TextView
                                 android:id="@+id/greeting"
+                                android:fallbackLineSpacing="false"
                                 android:shadowColor="#B3000000"
                                 android:shadowRadius="8"
                                 android:shadowDy="1"
