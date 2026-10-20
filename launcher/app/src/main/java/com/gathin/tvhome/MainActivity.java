@@ -115,6 +115,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean heroShown;
     private TextView greeting;
     private TextView btnInputs;
+    private TextView btnReport;
     private TextView btnWifi;
     private TextView shamsiDate;
     private boolean shamsi;
@@ -315,8 +316,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean tidy = true;
     private static final long TIDY_DELAY_MS = 5000;
     private static final long FOLD_MS = 450;
-    private Tween inputsFold, wifiFold, tickerFold, cardFold;
-    private final FoldSpan inputsSpan = new FoldSpan(null, 0);
+    private Tween inputsFold, reportFold, wifiFold, tickerFold, cardFold;
+    private final FoldSpan inputsSpan = new FoldSpan(null, 0), reportSpan = new FoldSpan(null, 0);
     private FoldSpan wifiBadgeFold, tickerChangeFold;
     private CharSequence wifiText, tickerText;
     private View nowPlayingText;
@@ -474,6 +475,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs = findViewById(R.id.btnInputs);
         btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> showInputs());
+        btnReport = findViewById(R.id.btnReport);
+        btnReport.setOnClickListener(v -> showReport());
         btnWifi.setOnClickListener(v -> openNetworkPill());
         btnWifi.setOnLongClickListener(v -> {
             showNetworkMenu();
@@ -517,7 +520,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                 // The left end is Inputs, or Wi-Fi on a box without inputs; there Left steps back a photo.
                 boolean end = v.getId() == R.id.btnInputs
-                        || (v.getId() == R.id.btnWifi && btnInputs.getVisibility() != View.VISIBLE);
+                        || (v.getId() == R.id.btnReport && btnInputs.getVisibility() != View.VISIBLE);
                 if (end) stepPhoto(true);
                 return end;
             }
@@ -526,6 +529,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return end;
         };
         btnInputs.setOnKeyListener(pillKeys);
+        btnReport.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
         // Focused, a pill is dark text on white and needs no shadow; unfocused it keeps the style's soft one.
@@ -534,10 +538,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (focused) t.setShadowLayer(0f, 0f, 0f, 0);
             else t.setShadowLayer(4f, 0f, 1f, 0x80000000);
             // A tidy pill unfolds while it has focus.
-            Tween fold = v == btnInputs ? inputsFold : v == btnWifi ? wifiFold : null;
+            Tween fold = v == btnInputs ? inputsFold : v == btnReport ? reportFold : v == btnWifi ? wifiFold : null;
             if (fold != null) fold.to(focused || !tidy ? 1f : 0f, FOLD_MS * 2 / 3);
         };
-        inputsFold = new Tween(0f, this::foldInputs);
+        inputsFold = new Tween(0f, v -> foldPill(btnInputs, R.string.inputs, inputsSpan, v));
+        reportFold = new Tween(0f, v -> foldPill(btnReport, R.string.report, reportSpan, v));
         wifiFold = new Tween(0f, v -> {
             if (wifiBadgeFold == null) return;
             wifiBadgeFold.fraction = v;
@@ -548,8 +553,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             tickerChangeFold.fraction = v;
             btcTicker.setText(tickerText);
         });
-        foldInputs(0f);
+        foldPill(btnInputs, R.string.inputs, inputsSpan, 0f);
+        foldPill(btnReport, R.string.report, reportSpan, 0f);
         btnInputs.setOnFocusChangeListener(pillShadow);
+        btnReport.setOnFocusChangeListener(pillShadow);
         btnWifi.setOnFocusChangeListener(pillShadow);
         btnSettings.setOnFocusChangeListener(pillShadow);
         setUpNowPlaying(cfg.nowPlaying);
@@ -1033,7 +1040,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         View best = btnSettings;
         float bestD = Float.MAX_VALUE;
-        for (View b : new View[]{btnInputs, btnWifi, btnSettings}) {
+        for (View b : new View[]{btnInputs, btnReport, btnWifi, btnSettings}) {
             if (b.getVisibility() != View.VISIBLE) continue;
             Rect r = new Rect(0, 0, b.getWidth(), b.getHeight());
             root.offsetDescendantRectToMyCoords(b, r);
@@ -1144,27 +1151,48 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         long ms = animate ? FOLD_MS : 0;
         float v = on ? 0f : 1f;
         if (!btnInputs.isFocused()) inputsFold.to(v, ms);
+        if (!btnReport.isFocused()) reportFold.to(v, ms);
         if (!btnWifi.isFocused()) wifiFold.to(v, ms);
         tickerFold.to(v, ms);
         if (!nowPlaying.isFocused()) cardFold.to(v, ms);
     }
 
-    /** The HDMI pill at a fold: its word narrows and fades, and the paddings close to the icon's. */
-    private void foldInputs(float v) {
-        String label = getString(R.string.inputs);
+    /** A labelled pill (HDMI, Report) at a fold: its word narrows and fades, and the paddings close to the icon's. */
+    private void foldPill(TextView pill, int labelRes, FoldSpan span, float v) {
+        String label = getString(labelRes);
         if (v >= 1f) {
-            btnInputs.setText(label);
+            pill.setText(label);
         } else if (v <= 0f) {
-            btnInputs.setText("");
+            pill.setText("");
         } else {
             SpannableString s = new SpannableString(label);
-            inputsSpan.fraction = v;
-            s.setSpan(inputsSpan, 0, s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            btnInputs.setText(s);
+            span.fraction = v;
+            s.setSpan(span, 0, s.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            pill.setText(s);
         }
-        btnInputs.setCompoundDrawablePadding(Math.round(9 * density * v));
-        btnInputs.setPaddingRelative(Math.round((14 + 2 * v) * density), btnInputs.getPaddingTop(),
-                Math.round((14 + 6 * v) * density), btnInputs.getPaddingBottom());
+        pill.setCompoundDrawablePadding(Math.round(9 * density * v));
+        pill.setPaddingRelative(Math.round((14 + 2 * v) * density), pill.getPaddingTop(),
+                Math.round((14 + 6 * v) * density), pill.getPaddingBottom());
+    }
+
+    /** The Screen time panel, centred; the tabs switch between 24 hours and 7 days as they take focus. */
+    private void showReport() {
+        final ReportPanel[] panel = new ReportPanel[1];
+        final boolean[] want = new boolean[1];
+        panel[0] = new ReportPanel(this, week -> {
+            want[0] = week;
+            panel[0].loading(week);
+            final Context app = getApplicationContext();
+            ScreenTime.EXECUTOR.execute(() -> {
+                ScreenTime.Report r = ScreenTime.load(app, week);
+                handler.post(() -> {
+                    if (want[0] == week) panel[0].bind(r, week);
+                });
+            });
+        });
+        PopupWindow popup = glassPopup(panel[0].view, (int) (720 * density));
+        popup.showAtLocation(root, Gravity.CENTER, 0, 0);
+        panel[0].tab24.requestFocus();
     }
 
     /** Shows the Wi-Fi network name on the button when we can read it, otherwise the connection type. */

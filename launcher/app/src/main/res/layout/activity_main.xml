@@ -229,6 +229,18 @@
                     android:contentDescription="@string/inputs"
                     android:text="@string/inputs"
                     android:drawableStart="@drawable/ic_input"
+                    android:nextFocusRight="@+id/btnReport"
+                    android:nextFocusDown="@+id/grid" />
+
+                <!-- Screen time report (ReportPanel). -->
+                <TextView
+                    android:id="@+id/btnReport"
+                    style="@style/TopButton"
+                    android:singleLine="true"
+                    android:contentDescription="@string/report"
+                    android:text="@string/report"
+                    android:drawableStart="@drawable/ic_report"
+                    android:nextFocusLeft="@+id/btnInputs"
                     android:nextFocusRight="@+id/btnWifi"
                     android:nextFocusDown="@+id/grid" />
 
@@ -240,7 +252,7 @@
                     android:ellipsize="end"
                     android:text="@string/wifi"
                     android:drawableStart="@drawable/ic_wifi"
-                    android:nextFocusLeft="@+id/btnInputs"
+                    android:nextFocusLeft="@+id/btnReport"
                     android:nextFocusRight="@+id/btnSettings"
                     android:nextFocusDown="@+id/grid" />
 

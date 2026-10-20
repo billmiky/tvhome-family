@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Report: three rising bars on a baseline. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp" android:height="22dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M5.5,12h1a1.5,1.5 0,0 1,1.5 1.5v5a1.5,1.5 0,0 1,-1.5 1.5h-1a1.5,1.5 0,0 1,-1.5 -1.5v-5a1.5,1.5 0,0 1,1.5 -1.5z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M11.5,7.5h1a1.5,1.5 0,0 1,1.5 1.5v9.5a1.5,1.5 0,0 1,-1.5 1.5h-1a1.5,1.5 0,0 1,-1.5 -1.5v-9.5a1.5,1.5 0,0 1,1.5 -1.5z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M17.5,3.5h1a1.5,1.5 0,0 1,1.5 1.5v13.5a1.5,1.5 0,0 1,-1.5 1.5h-1a1.5,1.5 0,0 1,-1.5 -1.5v-13.5a1.5,1.5 0,0 1,1.5 -1.5z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M3,21.25h18a0.75,0.75 0,0 1,0 1.5h-18a0.75,0.75 0,0 1,0 -1.5z" />
+</vector>

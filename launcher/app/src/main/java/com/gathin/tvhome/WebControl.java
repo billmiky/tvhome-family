@@ -220,6 +220,9 @@ final class WebControl {
             case "GET /api/state":
                 sendJson(out, 200, state(ctx));
                 break;
+            case "GET /api/report":
+                sendJson(out, 200, ScreenTime.json(ctx, ScreenTime.load(ctx, "7d".equals(req.query.get("range")))));
+                break;
             case "POST /api/settings":
                 settings(ctx, req, in, out);
                 break;

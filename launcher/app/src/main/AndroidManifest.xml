@@ -20,6 +20,10 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Never asked for: only `pm grant` over adb gives it. Puts the launcher's accessibility services
          back on after a self-update, if Android switched them off. -->
+    <!-- Never asked for: granted over adb (appops GET_USAGE_STATS) by the install script, for the
+         Screen time report. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
 

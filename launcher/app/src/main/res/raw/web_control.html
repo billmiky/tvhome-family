@@ -70,10 +70,29 @@
   .add input[type=text], .add input[type=url] { grid-column: 1 / -1; }
   .add label { display: flex; align-items: center; gap: 8px; color: var(--mid); font-size: 14px; }
   .add button { grid-column: 1 / -1; }
+  .seg { display: flex; gap: 8px; padding: 14px 16px 0; }
+  .seg button { flex: 1; padding: 8px 12px; }
+  .seg button:not(.on) { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .total { padding: 14px 16px 4px; font-size: 34px; font-weight: 300; letter-spacing: -0.02em; }
+  .total small { display: block; font-size: 13px; color: var(--mid); letter-spacing: 0; }
+  .chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; padding: 8px 16px 0; }
+  .chart div { flex: 1; background: #fff; border-radius: 3px 3px 0 0; min-height: 2px; opacity: .85; }
+  .ticks { display: flex; gap: 3px; padding: 4px 16px 12px; color: var(--mid); font-size: 11px; }
+  .ticks span { flex: 1; text-align: center; overflow: hidden; }
+  .app { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .app .len { color: var(--mid); font-variant-numeric: tabular-nums; }
+  .app .fill { grid-column: 1 / -1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .app .fill i { display: block; height: 100%; background: var(--ok); }
 </style>
 </head>
 <body>
 <h1>Home</h1>
+
+<h2>Screen time</h2>
+<div class="card">
+  <div class="seg"><button id="r24" class="on">24 hours</button><button id="r7">7 days</button></div>
+  <div id="report"></div>
+</div>
 
 <h2>Switches</h2>
 <div class="card">
@@ -258,7 +277,73 @@
     load();
   });
 
+  function dur(ms) {
+    const m = Math.floor(ms / 60000);
+    return m < 60 ? m + 'm' : Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm';
+  }
+
+  let range = '24h';
+  async function loadReport() {
+    $('r24').className = range === '24h' ? 'on' : '';
+    $('r7').className = range === '7d' ? 'on' : '';
+    const box = $('report');
+    let r;
+    try { r = await call('GET', '/api/report?range=' + range); } catch (e) { say(e.message, true); return; }
+    box.textContent = '';
+    if (!r.allowed) {
+      const n = document.createElement('div');
+      n.className = 'note';
+      n.style.paddingTop = '14px';
+      n.textContent = 'Needs usage access: run build-and-install.sh again, or adb shell appops set com.gathin.tvhome GET_USAGE_STATS allow';
+      box.appendChild(n);
+      return;
+    }
+    const total = document.createElement('div');
+    total.className = 'total';
+    total.textContent = dur(r.total);
+    const sub = document.createElement('small');
+    sub.textContent = range === '24h' ? 'TV on in the last 24 hours' : 'TV on in the last 7 days';
+    total.appendChild(sub);
+    box.appendChild(total);
+    const max = Math.max(1, ...r.buckets);
+    const chart = document.createElement('div');
+    chart.className = 'chart';
+    const ticks = document.createElement('div');
+    ticks.className = 'ticks';
+    r.buckets.forEach((v, i) => {
+      const b = document.createElement('div');
+      b.style.height = Math.round(v / max * 100) + '%';
+      b.title = r.labels[i] + ': ' + dur(v);
+      chart.appendChild(b);
+      const t = document.createElement('span');
+      t.textContent = range === '7d' || i % 3 === 0 ? r.labels[i] : '';
+      ticks.appendChild(t);
+    });
+    box.appendChild(chart);
+    box.appendChild(ticks);
+    const top = Math.max(1, ...r.apps.map(a => a.ms));
+    for (const a of r.apps) {
+      const row = document.createElement('div');
+      row.className = 'app';
+      const name = document.createElement('span');
+      name.textContent = a.name;
+      const len = document.createElement('span');
+      len.className = 'len';
+      len.textContent = dur(a.ms);
+      const fill = document.createElement('div');
+      fill.className = 'fill';
+      const bar = document.createElement('i');
+      bar.style.width = Math.round(a.ms / top * 100) + '%';
+      fill.appendChild(bar);
+      row.append(name, len, fill);
+      box.appendChild(row);
+    }
+  }
+  $('r24').addEventListener('click', () => { range = '24h'; loadReport(); });
+  $('r7').addEventListener('click', () => { range = '7d'; loadReport(); });
+
   load();
+  loadReport();
 })();
 </script>
 </body>
