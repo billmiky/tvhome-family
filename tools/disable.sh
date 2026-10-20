@@ -30,9 +30,16 @@ fi
 # android.uid.system). FORCE_SETUPWRAITH=1 disables it anyway, e.g. on Ethernet.
 SETUP=com.google.android.tungsten.setupwraith
 if printf '%s\n' "$PKGS" | grep -x "$SETUP" >/dev/null && [ -z "${FORCE_SETUPWRAITH:-}" ]; then
-  WIFI="$("$PY" -I tools/tv.py "dumpsys wifi" || true)"
+  # Be safe: if we cannot read the owners (tv.py failed, timed out, or showed no network at all),
+  # do not disable setupwraith, so the TV cannot lose the network it is on.
+  WIFI="$("$PY" -I tools/tv.py "dumpsys wifi")" || WIFI=""
+  OWNERS="$(printf '%s\n' "$WIFI" | grep -o 'cname=[^ ]*' || true)"
+  if [ -z "$OWNERS" ]; then
+    echo "Skipping $SETUP: could not check which app owns the saved Wi-Fi networks (dumpsys wifi failed" >&2
+    echo "or showed none). Try again, or set FORCE_SETUPWRAITH=1 if the TV uses Ethernet." >&2
+    PKGS="$(printf '%s\n' "$PKGS" | grep -vx "$SETUP" || true)"
   # no grep -q here: with pipefail its early exit would SIGPIPE the grep before it and fail open
-  if printf '%s\n' "$WIFI" | grep -o 'cname=[^ ]*' | grep setupwraith >/dev/null; then
+  elif printf '%s\n' "$OWNERS" | grep setupwraith >/dev/null; then
     echo "Skipping $SETUP: the saved Wi-Fi network belongs to it, and disabling it would delete that" >&2
     echo "network and take the TV off Wi-Fi. On the TV, forget the network and join it again in" >&2
     echo "Settings > Network & Internet, then run this again (or set FORCE_SETUPWRAITH=1 on Ethernet)." >&2
