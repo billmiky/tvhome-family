@@ -22,6 +22,10 @@
    "US2",
    "AMC.HD.us2"
   ],
+  "AlJazeera.qa@English": [
+   "UK1",
+   "Al.Jazeera.HD.uk"
+  ],
   "AnimalPlanet.in@HD": [
    "IN1",
    "Animal.Planet.HD.World.in"
@@ -53,6 +57,10 @@
   "BBCHomeGarden.us@SD": [
    "PLEX1",
    "plex.tv.BBC.Home.&.Garden.plex"
+  ],
+  "BBCNews.uk@NorthAmerica": [
+   "US2",
+   "BBC.News.(North.America).HD.us2"
   ],
   "BabyFirst.us@US": [
    "US2",
@@ -269,6 +277,10 @@
   "NBCNewsNOW.us@SD": [
    "PLEX1",
    "plex.tv.NBC.News.NOW.plex"
+  ],
+  "NHKWorldJapan.jp@HD": [
+   "SG1",
+   "NHK.World.–.Japan.(HD).sg"
   ],
   "NationalGeographic.us@HDEast": [
    "US2",

@@ -336,6 +336,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            // The TV comes on at the first dock tile: from a lower row the grid has scrolled up, and the
+            // greeting intro, as it grows, would cover the tiles. Done while the screen is off too, so
+            // the scroll back is over by the time it comes on.
+            backToDock();
             if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
                 LastUse.record(context);
                 intro.finish();
@@ -1147,6 +1151,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         }
         return best;
+    }
+
+    /** Focus goes to the first dock tile, now if Home is in front, else when it next resumes. */
+    private void backToDock() {
+        lastFocused = 0;
+        lastFocusedKey = adapter.keyAt(0);
+        if (!resumed) return;
+        if (dockHidden) setDockHidden(false);
+        focusTile(0);
     }
 
     private void focusTile(int position) {
