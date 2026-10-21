@@ -48,11 +48,27 @@ def answer(command):
         return "".join(f"package:{name}\n" for name in state["installed"])
     if command == "pm list packages -d":
         return "".join(f"package:{name}\n" for name in state["disabled"])
+    if command.startswith("dumpsys wifi"):
+        return state.get("wifi", "")
+    if command.startswith("dumpsys package "):
+        return dumpsys_package(command.split()[-1])
     if "resolve-activity" in command:
         return (state["home"] or "") + "\n"
     if "query-activities" in command:
         return "".join(f"  {component}\n" for component in state["home_activities"])
     return ""
+
+
+def dumpsys_package(name):
+    """What `dumpsys package <name>` prints, scoped to the permissions the package asks for."""
+    requested = ["android.permission.INTERNET"]
+    if name in state.get("input_drivers", []):
+        requested.append("android.permission.TV_INPUT_HARDWARE")
+    lines = [f"Packages:", f"  Package [{name}]", "    requested permissions:"]
+    lines += [f"      {permission}" for permission in requested]
+    lines.append("    install permissions:")
+    lines.append("      android.permission.INTERNET: granted=true")
+    return "\n".join(lines) + "\n"
 
 
 def apply(command):
@@ -130,13 +146,17 @@ class DriftCheckTest(unittest.TestCase):
             "pinned": [],
             "commands": [],
             "unreachable": False,
+            # Empty means the TV shows no saved network at all, which is what the safety checks treat
+            # as "could not tell" - the same answer a set with Wi-Fi off gives.
+            "wifi": "",
+            "input_drivers": [],
         }
         state.update(overrides)
         self.state_path.write_text(json.dumps(state))
 
-    def run_check(self, *args):
-        env = dict(os.environ, TV_HOST="192.168.1.50", HOME=str(self.home),
-                   FAKE_TV_STATE=str(self.state_path))
+    def run_check(self, *args, env=None):
+        env = dict(dict(os.environ, TV_HOST="192.168.1.50", HOME=str(self.home),
+                        FAKE_TV_STATE=str(self.state_path)), **(env or {}))
         return subprocess.run(
             [sys.executable, str(self.repo / "tools" / "check.py"), *args],
             cwd=self.repo, env=env, capture_output=True, text=True, timeout=120,
@@ -230,6 +250,125 @@ class DriftCheckTest(unittest.TestCase):
             if (self.home / ".cleanyourtv").exists() else []
         self.assertEqual(records, [])
 
+    def test_home_on_a_stock_launcher_the_list_leaves_out_is_drift(self):
+        # The case that prompted #359: build-and-install.sh disables the stock launcher, so no list
+        # names it, and an update that turns it back on and takes Home matches no line of the list.
+        self.write_list(["com.example.music", "com.example.store"])
+        self.tv(disabled=["com.example.music", "com.example.store"], home=f"{STOCK}/.MainActivity")
+        result = self.run_check(str(self.list_path))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"Home is {STOCK}/.MainActivity, not {CUSTOM}", result.stdout)
+
+    def test_fix_takes_home_back_from_a_stock_launcher_the_list_leaves_out(self):
+        self.write_list(["com.example.music", "com.example.store"])
+        self.tv(disabled=["com.example.music", "com.example.store"], home=f"{STOCK}/.MainActivity")
+        result = self.run_check("--fix", str(self.list_path))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"Home: set to {CUSTOM}/.MainActivity", result.stdout)
+        again = self.run_check(str(self.list_path))
+        self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+
+    def test_stock_home_without_our_launcher_is_not_drift(self):
+        # Debloat only, no launcher installed: the stock launcher on Home is the intended state, and
+        # --fix has nothing to switch Home to.
+        self.write_list(["com.example.music", "com.example.store"])
+        self.tv(installed=["com.example.music", "com.example.store", STOCK],
+                disabled=["com.example.music", "com.example.store"],
+                home=f"{STOCK}/.MainActivity", home_activities=[f"{STOCK}/.MainActivity"])
+        result = self.run_check(str(self.list_path))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_home_on_another_launcher_than_the_one_given_is_drift(self):
+        self.tv(installed=COMMON_LAUNCHERS, disabled=["com.example.music", "com.example.store", STOCK],
+                home=f"{CUSTOM}/.MainActivity",
+                home_activities=[f"{CUSTOM}/.MainActivity", f"{FORK}/.MainActivity"])
+        result = self.run_check(str(self.list_path), FORK)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"not {FORK}", result.stdout)
+
+    def test_fix_leaves_setupwraith_on_while_it_owns_the_wifi(self):
+        # The update turned setupwraith back on, and disabling it again deletes the saved network and
+        # takes the TV off Wi-Fi - the one mistake here a cron --fix could make on its own.
+        self.write_list([SETUP, "com.example.music"])
+        self.tv(installed=BASE + [SETUP], disabled=["com.example.music", "com.example.store", STOCK],
+                wifi=f" cuid=10031 cname={SETUP}:10031 allowAutojoin=true")
+        result = self.run_check("--fix", str(self.list_path))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"leaving {SETUP} on", result.stdout)
+        self.assertIn("not fully back to the list", result.stdout)
+        self.assertNotIn(f"pm disable-user --user 0 {SETUP}", self.sent())
+
+    def test_fix_disables_setupwraith_when_the_system_owns_the_wifi(self):
+        self.write_list([SETUP, "com.example.music"])
+        self.tv(installed=BASE + [SETUP], disabled=["com.example.music", "com.example.store", STOCK],
+                wifi=" cuid=1000 cname=android.uid.system:1000 allowAutojoin=true")
+        result = self.run_check("--fix", str(self.list_path))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"pm disable-user --user 0 {SETUP}", self.sent())
+
+    def test_fix_leaves_setupwraith_on_when_the_wifi_cannot_be_read(self):
+        self.write_list([SETUP])
+        self.tv(installed=BASE + [SETUP], disabled=["com.example.store", STOCK], wifi="")
+        result = self.run_check("--fix", str(self.list_path))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"leaving {SETUP} on", result.stdout)
+        self.assertIn("FORCE_SETUPWRAITH=1", result.stdout)
+
+    def test_fix_takes_the_forced_setupwraith(self):
+        self.write_list([SETUP])
+        self.tv(installed=BASE + [SETUP], disabled=["com.example.store", STOCK],
+                wifi=f" cuid=10031 cname={SETUP}:10031 allowAutojoin=true")
+        result = self.run_check("--fix", str(self.list_path), env={"FORCE_SETUPWRAITH": "1"})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"pm disable-user --user 0 {SETUP}", self.sent())
+
+    def test_fix_leaves_an_hdmi_input_driver_on(self):
+        # #321: disabling the package under the HDMI/AV inputs leaves every port black until a full
+        # restore and a cold boot, so --fix has to keep the same guard disable.sh has.
+        self.write_list([MEDIATEK_INPUT, "com.example.music"])
+        self.tv(installed=BASE + [MEDIATEK_INPUT],
+                disabled=["com.example.store", STOCK],
+                input_drivers=[MEDIATEK_INPUT])
+        result = self.run_check("--fix", str(self.list_path))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"leaving {MEDIATEK_INPUT} on", result.stdout)
+        self.assertIn("TV_INPUT_HARDWARE", result.stdout)
+        self.assertNotIn(f"pm disable-user --user 0 {MEDIATEK_INPUT}", self.sent())
+        # The rest of the drift is still fixed.
+        self.assertIn("pm disable-user --user 0 com.example.music", self.sent())
+
+    def test_fix_takes_an_input_driver_with_TVINPUT_ALLOW(self):
+        self.write_list([MEDIATEK_INPUT])
+        self.tv(installed=BASE + [MEDIATEK_INPUT],
+                disabled=["com.example.music", "com.example.store", STOCK],
+                input_drivers=[MEDIATEK_INPUT])
+        result = self.run_check("--fix", str(self.list_path), env={"TVINPUT_ALLOW": "1"})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"pm disable-user --user 0 {MEDIATEK_INPUT}", self.sent())
+
+    def test_fix_prefers_the_launcher_over_a_vendor_fallback(self):
+        # A FallbackHome is the placeholder a TCL set shows when no launcher is enabled; taking it
+        # as Home would leave the TV in the placeholder (#435).
+        self.write_list(["com.example.music", STOCK])
+        self.tv(disabled=["com.example.music", "com.example.store"],
+                home=f"{STOCK}/.MainActivity",
+                home_activities=[f"{STOCK}/.MainActivity", FALLBACK, f"{CUSTOM}/.MainActivity"])
+        result = self.run_check("--fix", str(self.list_path))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"Home: set to {CUSTOM}/.MainActivity", result.stdout)
+        self.assertNotIn(FALLBACK, " ".join(self.sent()))
+
+    def test_fix_refuses_a_home_only_a_fallback_can_take(self):
+        self.write_list(["com.example.music", STOCK])
+        self.tv(installed=["com.example.music", "com.example.store", STOCK, "com.tcl.tv"],
+                disabled=["com.example.music", "com.example.store"],
+                home=f"{STOCK}/.MainActivity",
+                home_activities=[f"{STOCK}/.MainActivity", FALLBACK])
+        result = self.run_check("--fix", str(self.list_path))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("launcher/build-and-install.sh", result.stdout)
+        self.assertNotIn("set-home-activity", " ".join(self.sent()))
+
     def test_unreachable_tv_is_not_drift(self):
         self.tv(unreachable=True)
         result = self.run_check(str(self.list_path))
@@ -247,6 +386,14 @@ class DriftCheckTest(unittest.TestCase):
 
 FORK = "com.example.forklauncher"
 COMMON_LAUNCHERS = ["com.example.music", "com.example.store", STOCK, CUSTOM, FORK]
+# The first-run wizard's app, which owns the Wi-Fi network a TV saved during setup.
+SETUP = "com.google.android.tungsten.setupwraith"
+# On MediaTek sets this is the package behind every HDMI, AV and tuner input.
+MEDIATEK_INPUT = "com.mediatek.tvinput"
+# The packages every fake TV here starts with, before a test adds the one it is about.
+BASE = ["com.example.music", "com.example.store", STOCK, CUSTOM]
+# What a TCL set shows when no launcher is enabled; not a home the viewer can use.
+FALLBACK = "com.tcl.keycustomfunctionservice/.FallbackHome"
 
 
 if __name__ == "__main__":
