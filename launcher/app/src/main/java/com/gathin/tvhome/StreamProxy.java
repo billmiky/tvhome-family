@@ -262,10 +262,15 @@ final class StreamProxy {
         return vtvgoSources(json).get(0);
     }
 
-    /** Every free (non-VIP, no DRM) source in a playback/source answer, in the API's order. */
+    /**
+     * Every free (non-VIP, no DRM) source in a playback/source answer, Akamai mirrors first (they carry
+     * 1080p, the AWS one stops at 720p; their hdnts token only gates the master, which hands out a 24 h
+     * hdntl link), the rest in the API's order.
+     */
     static List<String> vtvgoSources(String json) throws Exception {
         JSONObject r = new JSONObject(json);
         List<String> out = new ArrayList<>();
+        List<String> akamai = new ArrayList<>();
         if (!r.has("data")) throw new IllegalArgumentException("vtvgo: " + r.optJSONObject("error"));
         JSONArray modes = r.getJSONObject("data").getJSONArray("sourceModes");
         for (int i = 0; i < modes.length(); i++) {
@@ -279,10 +284,11 @@ final class StreamProxy {
                 JSONArray urls = src.optJSONArray("sources");
                 for (int k = 0; urls != null && k < urls.length(); k++) {
                     String url = urls.getJSONObject(k).optString("url");
-                    if (!url.isEmpty()) out.add(url);
+                    if (!url.isEmpty()) (url.contains(".akamaized.net/") ? akamai : out).add(url);
                 }
             }
         }
+        out.addAll(0, akamai);
         if (out.isEmpty()) throw new IllegalArgumentException("vtvgo: no free source");
         return out;
     }
