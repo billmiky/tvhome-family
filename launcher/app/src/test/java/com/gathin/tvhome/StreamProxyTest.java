@@ -133,6 +133,15 @@ public class StreamProxyTest {
     }
 
     @Test
+    public void bestVariantDropsIFrameVariants() {
+        String master = "#EXTM3U\n#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=848956,CODECS=\"avc1.4d4029\",URI=\"https://c/01-iframe.m3u8\"\n"
+                + "#EXT-X-STREAM-INF:BANDWIDTH=3902037,CODECS=\"avc1.4d4029,mp4a.40.2\"\nhttps://c/03.m3u8\n"
+                + "#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=3902037,CODECS=\"avc1.4d4029\",URI=\"https://c/03-iframe.m3u8\"\n";
+        assertEquals("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3902037,CODECS=\"avc1.4d4029,mp4a.40.2\"\nhttps://c/03.m3u8\n",
+                StreamProxy.bestVariant(master));
+    }
+
+    @Test
     public void vtvgoError() {
         assertThrows(IllegalArgumentException.class,
                 () -> StreamProxy.vtvgoSource("{\"error\":{\"code\":\"BAD_REQUEST\"}}"));

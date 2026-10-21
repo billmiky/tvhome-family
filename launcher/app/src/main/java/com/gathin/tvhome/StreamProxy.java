@@ -585,7 +585,9 @@ final class StreamProxy {
 
     /**
      * A master playlist cut down to its highest-bandwidth variant, so players start (and stay) at the best
-     * quality instead of climbing up from 360p; other tags stay. A media playlist comes back unchanged.
+     * quality instead of climbing up from 360p; other tags stay, except I-frame (trick-play) variants: they declare
+     * video-only codecs, and ExoPlayer preparing from the master then played some channels without sound. A media
+     * playlist comes back unchanged.
      */
     static String bestVariant(String playlist) {
         String[] lines = playlist.split("\n", -1);
@@ -603,6 +605,7 @@ final class StreamProxy {
         if (best < 0) return playlist;
         StringBuilder sb = new StringBuilder(playlist.length());
         for (int i = 0; i < lines.length; i++) {
+            if (lines[i].startsWith("#EXT-X-I-FRAME-STREAM-INF:")) continue;
             if (lines[i].startsWith("#EXT-X-STREAM-INF:") && i != best) {
                 // skip the tag, any blank lines, and the URI line under it
                 while (i + 1 < lines.length && lines[i + 1].isEmpty()) i++;
