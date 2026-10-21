@@ -46,6 +46,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
         /** Called for a D-pad direction key on a tile. Return true when handled (focus stays put). */
         boolean onTileVerticalKey(int position, int keyCode);
+
+        /** Before a tile opens its app (or, held, the app's info page): run open to go ahead (App lock may ask first). */
+        void onTileOpen(String pkg, Runnable open);
     }
 
     static final class Entry {
@@ -233,14 +236,17 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             h.label.setText(e.label);
             h.label.setVisibility(View.VISIBLE);
         }
-        h.card.setOnClickListener(v -> launch(e));
+        h.card.setOnClickListener(v -> listener.onTileOpen(e.pkg, () -> launch(e)));
+        // The app's info page has an Open button, so a locked app asks here too.
         h.card.setOnLongClickListener(v -> {
-            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                ctx.startActivity(i);
-            } catch (ActivityNotFoundException ignored) {
-            }
+            listener.onTileOpen(e.pkg, () -> {
+                Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                try {
+                    ctx.startActivity(i);
+                } catch (ActivityNotFoundException ignored) {
+                }
+            });
             return true;
         });
     }

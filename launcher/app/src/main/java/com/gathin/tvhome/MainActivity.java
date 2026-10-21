@@ -45,6 +45,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
@@ -1813,12 +1814,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             rows.addView(row);
         }
         updateCardStates(rows);
-        // Scroll inside the panel instead of running off the bottom of a 720p screen.
-        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        int[] at = new int[2];
-        anchor.getLocationInWindow(at);
-        int room = root.getHeight() - (at[1] + anchor.getHeight()) - (int) (34 * density);
-        popup.setHeight(Math.min(panel.getMeasuredHeight(), Math.max(room, (int) (120 * density))));
+        fitBelow(popup, panel, anchor);
         dropIn(popup, panel, anchor, Gravity.END);
         rows.getChildAt(0).requestFocus();
     }
@@ -1852,6 +1848,162 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             default:
                 return getString(R.string.card_state_new);
         }
+    }
+
+    // ---- App lock -------------------------------------------------------------------------------
+
+    /** Wrong PINs in a row, and until when the pad refuses after too many (AppLock.MAX_TRIES). */
+    private int pinFails;
+    private long pinWaitUntil;
+
+    @Override
+    public void onTileOpen(String pkg, Runnable open) {
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        if (!AppLock.locked(p, pkg) || AppLock.inGrace(AppLock.unlockedAt, SystemClock.elapsedRealtime(), AppLock.grace(p))) {
+            open.run();
+            return;
+        }
+        verifyPin(getString(R.string.app_lock_enter_for, appLabel(pkg)), () -> {
+            AppLock.unlockedAt = SystemClock.elapsedRealtime();
+            open.run();
+        });
+    }
+
+    private String appLabel(String pkg) {
+        try {
+            PackageManager pm = getPackageManager();
+            return String.valueOf(pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)));
+        } catch (PackageManager.NameNotFoundException e) {
+            return pkg;
+        }
+    }
+
+    private String appLockState() {
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        if (!AppLock.hasPin(p)) return getString(R.string.app_lock_no_pin);
+        int n = AppLock.apps(p).size();
+        return n == 0 ? getString(R.string.settings_menu_off) : getString(R.string.app_lock_count, n);
+    }
+
+    /** Settings, App lock: the PIN first (a new one when none is set), then the list of apps. */
+    private void openAppLock() {
+        if (AppLock.hasPin(getSharedPreferences(PREFS, MODE_PRIVATE))) {
+            verifyPin(getString(R.string.app_lock_enter), this::showAppLockList);
+        } else {
+            newPin(this::showAppLockList);
+        }
+    }
+
+    private void verifyPin(String title, Runnable then) {
+        View panel = getLayoutInflater().inflate(R.layout.dialog_pin, root, false);
+        PinPad.show(glassDialog(panel), panel, title, (pad, pin) -> {
+            long now = SystemClock.elapsedRealtime();
+            if (now < pinWaitUntil) {
+                pad.fail(getString(R.string.app_lock_wait, (int) ((pinWaitUntil - now + 999) / 1000)));
+                return;
+            }
+            if (AppLock.checkPin(getSharedPreferences(PREFS, MODE_PRIVATE), pin)) {
+                pinFails = 0;
+                pad.dismiss();
+                then.run();
+                return;
+            }
+            if (++pinFails >= AppLock.MAX_TRIES) {
+                pinFails = 0;
+                pinWaitUntil = now + AppLock.WAIT_MS;
+                pad.fail(getString(R.string.app_lock_wait, (int) (AppLock.WAIT_MS / 1000)));
+            } else {
+                pad.fail(getString(R.string.app_lock_wrong));
+            }
+        });
+    }
+
+    /** A new PIN, typed twice. */
+    private void newPin(Runnable then) {
+        final String[] first = new String[1];
+        View panel = getLayoutInflater().inflate(R.layout.dialog_pin, root, false);
+        PinPad.show(glassDialog(panel), panel, getString(R.string.app_lock_new), (pad, pin) -> {
+            if (first[0] == null) {
+                first[0] = pin;
+                pad.next(getString(R.string.app_lock_confirm));
+                return;
+            }
+            if (!first[0].equals(pin)) {
+                first[0] = null;
+                pad.next(getString(R.string.app_lock_new));
+                pad.fail(getString(R.string.app_lock_mismatch));
+                return;
+            }
+            AppLock.setPin(getSharedPreferences(PREFS, MODE_PRIVATE), pin);
+            pad.dismiss();
+            Toast.makeText(this, R.string.app_lock_saved, Toast.LENGTH_SHORT).show();
+            then.run();
+        });
+    }
+
+    /** Dropdown under the Settings pill: Change PIN, then every app with a TV entry; OK toggles its lock. */
+    private void showAppLockList() {
+        View anchor = btnSettings;
+        View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
+        ((TextView) panel.findViewById(R.id.heading)).setText(R.string.settings_menu_app_lock);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (400 * density));
+        final SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+
+        View pinRow = addMenuRow(rows, getString(R.string.app_lock_change_pin), "");
+        pinRow.setOnClickListener(v -> {
+            popup.dismiss();
+            newPin(this::showAppLockList);
+        });
+        View graceRow = addMenuRow(rows, getString(R.string.app_lock_grace), graceLabel(AppLock.grace(prefs)));
+        final TextView graceStatus = graceRow.findViewById(R.id.status);
+        graceRow.setOnClickListener(v -> {
+            long g = AppLock.nextGrace(AppLock.grace(prefs));
+            AppLock.setGrace(prefs, g);
+            graceStatus.setText(graceLabel(g));
+        });
+
+        PackageManager pm = getPackageManager();
+        List<ResolveInfo> found = pm.queryIntentActivities(
+                new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0);
+        final List<String[]> apps = new ArrayList<>();   // {label, package}
+        Set<String> seen = new HashSet<>();
+        for (ResolveInfo ri : found) {
+            if (ri.activityInfo == null) continue;
+            String pkg = ri.activityInfo.packageName;
+            if (pkg.equals(getPackageName()) || !seen.add(pkg)) continue;
+            apps.add(new String[] {String.valueOf(ri.loadLabel(pm)), pkg});
+        }
+        Collections.sort(apps, (a, b) -> a[0].compareToIgnoreCase(b[0]));
+        Set<String> locked = AppLock.apps(prefs);
+        for (String[] app : apps) {
+            final String pkg = app[1];
+            View row = addMenuRow(rows, app[0], getString(locked.contains(pkg) ? R.string.app_lock_locked : R.string.app_lock_open));
+            final TextView status = row.findViewById(R.id.status);
+            row.setOnClickListener(v -> {
+                boolean on = !AppLock.apps(prefs).contains(pkg);
+                AppLock.setLocked(prefs, pkg, on);
+                status.setText(on ? R.string.app_lock_locked : R.string.app_lock_open);
+            });
+        }
+        fitBelow(popup, panel, anchor);
+        dropIn(popup, panel, anchor, Gravity.END);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    private String graceLabel(long ms) {
+        if (ms == 0) return getString(R.string.app_lock_grace_always);
+        long min = ms / 60_000;
+        return min < 60 ? getString(R.string.app_lock_grace_min, (int) min) : getString(R.string.app_lock_grace_hours, (int) (min / 60));
+    }
+
+    /** Scroll inside the panel instead of running off the bottom of a 720p screen. */
+    private void fitBelow(PopupWindow popup, View panel, View anchor) {
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int[] at = new int[2];
+        anchor.getLocationInWindow(at);
+        int room = root.getHeight() - (at[1] + anchor.getHeight()) - (int) (34 * density);
+        popup.setHeight(Math.min(panel.getMeasuredHeight(), Math.max(room, (int) (120 * density))));
     }
 
     // ---- Now playing ----------------------------------------------------------------------------
@@ -2340,6 +2492,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 for (int tries = 0; tries < 5; tries++) {
                     String item = back ? galleryBag.previous(galleryPhotos) : galleryBag.next(galleryPhotos);
                     if (item == null) return null;
+                    Log.d(Gallery.TAG, (back ? "previous " : "next ") + item.substring(item.lastIndexOf('/') + 1)
+                            + " (" + galleryPhotos.size() + " items)");
                     if (Gallery.isVideo(item)) {
                         handler.post(() -> playVideo(item));   // played on the main thread, not decoded
                         return null;
@@ -2750,6 +2904,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
             galleryListedAt = 0;   // look at the folder again: the owner may just have added photos
             startGallery();
+        });
+
+        View lockRow = addMenuRow(rows, getString(R.string.settings_menu_app_lock), appLockState());
+        lockRow.setOnClickListener(v -> {
+            popup.dismiss();
+            openAppLock();
         });
 
         View checkRow = addMenuRow(rows, getString(R.string.update_menu_check, BuildConfig.VERSION_NAME), updateState());
