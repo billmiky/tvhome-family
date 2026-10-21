@@ -380,6 +380,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         config = cfg;
         // The phone page lives as long as the process; a second onCreate finds it running.
         WebControl.start(this, cfg.webControl, cfg.webPort);
+        // IPTV links (http://127.0.0.1:8790/?url=...), likewise for the life of the process.
+        StreamProxy.start();
         COLUMNS = cfg.columns;
         liveTvPkg = cfg.liveTvPackage;
         liveTvAction = cfg.liveTvAction;
