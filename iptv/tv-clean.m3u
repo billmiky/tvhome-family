@@ -36,7 +36,7 @@ https://freem3u.xyz/api/live/play.m3u8?vid=9
 #EXTINF:-1 tvg-id="HTV7.vn@SD" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/c/c0/HTV7_logo.webp" group-title="Kênh HTV",HTV7 (720p)
 https://dethich.pw/htv7/index.m3u8
 #EXTINF:-1 tvg-id="vtvgo-10068" tvg-logo="https://thumb.vtvdigital.org/transform?url=https://vtvgo-next-assets.vtvdigital.vn/prod/images/channel/20260911/2026091104/0dcd065875-HTV9-Logo.webp" group-title="Kênh HTV",HTV9
-http://127.0.0.1:8790/?url=https://vtvgo.vn/channel/10068
+http://127.0.0.1:8790/?url=https://dethich.pw/htv9/index.m3u8&alt=https://vtvgo.vn/channel/10068
 #EXTINF:-1 tvg-id="HTVSports.vn@SD" tvg-logo="https://upload.wikimedia.org/wikipedia/vi/3/3f/HTV_THETHAO_2014.png" group-title="Kênh HTV",HTV Sports
 https://dethich.pw/htvthethao/index.m3u8
 #EXTINF:-1 tvg-id="vtvgo-sctv2" tvg-logo="https://i.imgur.com/8i5DXIg.png" group-title="Kênh SCTV",SCTV2 SD (720p)
