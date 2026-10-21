@@ -1,0 +1,406 @@
+{
+ "refresh_hours": 12,
+ "sources": {
+  "CZ1": "https://epgshare01.online/epgshare01/epg_ripper_CZ1.xml.gz",
+  "DE1": "https://epgshare01.online/epgshare01/epg_ripper_DE1.xml.gz",
+  "FR1": "https://epgshare01.online/epgshare01/epg_ripper_FR1.xml.gz",
+  "HK1": "https://epgshare01.online/epgshare01/epg_ripper_HK1.xml.gz",
+  "IN1": "https://epgshare01.online/epgshare01/epg_ripper_IN1.xml.gz",
+  "KR1": "https://epgshare01.online/epgshare01/epg_ripper_KR1.xml.gz",
+  "PLEX1": "https://epgshare01.online/epgshare01/epg_ripper_PLEX1.xml.gz",
+  "SG1": "https://epgshare01.online/epgshare01/epg_ripper_SG1.xml.gz",
+  "SK1": "https://epgshare01.online/epgshare01/epg_ripper_SK1.xml.gz",
+  "UK1": "https://epgshare01.online/epgshare01/epg_ripper_UK1.xml.gz",
+  "US2": "https://epgshare01.online/epgshare01/epg_ripper_US2.xml.gz"
+ },
+ "channels": {
+  "ABCNewsLive1.us@SD": [
+   "US2",
+   "ABC.News.Live.us2"
+  ],
+  "AMC.us@EastHD": [
+   "US2",
+   "AMC.HD.us2"
+  ],
+  "AnimalPlanet.in@HD": [
+   "IN1",
+   "Animal.Planet.HD.World.in"
+  ],
+  "AnimalPlanet.us@East": [
+   "US2",
+   "Animal.Planet.HD.us2"
+  ],
+  "ArenaSport1.sk@SD": [
+   "SK1",
+   "Arena.Sport.1.HD.sk"
+  ],
+  "ArenaSport2.sk@SD": [
+   "SK1",
+   "Arena.Sport.2.HD.sk"
+  ],
+  "ArirangTV.kr@SD": [
+   "KR1",
+   "Arirang.World.kr"
+  ],
+  "AsianFoodNetwork.sg@Vietnam": [
+   "HK1",
+   "Asian.Food.Network.hk"
+  ],
+  "BBCFood.us@SD": [
+   "PLEX1",
+   "plex.tv.BBC.Food.plex"
+  ],
+  "BBCHomeGarden.us@SD": [
+   "PLEX1",
+   "plex.tv.BBC.Home.&.Garden.plex"
+  ],
+  "BabyFirst.us@US": [
+   "US2",
+   "BabyFirst.TV.us2"
+  ],
+  "BabySharkTV.us@SD": [
+   "PLEX1",
+   "plex.tv.BABY.SHARK.TV.plex"
+  ],
+  "BloombergOriginals.us@US": [
+   "PLEX1",
+   "plex.tv.Bloomberg.Originals.plex"
+  ],
+  "BloombergTV.us@US": [
+   "US2",
+   "Bloomberg.HD.us2"
+  ],
+  "Boomerang.us@SD": [
+   "US2",
+   "Boomerang.us2"
+  ],
+  "BrazzersTV.adult": [
+   "SK1",
+   "Brazzers.TV.Europe.sk"
+  ],
+  "BritBoxMysteries.us@SD": [
+   "PLEX1",
+   "plex.tv.BritBox.Mysteries.plex"
+  ],
+  "CBSNews247.us@SD": [
+   "PLEX1",
+   "plex.tv.CBS.News.24/7.plex"
+  ],
+  "CNA.sg@SD": [
+   "SG1",
+   "CNA.(HD).sg"
+  ],
+  "CNBCAsia.sg@HD": [
+   "SG1",
+   "CNBC.Asia.sg"
+  ],
+  "CNBCEurope.uk": [
+   "FR1",
+   "CNBC.Europe.fr"
+  ],
+  "CNN.us@SD": [
+   "US2",
+   "CNN.HD.us2"
+  ],
+  "CNNInternational.us@Europe": [
+   "SG1",
+   "CNN.International.(HD).sg"
+  ],
+  "CNNOriginals.us@SD": [
+   "PLEX1",
+   "plex.tv.CNN.Originals.plex"
+  ],
+  "CartoonNetwork.us@East": [
+   "US2",
+   "Cartoon.Network.HD.us2"
+  ],
+  "CartoonNetworkAsia.sg@SD": [
+   "SG1",
+   "Cartoon.Network.(HD).sg"
+  ],
+  "Channel5.sg@SD": [
+   "SG1",
+   "Ch.5.(HD).sg"
+  ],
+  "Channel8.sg@SD": [
+   "SG1",
+   "Ch.8.(HD).sg"
+  ],
+  "ChannelU.sg@SD": [
+   "SG1",
+   "Ch.U.(HD).sg"
+  ],
+  "CheddarNews.us@SD": [
+   "US2",
+   "Cheddar.us2"
+  ],
+  "Cinemax.cz@Czechia": [
+   "CZ1",
+   "Cinemax.cz"
+  ],
+  "Cinemax.us@West": [
+   "US2",
+   "Cinemax.(Pacific).us2"
+  ],
+  "CinemaxAsia.sg@HD": [
+   "SG1",
+   "CINEMAX.(HD).sg"
+  ],
+  "CookingChannel.us@SD": [
+   "US2",
+   "Cooking.Channel.HD.us2"
+  ],
+  "Crunchyroll.us@SD": [
+   "PLEX1",
+   "plex.tv.Crunchyroll.plex"
+  ],
+  "DW.de@English": [
+   "SG1",
+   "Deutsche.Welle.(English).sg"
+  ],
+  "Dateline247.us@SD": [
+   "PLEX1",
+   "plex.tv.Dateline.plex"
+  ],
+  "DiscoveryAsiaTaiwan.tw@SD": [
+   "HK1",
+   "Discovery.Asia.hk"
+  ],
+  "DiscoveryChannel.in@HD": [
+   "IN1",
+   "Discovery.HD.World.in"
+  ],
+  "DiscoveryScience.in@SD": [
+   "IN1",
+   "Discovery.Science.in"
+  ],
+  "DocumentaryPlus.us@US": [
+   "PLEX1",
+   "plex.tv.Documentary+.plex"
+  ],
+  "DorcelTV.adult": [
+   "SK1",
+   "Dorcel.TV.HD.sk"
+  ],
+  "ESPN.us@HD": [
+   "US2",
+   "ESPN.HD.us2"
+  ],
+  "ESPN2.us@HD": [
+   "US2",
+   "ESPN2.HD.us2"
+  ],
+  "EroxxxHD.adult": [
+   "SK1",
+   "Eroxxx.HD.sk"
+  ],
+  "EuronewsEnglish.fr@SD": [
+   "UK1",
+   "Euronews.uk"
+  ],
+  "FashionTV.fr@SD": [
+   "PLEX1",
+   "plex.tv.FashionTV.plex"
+  ],
+  "FashionTVParis.fr@SD": [
+   "FR1",
+   "Fashion.TV.fr"
+  ],
+  "FoodNetwork.us@East": [
+   "US2",
+   "Food.Network.HD.us2"
+  ],
+  "FoxNewsChannel.us@SD": [
+   "US2",
+   "Fox.News.Channel.HD.us2"
+  ],
+  "FoxSports1.us@HD": [
+   "US2",
+   "FS1.HD.us2"
+  ],
+  "FoxWeather.us@SD": [
+   "PLEX1",
+   "plex.tv.FOX.Weather.plex"
+  ],
+  "France24.fr@English": [
+   "FR1",
+   "France.24.fr"
+  ],
+  "HBO.cz@SD": [
+   "CZ1",
+   "HBO.cz"
+  ],
+  "HBO.us@East": [
+   "US2",
+   "HBO.East.us2"
+  ],
+  "HBOHits.us@East": [
+   "US2",
+   "HBO.Hits.us2"
+  ],
+  "HistoryAsia.us@SD": [
+   "SG1",
+   "HISTORY™.(HD).sg"
+  ],
+  "HistoryHit.uk@SD": [
+   "PLEX1",
+   "plex.tv.History.Hit.plex"
+  ],
+  "HustlerHD.adult": [
+   "US2",
+   "Hustler.TV.us2"
+  ],
+  "HustlerTV.adult": [
+   "US2",
+   "Hustler.TV.us2"
+  ],
+  "KBSWorld.kr@SD": [
+   "SG1",
+   "KBS.World.(HD).sg"
+  ],
+  "LeoGoldTV.adult": [
+   "SK1",
+   "Leo.TV.Gold.HD.sk"
+  ],
+  "LiveNOWfromFOX.us@SD": [
+   "PLEX1",
+   "plex.tv.LiveNOW.from.FOX.plex"
+  ],
+  "NBCNewsNOW.us@SD": [
+   "PLEX1",
+   "plex.tv.NBC.News.NOW.plex"
+  ],
+  "NationalGeographic.us@HDEast": [
+   "US2",
+   "National.Geographic.HD.us2"
+  ],
+  "Nickelodeon.us@East": [
+   "US2",
+   "Nickelodeon.HD.us2"
+  ],
+  "Nicktoons.us@East": [
+   "US2",
+   "Nicktoons.us2"
+  ],
+  "NinjaKidzTV.us@SD": [
+   "PLEX1",
+   "plex.tv.Ninja.Kidz.TV.plex"
+  ],
+  "OutdoorChannel.us@SD": [
+   "US2",
+   "Outdoor.Channel.HD.us2"
+  ],
+  "OutdoorChannel.us@Vietnam": [
+   "HK1",
+   "Outdoor.Channel.hk"
+  ],
+  "OutsideTV.us@SD": [
+   "PLEX1",
+   "plex.tv.Outside.plex"
+  ],
+  "PBSKids.us@SD": [
+   "US2",
+   "PBS.KIDS.HD.us2"
+  ],
+  "PBSNature.us@SD": [
+   "PLEX1",
+   "plex.tv.PBS.Nature.plex"
+  ],
+  "PBSTravel.us@SD": [
+   "PLEX1",
+   "plex.tv.PBS.Travel.plex"
+  ],
+  "PlayboyTV.adult": [
+   "DE1",
+   "Playboy.TV.de"
+  ],
+  "RedBullTV.at@US": [
+   "IN1",
+   "Red.Bull.TV.in"
+  ],
+  "RetroCrush.us@SD": [
+   "PLEX1",
+   "plex.tv.RetroCrush.plex"
+  ],
+  "RyanandFriends.us@SD": [
+   "PLEX1",
+   "plex.tv.Ryan.and.Friends.plex"
+  ],
+  "ScrippsNews.us@SD": [
+   "US2",
+   "Scripps.News.us2"
+  ],
+  "ShowtimeFamilyZone.us@East": [
+   "US2",
+   "Showtime.Familyzone.HD.us2"
+  ],
+  "SkySportsNFL.uk@SD": [
+   "UK1",
+   "Sky.Sports.NFL.uk"
+  ],
+  "SonicTV.us@SD": [
+   "PLEX1",
+   "plex.tv.Sonic.TV.plex"
+  ],
+  "Starz.us@West": [
+   "US2",
+   "Starz.HD.(Pacific).us2"
+  ],
+  "StarzComedy.us@East": [
+   "US2",
+   "Starz.Comedy.HD.us2"
+  ],
+  "StarzKidsFamily.us@East": [
+   "US2",
+   "Starz.Kids.HD.us2"
+  ],
+  "TLC.in@HD": [
+   "IN1",
+   "TLC.HD.in"
+  ],
+  "Tastemade.us@US": [
+   "US2",
+   "Tastemade.us2"
+  ],
+  "TastemadeTravel.us@SD": [
+   "US2",
+   "Tastemade.Travel.us2"
+  ],
+  "TheDesignNetwork.us@SD": [
+   "PLEX1",
+   "plex.tv.The.Design.Network.plex"
+  ],
+  "TheJamieOliverChannel.us@SD": [
+   "PLEX1",
+   "plex.tv.The.Jamie.Oliver.Channel.plex"
+  ],
+  "ToonGoggles.us@SD": [
+   "PLEX1",
+   "plex.tv.Toon.Goggles.plex"
+  ],
+  "VividTV.adult": [
+   "US2",
+   "VividTV.us2"
+  ],
+  "WillowSports.us@SD": [
+   "PLEX1",
+   "plex.tv.Willow.Sports.plex"
+  ],
+  "YahooFinance.us@SD": [
+   "PLEX1",
+   "plex.tv.Yahoo.Finance.plex"
+  ],
+  "YuGiOh.us@SD": [
+   "PLEX1",
+   "plex.tv.Yu-Gi-Oh!.plex"
+  ],
+  "beINSPORTSXTRA.us@SD": [
+   "PLEX1",
+   "plex.tv.beIN.SPORTS.XTRA.plex"
+  ],
+  "bonappetit.us@SD": [
+   "US2",
+   "Bon.Appétit.TV.us2"
+  ]
+ }
+}
