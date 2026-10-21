@@ -175,4 +175,12 @@ public class StreamProxyTest {
     public void configMissing() {
         assertThrows(IllegalArgumentException.class, () -> StreamProxy.config("<html></html>"));
     }
+
+    @Test
+    public void referersTryThePageThenTheStreamSiteThenNone() {
+        assertEquals(java.util.Arrays.asList("https://xlivetv.com/", null),
+                StreamProxy.referers("https://stream.xlivetv.com/s/abc", "https://xlivetv.com/ch/1"));
+        assertEquals(java.util.Arrays.asList("https://adult-tv-channels.click/", "https://xlivetv.com/", null),
+                StreamProxy.referers("https://stream.xlivetv.com/s/abc", "https://adult-tv-channels.click/x"));
+    }
 }

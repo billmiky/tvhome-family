@@ -177,7 +177,7 @@ final class StreamProxy {
             if (firstSource == null) firstSource = sources.get(0);
             for (String src : sources) {
                 try {
-                    String[] got = fetchPlaylist(src);   // {final url, body}
+                    String[] got = fetchPlaylist(src, p);   // {final url, body}
                     if (got[1].startsWith("#EXTM3U")) {
                         String playlist = bestVariant(absolute(got[1], got[0]));
                         send(out, 200, "application/vnd.apple.mpegurl", playlist.getBytes(StandardCharsets.UTF_8), null);
@@ -624,13 +624,57 @@ final class StreamProxy {
         return sb.toString();
     }
 
-    /** {final url after redirects, body}; only a 2xx answer counts. */
-    private static String[] fetchPlaylist(String url) throws IOException {
+    /**
+     * {final url after redirects, body}; only a 2xx answer counts. Some hosts (stream.xlivetv.com) refuse a playlist
+     * without the page's Referer: the page the link came from is sent, then the stream's own site, then none.
+     */
+    private static String[] fetchPlaylist(String url, String page) throws IOException {
+        IOException last = null;
+        for (String referer : referers(url, page)) {
+            try {
+                return fetchPlaylistOnce(url, referer);
+            } catch (IOException e) {
+                last = e;
+            }
+        }
+        throw last;
+    }
+
+    /** The page's origin, the stream host's parent site (stream.example.com → example.com), then no Referer. */
+    static List<String> referers(String url, String page) {
+        List<String> out = new ArrayList<>();
+        String p = origin(page);
+        if (p != null) out.add(p + "/");
+        try {
+            URL u = new URL(url);
+            String[] labels = u.getHost().split("\\.");
+            if (labels.length > 2) {
+                String site = u.getProtocol() + "://" + labels[labels.length - 2] + "." + labels[labels.length - 1] + "/";
+                if (!out.contains(site)) out.add(site);
+            }
+        } catch (IOException ignored) {
+            // a bad url fails in the fetch itself
+        }
+        out.add(null);
+        return out;
+    }
+
+    private static String origin(String url) {
+        try {
+            URL u = new URL(url);
+            return u.getProtocol() + "://" + u.getHost() + (u.getPort() > 0 ? ":" + u.getPort() : "");
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static String[] fetchPlaylistOnce(String url, String referer) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         try {
             c.setConnectTimeout(8000);
             c.setReadTimeout(8000);
             c.setRequestProperty("User-Agent", UA);
+            if (referer != null) c.setRequestProperty("Referer", referer);
             int code = c.getResponseCode();
             if (code / 100 != 2) throw new IOException("HTTP " + code);
             try (InputStream in = c.getInputStream()) {
