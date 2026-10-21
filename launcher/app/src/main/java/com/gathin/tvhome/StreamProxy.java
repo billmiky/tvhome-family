@@ -60,7 +60,7 @@ final class StreamProxy {
     static final String TAG = "TvHomeStream";
     static final int PORT = 8790;
 
-    private static final String UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36";
+    private static final String UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36";
     private static final int TIMEOUT_MS = 20_000;
     private static final int MAX_BODY = 2 * 1024 * 1024;
     private static final Pattern CONFIG = Pattern.compile("window\\.playerConfig\\s*=\\s*\\{(.*?)\\};", Pattern.DOTALL);

@@ -4,7 +4,7 @@ Usage: python3 extract_stream.py <page-url> [<page-url> ...]"""
 import base64, json, re, sys, urllib.request
 from urllib.parse import urlsplit
 
-UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36"
+UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
 
 def fetch(url, origin, data=None):
     # Cloudflare answers bare curl/urllib with a 403 page; a browser UA + Origin/Referer gets through
