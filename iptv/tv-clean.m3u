@@ -194,15 +194,15 @@ https://d2e1asnsl7br7b.cloudfront.net/7782e205e72f43aeb4a48ec97f66ebbe/index.m3u
 #EXTINF:-1 tvg-id="CNAOriginals.sg@SD" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/8/83/CNA_new_logo.svg/500px-CNA_new_logo.svg.png" group-title="Singapore",CNA Originals (1080p)
 https://amg01082-cna-amg01082c1-rlaxx-us-11304.playouts.now.amagi.tv/playlist.m3u8
 #EXTINF:-1 tvg-id="ABCNewsLive1.us@SD" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/ABC_News_Live_logo_2021.svg/960px-ABC_News_Live_logo_2021.svg.png" group-title="News",ABC News Live 1 (720p)
-https://abcnews-streams.akamaized.net/hls/live/2023560/abcnewshudson1/master.m3u8
+http://127.0.0.1:8790/?url=https://dbrb49pjoymg4.cloudfront.net/10001/99951517/hls/master.m3u8%3Fads.xumo_channelId%3D99951517&alt=https://jmp2.uk/plu-6508be683a0d700008c534e4.m3u8
 #EXTINF:-1 tvg-id="BloombergTV.us@US" tvg-logo="https://i.imgur.com/OuogLHx.png" group-title="News",Bloomberg TV (720p)
 https://www.bloomberg.com/media-manifest/streams/asia.m3u8
 #EXTINF:-1 tvg-id="BloombergTV.us@Plus" tvg-logo="https://i.imgur.com/OuogLHx.png" group-title="News",Bloomberg TV+ (2160p)
 https://d8975dc3.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/U2Ftc3VuZy1nYl9CbG9vbWJlcmdUVlBsdXNfSExT/playlist.m3u8
 #EXTINF:-1 tvg-id="CBSNews247.us@SD" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/CBS_News_247_logo.svg/960px-CBS_News_247_logo.svg.png" group-title="News",CBS News 24/7 (720p)
 https://jmp2.uk/plu-6350fdd266e9ea0007bedec5.m3u8
-#EXTINF:-1 tvg-id="CBSNewsPhilly.us@SD" tvg-logo="https://i.imgur.com/FmtTbNY.png" group-title="News",CBS News Philly (720p)
-https://cbsn-phi.cbsnstream.cbsnews.com/out/v1/5c9ad3e215984b0e9ad845b335216b72/master.m3u8
+#EXTINF:-1 tvg-id="CBSNewsPhilly.us@SD" tvg-logo="https://i.imgur.com/FmtTbNY.png" group-title="News",CBS News Philly (1080p)
+http://127.0.0.1:8790/?url=https://dai.google.com/linear/hls/event/R2Kw0uvnQIW7fUmOseurzA/master.m3u8&alt=https://jmp2.uk/plu-5eb1b05ea168cc000767ba67.m3u8
 #EXTINF:-1 tvg-id="CheddarNews.us@SD" tvg-logo="https://i.imgur.com/tuP9GW8.png" group-title="News",Cheddar News (1080p)
 https://hls.livecdn.io/cheddar.com/cheddar/playlist.m3u8
 #EXTINF:-1 tvg-id="CNN.us@SD" tvg-logo="https://jiotvimages.cdn.jio.com/dare_images/images/CNN.png" group-title="News",CNN (720p)
@@ -247,8 +247,8 @@ https://dil9xdvretp0f.cloudfront.net/index.m3u8
 https://lightning-fnf-samsungaus.amagi.tv/playlist.m3u8
 #EXTINF:-1 tvg-id="LegoChannel.us@SD" tvg-logo="https://i.imgur.com/xePwW13.png" group-title="Cartoon",Lego Channel (1080p)
 https://dltiqboxjw21d.cloudfront.net/index.m3u8
-#EXTINF:-1 tvg-id="Naruto.us@US" tvg-logo="https://i.imgur.com/M8X3Kvc.png" group-title="Cartoon",Naruto (1080p)
-https://d21vn5eki5qsdi.cloudfront.net/playlist.m3u8
+#EXTINF:-1 tvg-id="Naruto.us@US" tvg-logo="https://i.imgur.com/M8X3Kvc.png" group-title="Cartoon",Naruto (684p)
+https://jmp2.uk/plu-5da0c85bd2c9c10009370984.m3u8
 #EXTINF:-1 tvg-id="Nickelodeon.us@East" tvg-logo="https://i.imgur.com/E84jnP8.png" group-title="Cartoon",Nickelodeon (United States) (720p)
 http://198.58.104.90:8989/nickelodeon/index.m3u8
 #EXTINF:-1 tvg-id="Nicktoons.us@East" tvg-logo="https://images.pluto.tv/channels/654ca7f92c1d3300086b608c/colorLogoPNG_1751457678592.png" group-title="Cartoon",Nicktoons (United States) (720p)
@@ -288,9 +288,9 @@ https://jmp2.uk/plu-5e84f54a82f05300080e6746.m3u8
 #EXTINF:-1 tvg-id="AutenticTravel.de@SD" tvg-logo="https://d3b6luslimvglo.cloudfront.net/images/79/rlaxximages/channels-rescaled/icon-white/autentictravel_white.png" group-title="Lifestyle",Autentic Travel (1080p)
 https://cb0c87cc605942ff9766a4e6744bbadc.mediatailor.us-east-1.amazonaws.com/v1/master/44f73ba4d03e9607dcd9bebdcb8494d86964f1d8/RlaxxTV-eu_AutenticTravel/playlist.m3u8
 #EXTINF:-1 tvg-id="BBCFood.us@SD" tvg-logo="https://i.imgur.com/kcmHcSx.png" group-title="Lifestyle",BBC Food (1080p)
-https://d1e9r0b71zfwk7.cloudfront.net/playlist.m3u8
+http://127.0.0.1:8790/?url=https://d74d877d.wurl.com/master/f36d25e7e52f1ba8d7e56eb859c636563214f541/Vml6aW9fQkJDRm9vZF9ITFM/playlist.m3u8&alt=https://dbrb49pjoymg4.cloudfront.net/10001/99951177/hls/playlist.m3u8%3Fads.xumo_channelId%3D99951177
 #EXTINF:-1 tvg-id="BBCHomeGarden.us@SD" tvg-logo="https://i.imgur.com/rC0pi1D.png" group-title="Lifestyle",BBC Home & Garden (1080p)
-https://d11r33s5i066xh.cloudfront.net/playlist.m3u8
+https://dbrb49pjoymg4.cloudfront.net/10001/99951178/hls/playlist.m3u8?ads.xumo_channelId=99951178
 #EXTINF:-1 tvg-id="bonappetit.us@SD" tvg-logo="https://i.imgur.com/YhFFxlE.png" group-title="Lifestyle",bon appetit (1080p)
 https://bonappetit-samsung.amagi.tv/playlist.m3u8
 #EXTINF:-1 tvg-id="CookingChannel.us@SD" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Cooking_Channel.svg/960px-Cooking_Channel.svg.png" group-title="Lifestyle",Cooking Channel (720p)
@@ -318,7 +318,7 @@ https://0b73ace69ebb45eaa249bb87837cb958.mediatailor.us-west-2.amazonaws.com/v1/
 #EXTINF:-1 tvg-id="Tastemade.us@US" tvg-logo="https://i.imgur.com/xP7Ehn8.png" group-title="Lifestyle",Tastemade (1080p)
 https://rakutenaa-tm-intl-aus-rakuten-eu-n1gtg.amagi.tv/playlist/rakutenAA-tm-intl-aus-rakuten-eu/playlist.m3u8
 #EXTINF:-1 tvg-id="TastemadeTravel.us@SD" tvg-logo="https://i.imgur.com/8s6aRwv.png" group-title="Lifestyle",Tastemade Travel (1080p)
-https://d6ef3usc6d9cl.cloudfront.net/Tastemade_Travel.m3u8
+https://s8host4.localnow.api.cms.amdvids.com/v1/master/c189661feba961c19bc5fb60b57879ee9b84548a/config10/tm-travel-tubi/playlist.m3u8?ads.cdnhost=s8host4.localnow.api.cms.amdvids.com&ads.playbackid=C452694C-6430-40B3-887B-CC94F4EBA4F4&ads.v3=C452694C-6430-40B3-887B-CC94F4EBA4F4
 #EXTINF:-1 tvg-id="TheDesignNetwork.us@SD" tvg-logo="https://i.imgur.com/J5YJ3r3.png" group-title="Lifestyle",The Design Network (1080p)
 https://amg00441-amg00441c1-rakuten-us-6050.playouts.now.amagi.tv/playlist.m3u8
 #EXTINF:-1 tvg-id="TheJamieOliverChannel.us@SD" tvg-logo="https://i.imgur.com/4v93XUB.png" group-title="Lifestyle",The Jamie Oliver Channel (1080p)
@@ -344,7 +344,7 @@ https://amg00861-terninternation-inwild-samsunguk-w5wic.amagi.tv/playlist/amg008
 #EXTINF:-1 tvg-id="LoveThePlanet.es@EN" tvg-logo="https://i.imgur.com/RBcD49X.png" group-title="Documentary",Love The Planet (1080p)
 https://amg01821-lovetvchannels-lovetheplanetuksamsung-samsunguk-apopw.amagi.tv/playlist/amg01821-lovetvchannels-lovetheplanetuksamsung-samsunguk/playlist.m3u8
 #EXTINF:-1 tvg-id="PBSNature.us@SD" tvg-logo="https://i.imgur.com/Brry7cZ.png" group-title="Documentary",PBS Nature (1080p)
-https://d3mr43kyql7wgk.cloudfront.net/PBS_Nature.m3u8
+http://127.0.0.1:8790/?url=https://s6host5.localnow.api.cms.amdvids.com/v1/master/c189661feba961c19bc5fb60b57879ee9b84548a/config9/playlist.m3u8%3Fads.cdnhost%3Ds3host4.localnow.api.cms.amdvids.com%26ads.playbackid%3DB7688A14-B68F-4A9B-8857-28A584CCB016%26ads.v3%3DB7688A14-B68F-4A9B-8857-28A584CCB016&alt=https://jmp2.uk/plu-640a64bd73e013000893d4e0.m3u8
 #EXTINF:-1 tvg-id="beINSPORTSXTRA.us@SD" tvg-logo="https://i.ibb.co/HT49GPmB/XTRA-2.png" group-title="Sports",beIN SPORTS XTRA (1080p)
 https://bein-xtra-bein.amagi.tv/playlist.m3u8
 #EXTINF:-1 tvg-id="ESPN.us@HD" tvg-logo="https://imgx.fubo.tv/station_logos/espn-hd_c.png" group-title="Sports",ESPN (United States) HD (720p)
@@ -366,8 +366,8 @@ https://cdn.stmify.com/out/v1/SKY_SPORTS_ACTION/index.m3u8
 http://88.212.15.17/live/test_arenasport/playlist.m3u8
 #EXTINF:-1 tvg-id="CanalPlusSportSK.sk@SD" tvg-logo="https://static.wikia.nocookie.net/logopedia/images/2/25/Canal%2B_Sport_2023.svg/revision/latest?cb=20230901182304" group-title="Sports",Canal+ Sport SK
 http://rpprod.hbbtv.cdn.cra.cz:8080/hbbTV/cme-sk-canal-plus-sport/live_fullhd?offsetSeconds=0
-#EXTINF:-1 tvg-id="WillowSports.us@SD" tvg-logo="https://provider-static.plex.tv/epg/cms/production/acf3d1d8-c53e-49ca-86e9-0d9410b106b4/Willow_Sports_dark_Background_1500_1000_color.png" group-title="Sports",Willow Sports (1080p)
-https://d36r8jifhgsk5j.cloudfront.net/Willow_TV.m3u8
+#EXTINF:-1 tvg-id="WillowSports.us@SD" tvg-logo="https://provider-static.plex.tv/epg/cms/production/acf3d1d8-c53e-49ca-86e9-0d9410b106b4/Willow_Sports_dark_Background_1500_1000_color.png" group-title="Sports",Willow Sports (720p)
+http://127.0.0.1:8790/?url=https://tvsen5.aynaott.com/willowhd/index.m3u8&alt=http://tvsen5.aynascope.net/willowhd/index.m3u8
 #EXTINF:-1 tvg-id="HBO.us@East" tvg-logo="https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/HBO_logo.svg/960px-HBO_logo.svg.png" group-title="Movies",HBO (United States) (720p)
 http://tvsen7.aynascope.net/hbo/index.m3u8
 #EXTINF:-1 tvg-id="HBOHits.us@East" tvg-logo="https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f0/HBO_Hits_Logo.svg/960px-HBO_Hits_Logo.svg.png" group-title="Movies",HBO Hits (720p)
@@ -437,4 +437,4 @@ https://freem3u.xyz/api/live/play.m3u8?vid=9855
 #EXTINF:-1 tvg-id="CNNInternational.us@Europe" tvg-logo="https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b8/CNN-International-Logo.svg/960px-CNN-International-Logo.svg.png" group-title="News",CNN International (1080p)
 https://d3bp6dwmpbdajl.cloudfront.net/v1/master/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-ury0meh5m4nzm/index.m3u8
 #EXTINF:-1 tvg-name="CNBC Europe" tvg-logo="https://d2n0069hmnqmmx.cloudfront.net/epgdata/1.0/newchanlogos/512/512/skychb1088.png" tvg-id="CNBCEurope.uk" tvg-chno="106" group-title="News",CNBC Europe
-https://amg01079-nbcuuk-amg01079c1-samsung-es-1261.playouts.now.amagi.tv/playlist/amg01079-nbcuukfast-cnbcpe-samsunges/playlist.m3u8
+https://amg01079-nbcuuk-amg01079c2-samsung-gb-1258.playouts.now.amagi.tv/playlist.m3u8
