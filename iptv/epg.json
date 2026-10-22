@@ -274,6 +274,14 @@
    "PLEX1",
    "plex.tv.LiveNOW.from.FOX.plex"
   ],
+  "LoveNature.ca@4K": [
+   "PLEX1",
+   "plex.tv.Love.Nature.plex"
+  ],
+  "MTV.us@SD": [
+   "US2",
+   "MTV.-.Music.Television.HD.us2"
+  ],
   "NBCNewsNOW.us@SD": [
    "PLEX1",
    "plex.tv.NBC.News.NOW.plex"
@@ -393,6 +401,10 @@
   "VividTV.adult": [
    "US2",
    "VividTV.us2"
+  ],
+  "WildEarth.za@SD": [
+   "UK1",
+   "WildEarth.uk"
   ],
   "WillowSports.us@SD": [
    "PLEX1",
