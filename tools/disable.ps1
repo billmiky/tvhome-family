@@ -78,7 +78,8 @@ if (-not $env:FORCE_HOME) {
         } | Sort-Object -Unique)
         # The setup wizard and the settings apps answer HOME too, but they are not launchers (disable.sh).
         $notLaunchers = @('com.google.android.tungsten.setupwraith', 'com.android.tv.settings', 'com.android.settings', 'com.android.provision')
-        $others = @($claims | Where-Object { $_ -ne $homePkg -and $pkgs -notcontains $_ -and $notLaunchers -notcontains $_ })
+        # Nor is a factory-test app (com.duokan.factorytest/.FactoryLauncher answers HOME on a Mi TV 4A).
+        $others = @($claims | Where-Object { $_ -ne $homePkg -and $pkgs -notcontains $_ -and $notLaunchers -notcontains $_ -and $_ -notmatch 'factorytest|factory_test|factorymode' })
         if ($others.Count -eq 0) {
             Write-Warning "Skipping ${homePkg}: it owns Home, and no other app that can answer Home is installed and staying enabled. Make the new launcher Home first (launcher\build-and-install.ps1), then run this list again to disable the old one; or set `$env:FORCE_HOME=1 if you can still reach the TV."
             $pkgs = @($pkgs | Where-Object { $_ -ne $homePkg })

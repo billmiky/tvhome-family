@@ -223,6 +223,21 @@ class HomeGuardTest(unittest.TestCase):
                                  "a vendor fallback is not a launcher to fall back on")
                 self.assertIn(f"Skipping {STOCK}", self.output(result))
 
+    def test_a_factory_test_app_does_not_count_as_another_home(self):
+        # A Xiaomi Mi TV 4A answers the HOME query with com.duokan.factorytest/.FactoryLauncher next to
+        # the launcher and a FallbackHome. Counting the factory test as another Home let a list disable
+        # the owner and hand Home to the factory test screen.
+        for entry in self.entries():
+            for factory in ("com.duokan.factorytest/.FactoryLauncher", "com.example.factory_test/.Main",
+                            "com.mediatek.factorymode/.FactoryHome"):
+                with self.subTest(entry=entry, factory=factory):
+                    self.tv(claims=[factory, STOCK, "com.android.tv.settings/.system.FallbackHome"])
+                    result, sent = self.disable(entry)
+                    self.assertEqual(result.returncode, 0, self.output(result))
+                    self.assertNotIn(f"pm disable-user --user 0 {STOCK}", sent,
+                                     "a factory test app is not a launcher to fall back on")
+                    self.assertIn(f"Skipping {STOCK}", self.output(result))
+
     def test_a_tv_that_cannot_list_its_homes_is_left_with_one(self):
         # tv.py fails or the TV answers nothing: the owner is the only Home this run knows about.
         for entry in self.entries():

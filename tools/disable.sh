@@ -86,7 +86,10 @@ if [ -n "$HOME_PKG" ] && printf '%s\n' "$PKGS" | grep -xF "$HOME_PKG" >/dev/null
   # A vendor's own fallback does not count either: TCL Android TV sets register
   # com.tcl.keycustomfunctionservice/.FallbackHome (and com.android.tv.settings/.system.FallbackHome),
   # a placeholder the firmware shows when no launcher is enabled, not a home the viewer can use.
+  # Nor does a factory-test app: on a Xiaomi Mi TV 4A com.duokan.factorytest/.FactoryLauncher answers
+  # HOME, and handing Home to it leaves the viewer on the factory test screen.
   OTHERS=$(printf '%s\n' "$CLAIMS" | grep -vE '/[^ ]*FallbackHome$' | cut -d/ -f1 | sort -u \
+    | grep -viE 'factorytest|factory_test|factorymode' \
     | grep -vxF "$HOME_PKG" | grep -vxF "$PKGS" \
     | grep -vxF -e com.google.android.tungsten.setupwraith -e com.android.tv.settings -e com.android.settings -e com.android.provision || true)
   if [ -z "$OTHERS" ]; then
