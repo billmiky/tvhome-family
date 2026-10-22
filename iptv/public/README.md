@@ -1,3 +1,5 @@
+**Published:** World Tivi config https://trinh.uk/worldtivi/vn.json (paste this URL in World Tivi: first run ▸ Nhập URL, or Settings ▸ Kết nối config) · m3u for other players https://trinh.uk/worldtivi/vn.m3u
+
 # WorldTivi public channel list
 
 Free, legal-to-watch channels (free FAST channels and broadcasters' own free streams), ready to import.
