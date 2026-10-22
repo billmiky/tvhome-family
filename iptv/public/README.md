@@ -1,4 +1,4 @@
-**Published:** World Tivi config https://trinh.uk/worldtivi/vn.json (paste this URL in World Tivi: first run ▸ Nhập URL, or Settings ▸ Kết nối config) · m3u for other players https://trinh.uk/worldtivi/vn.m3u
+**Published:** World Tivi config https://trinh.uk/worldtivi/vn.json (paste this URL in World Tivi: first run ▸ Nhập URL, or Settings ▸ Kết nối config) · m3u for other players https://trinh.uk/worldtivi/vn.m3u (without the VTV/VTVgo channels: they need World Tivi's vtvgo / vtv-vn proxy scripts)
 
 # WorldTivi public channel list
 
