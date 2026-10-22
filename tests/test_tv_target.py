@@ -60,8 +60,13 @@ class TvTargetTest(unittest.TestCase):
         self.assertEqual(tv.HOST, "192.0.2.1")
         self.assertEqual(tv.PORT, 39482)
 
-    def test_tv_port_env_overrides_endpoint_port(self):
+    def test_endpoint_port_overrides_tv_port_env(self):
         tv = load_tv({"TV_HOST": "192.0.2.1:39482", "TV_PORT": "15555"})
+        self.assertEqual(tv.HOST, "192.0.2.1")
+        self.assertEqual(tv.PORT, 39482)
+
+    def test_tv_port_env_used_when_endpoint_has_no_port(self):
+        tv = load_tv({"TV_HOST": "192.0.2.1", "TV_PORT": "15555"})
         self.assertEqual(tv.HOST, "192.0.2.1")
         self.assertEqual(tv.PORT, 15555)
 

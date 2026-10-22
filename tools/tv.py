@@ -49,7 +49,7 @@ if not _raw_host:
     sys.exit("Set TV_HOST to your TV's IP address, e.g.  TV_HOST=192.168.1.50 tools/tv.py --probe\n"
              "(find it under Settings → Network, or look for the TV in `arp -a`)")
 HOST, _endpoint_port = split_host_port(_raw_host)
-_port_str = os.environ.get("TV_PORT") or _endpoint_port or "5555"
+_port_str = _endpoint_port or os.environ.get("TV_PORT") or "5555"
 try:
     PORT = int(_port_str)
     if not (1 <= PORT <= 65535):
