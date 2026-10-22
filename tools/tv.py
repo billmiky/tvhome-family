@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Minimal ADB-over-TCP client for an Android TV using adb_shell (no adb binary needed).
 
-Set TV_HOST to the TV's IP. Usage:
+Set TV_HOST to the TV's IP (or IP:port). Usage:
     tv.py --probe                      connect and print model / Android version
     tv.py <shell command...>           run one shell command
     tv.py --screenshot <local.png> [KEY ...] [--wait SECONDS]
@@ -28,11 +28,34 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-HOST = os.environ.get("TV_HOST")
-PORT = int(os.environ.get("TV_PORT", "5555"))
-if not HOST:
+def split_host_port(endpoint):
+    """Split host:port or [ipv6]:port into (host, port_or_none)."""
+    if endpoint.startswith("["):
+        end = endpoint.find("]")
+        if end != -1:
+            host = endpoint[1:end]
+            rest = endpoint[end + 1:]
+            if rest.startswith(":"):
+                return host, rest[1:]
+            return host, None
+    elif endpoint.count(":") == 1:
+        host, port = endpoint.split(":", 1)
+        return host, port
+    return endpoint, None
+
+
+_raw_host = os.environ.get("TV_HOST")
+if not _raw_host:
     sys.exit("Set TV_HOST to your TV's IP address, e.g.  TV_HOST=192.168.1.50 tools/tv.py --probe\n"
              "(find it under Settings → Network, or look for the TV in `arp -a`)")
+HOST, _endpoint_port = split_host_port(_raw_host)
+_port_str = os.environ.get("TV_PORT") or _endpoint_port or "5555"
+try:
+    PORT = int(_port_str)
+    if not (1 <= PORT <= 65535):
+        raise ValueError
+except ValueError:
+    sys.exit(f"not a port number: {_port_str!r}")
 KEYDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adbkey")
 KEY = os.path.join(KEYDIR, "adbkey")
 # Reuse the stock adb key when the TV already trusts it (platform-tools / Android Studio users), so the
