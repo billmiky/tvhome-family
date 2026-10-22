@@ -9,6 +9,7 @@ Set TV_HOST to the TV's IP (or IP:port). Usage:
     tv.py --batch < commands.txt       one command per line, same connection
     tv.py --push <local> <remote>      small files only (see b64push.py for larger ones)
     tv.py --pull <remote> <local>
+    tv.py --reboot                     return once the reboot request is accepted; the TV may still be restarting
 """
 import os
 import re
@@ -104,12 +105,13 @@ USAGE = """usage:
     tv.py --push <local> <remote>
     tv.py --pull <remote> <local>
     tv.py --batch < commands.txt
+    tv.py --reboot
     tv.py <shell command...>
 """
 # Arguments each known flag takes, the flag included. The shell branch takes anything, so a flag
 # with the wrong count listed here is a typo, not a command for the TV.
 # --screenshot takes its file and then any number of keys, so it is checked by screenshot_args instead.
-ARITY = {"--probe": 1, "--push": 3, "--pull": 3, "--batch": 1}
+ARITY = {"--probe": 1, "--push": 3, "--pull": 3, "--batch": 1, "--reboot": 1}
 
 # screencap writes the PNG on the TV and we pull the file afterwards: adb_shell's shell() decodes
 # what comes back as text, which corrupts an image, and `exec-out screencap -p` returns a broken
@@ -217,6 +219,14 @@ def main():
     args = sys.argv[1:]
     check_arity(args)
     dev = connect()
+    if args == ["--reboot"]:
+        # Native reboot waits for ADB's OKAY, not the shell's CLSE that can be lost as adbd stops (#995).
+        try:
+            dev.reboot()
+        finally:
+            dev.close()
+        print("Reboot request accepted; wait for the TV to restart before reconnecting.")
+        return 0
     status = 0
     if not args or args == ["--probe"]:
         for p in ("ro.product.model", "ro.product.device", "ro.build.version.release",
