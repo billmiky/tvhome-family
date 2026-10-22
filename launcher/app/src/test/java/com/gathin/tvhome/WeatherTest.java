@@ -52,6 +52,10 @@ public class WeatherTest {
         assertEquals("☁", Weather.icon(3));
         assertEquals("≡", Weather.icon(45));
         assertEquals("☂", Weather.icon(61));
+        // After sunset: the moon for a clear sky, a cloud for a partly cloudy one; the rest as by day.
+        assertEquals("☾", Weather.icon(0, false));
+        assertEquals("☁", Weather.icon(2, false));
+        assertEquals("☂", Weather.icon(61, false));
         assertEquals("☂", Weather.icon(81));
         assertEquals("❄", Weather.icon(73));
         assertEquals("⚡", Weather.icon(95));
@@ -97,5 +101,14 @@ public class WeatherTest {
         assertEquals(0xFFFF453A, Weather.aqiColor(151));
         Weather.Reading r = Weather.decodeLast(Weather.encodeLast(new Weather.Reading(27.6, 3, 40, 30, 120, 1L)));
         assertEquals(120, r.aqi);
+    }
+
+    @Test
+    public void nightFromTheForecastSurvivesTheCache() throws Exception {
+        Weather.Reading r = Weather.parseForecast("{\"current\":{\"temperature_2m\":27.0,\"weather_code\":0,\"is_day\":0}}", 5L);
+        assertEquals(false, r.day);
+        assertEquals(false, Weather.decodeLast(Weather.encodeLast(r)).day);
+        // A reading cached by an older version (6 fields) counts as day.
+        assertEquals(true, Weather.decodeLast("27.0,0,5,-1,-1,-1").day);
     }
 }

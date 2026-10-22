@@ -167,7 +167,7 @@ public class GalleryDream extends ClockDream {
         Weather.Reading r = on && !cfg.weatherLocation.isEmpty()
                 ? Weather.cached(this, cfg.weatherLocation, cfg.weatherUnit) : null;
         if (r == null) return;
-        String icon = Weather.icon(r.code);
+        String icon = Weather.icon(r.code, r.day);
         if (!icon.isEmpty() && !view.getPaint().hasGlyph(icon)) icon = "";
         view.setText(Weather.line(r, icon));
         view.setVisibility(View.VISIBLE);

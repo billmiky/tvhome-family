@@ -26,7 +26,7 @@ final class Weather {
     static final String FAHRENHEIT = "fahrenheit";
     static final long REFRESH_MS = 30 * 60_000L;
 
-    private static final String FORECAST = "https://api.open-meteo.com/v1/forecast?current=temperature_2m,weather_code&hourly=precipitation_probability&forecast_hours=3&timezone=auto";
+    private static final String FORECAST = "https://api.open-meteo.com/v1/forecast?current=temperature_2m,weather_code,is_day&hourly=precipitation_probability&forecast_hours=3&timezone=auto";
     /** US AQI from Open-Meteo's air-quality model (CAMS); same host family, no key. */
     private static final String AIR = "https://air-quality-api.open-meteo.com/v1/air-quality?current=us_aqi";
     private static final String GEOCODE = "https://geocoding-api.open-meteo.com/v1/search?count=1&format=json&name=";
@@ -49,12 +49,19 @@ final class Weather {
         /** US AQI, or -1 when the air-quality request failed. */
         final int aqi;
         final long at;
+        /** Open-Meteo's is_day at the place: false after sunset, so a clear sky shows the moon. */
+        final boolean day;
 
         Reading(double temp, int code, int rain1h, int rain2h, long at) {
-            this(temp, code, rain1h, rain2h, -1, at);
+            this(temp, code, rain1h, rain2h, -1, at, true);
         }
 
         Reading(double temp, int code, int rain1h, int rain2h, int aqi, long at) {
+            this(temp, code, rain1h, rain2h, aqi, at, true);
+        }
+
+        Reading(double temp, int code, int rain1h, int rain2h, int aqi, long at, boolean day) {
+            this.day = day;
             this.temp = temp;
             this.code = code;
             this.rain1h = rain1h;
@@ -64,7 +71,7 @@ final class Weather {
         }
 
         Reading withAqi(int aqi) {
-            return new Reading(temp, code, rain1h, rain2h, aqi, at);
+            return new Reading(temp, code, rain1h, rain2h, aqi, at, day);
         }
     }
 
@@ -130,7 +137,8 @@ final class Weather {
         // The hourly list starts at the current hour: [1] is the next hour, [2] the one after.
         JSONObject hourly = json.optJSONObject("hourly");
         JSONArray p = hourly != null ? hourly.optJSONArray("precipitation_probability") : null;
-        return new Reading(t, cur.getInt("weather_code"), percent(p, 1), percent(p, 2), now);
+        boolean day = cur.optInt("is_day", 1) != 0;
+        return new Reading(t, cur.getInt("weather_code"), percent(p, 1), percent(p, 2), -1, now, day);
     }
 
     private static int percent(JSONArray a, int i) {
@@ -150,11 +158,16 @@ final class Weather {
 
     /**
      * A symbol for a WMO weather code, from the old BMP symbol block so most TV fonts have it; the caller
-     * drops it when the font hasn't. Night is not told apart: the sun stays the sun.
+     * drops it when the font hasn't. At night ({@code day} false) a clear sky is the moon and a partly cloudy one
+     * a cloud: the sun at 11 pm read as "sunny".
      */
     static String icon(int code) {
-        if (code == 0) return "☀";                         // clear
-        if (code == 1 || code == 2) return "⛅";            // mainly clear, partly cloudy
+        return icon(code, true);
+    }
+
+    static String icon(int code, boolean day) {
+        if (code == 0) return day ? "☀" : "☾";             // clear
+        if (code == 1 || code == 2) return day ? "⛅" : "☁"; // mainly clear, partly cloudy
         if (code == 3) return "☁";                         // overcast
         if (code == 45 || code == 48) return "≡";          // fog
         if (code >= 95) return "⚡";                        // thunderstorm
@@ -198,17 +211,18 @@ final class Weather {
     }
 
     static String encodeLast(Reading r) {
-        return String.format(Locale.US, "%.1f,%d,%d,%d,%d,%d", r.temp, r.code, r.at, r.rain1h, r.rain2h, r.aqi);
+        return String.format(Locale.US, "%.1f,%d,%d,%d,%d,%d,%d", r.temp, r.code, r.at, r.rain1h, r.rain2h, r.aqi, r.day ? 1 : 0);
     }
 
     static Reading decodeLast(String s) {
         if (s == null) return null;
         String[] p = s.split(",");
-        if (p.length != 3 && p.length != 5 && p.length != 6) return null;   // older versions kept fewer fields
+        if (p.length != 3 && p.length != 5 && p.length != 6 && p.length != 7) return null;   // older versions kept fewer fields
         try {
             int r1 = p.length >= 5 ? Integer.parseInt(p[3]) : -1, r2 = p.length >= 5 ? Integer.parseInt(p[4]) : -1;
-            int aqi = p.length == 6 ? Integer.parseInt(p[5]) : -1;
-            return new Reading(Double.parseDouble(p[0]), Integer.parseInt(p[1]), r1, r2, aqi, Long.parseLong(p[2]));
+            int aqi = p.length >= 6 ? Integer.parseInt(p[5]) : -1;
+            boolean day = p.length < 7 || !"0".equals(p[6]);
+            return new Reading(Double.parseDouble(p[0]), Integer.parseInt(p[1]), r1, r2, aqi, Long.parseLong(p[2]), day);
         } catch (NumberFormatException e) {
             return null;
         }

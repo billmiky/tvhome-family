@@ -2847,7 +2847,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             weatherView.setVisibility(View.GONE);
             return;
         }
-        String icon = Weather.icon(r.code);
+        String icon = Weather.icon(r.code, r.day);
         if (!icon.isEmpty() && !weatherView.getPaint().hasGlyph(icon)) icon = "";
         weatherView.setText(Weather.line(r, icon));
         weatherView.setVisibility(View.VISIBLE);
