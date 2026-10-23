@@ -10,11 +10,13 @@ import androidx.annotation.NonNull;
 
 /**
  * The Now playing card's progress: a dark strip along its bottom edge, filled from the left as the
- * track plays. On the focused card, which turns solid black, the strip turns light so it still shows.
+ * track plays, in orange. On the focused card, which turns solid black, the track turns light.
  * Drawn as the card's foreground, which the card clips to its rounded outline.
  */
 final class ProgressStrip extends Drawable {
 
+    /** The played part, orange on either card so it reads against a light photo or the black focus. */
+    private static final int ORANGE = 0xFFFF9F0A;
     private final Paint track = new Paint();
     private final Paint fill = new Paint();
     private final float height;
@@ -24,13 +26,13 @@ final class ProgressStrip extends Drawable {
     ProgressStrip(float density) {
         height = 3f * density;
         track.setColor(0xCC000000);
-        fill.setColor(0xE6FFFFFF);
+        fill.setColor(ORANGE);
     }
 
     /** Dark strip on the glass card; light on the focused, solid black one. */
     void setFocused(boolean focused) {
         track.setColor(focused ? 0x40FFFFFF : 0xCC000000);
-        fill.setColor(focused ? 0xFFFFFFFF : 0xE6FFFFFF);
+        fill.setColor(ORANGE);
         invalidateSelf();
     }
 
