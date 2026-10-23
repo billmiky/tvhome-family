@@ -326,7 +326,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** The greeting line's turns: greeting, date, Bitcoin price (TextCycle). */
     private TextCycle cycle;
-    private CharSequence greetingLine = "", btcLine, usdtLine;
+    private CharSequence greetingLine = "", btcLine;
 
     /** The big greeting that types itself out when the TV comes on (GreetingIntro). */
     private GreetingIntro intro;
@@ -420,7 +420,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The greeting line takes turns with the date and the Bitcoin price, which have no lines of their own.
         cycle = new TextCycle(greeting, handler, () -> java.util.Arrays.asList(greetingLine,
                 new java.text.SimpleDateFormat(getString(R.string.date_format), Locale.getDefault()).format(new java.util.Date()),
-                btcOn ? btcLine : null, btcOn ? usdtLine : null));
+                btcOn ? btcLine : null));
         introDueAt = android.os.SystemClock.elapsedRealtime();   // a cold start is the TV coming on too
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
@@ -2834,12 +2834,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             line.append("   ");
             append(line, Ticker.formatChange(q.changePct), q.changePct < 0 ? 0xFFFF6B6B : 0xFF4CD787);
         }
+        // USDT in VND (Remitano) shares the turn, after Bitcoin, in the line's own colour.
+        if (!Double.isNaN(q.usdtVnd)) line.append("     USDT ").append(Ticker.formatVnd(q.usdtVnd));
         btcLine = line;
-        // USDT in VND (Remitano) takes the next turn, after Bitcoin.
-        usdtLine = null;
-        if (!Double.isNaN(q.usdtVnd)) {
-            usdtLine = "USDT " + Ticker.formatVnd(q.usdtVnd);   // in the line's own colour
-        }
         if (cycle != null) cycle.refresh();
     }
 
