@@ -47,4 +47,19 @@ public class TickerTest {
         assertEquals("▲ 1.3%", Ticker.formatChange(1.25));
         assertEquals("0.0%", Ticker.formatChange(-0.04));
     }
+
+    @Test
+    public void usdtInVnd() throws Exception {
+        String body = "{\"RENECVND\":{\"bid\":837.8,\"ask\":837.8},\"USDTVND\":{\"bid\":25993.48556581,\"ask\":25993.48556581}}";
+        assertEquals(25993.48556581, Ticker.parseUsdtVnd(body), 1e-6);
+        assertEquals("25.993 ₫", Ticker.formatVnd(25993.48));
+        for (String bad : new String[] {"{}", "{\"USDTVND\":{\"bid\":0}}", "{\"USDTVND\":{\"bid\":2123408073}}"}) {
+            try {
+                Ticker.parseUsdtVnd(bad);
+                org.junit.Assert.fail(bad);
+            } catch (Exception expected) {
+                // refused
+            }
+        }
+    }
 }

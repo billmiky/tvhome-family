@@ -28,6 +28,8 @@ final class Ticker {
     static final String SPOT_URL = "https://api.coinbase.com/v2/prices/BTC-USD/spot";
     /** 24 hour open and last trade; the change is last price against open. */
     static final String STATS_URL = "https://api.exchange.coinbase.com/products/BTC-USD/stats";
+    /** Remitano's VND prices for every coin it trades; the line uses USDTVND. */
+    static final String VND_URL = "https://api.remitano.com/api/v1/tickers/price?currency_unit=vnd";
 
     /** How often the line refreshes while Home is in front, and how old a value may be on return. */
     static final long REFRESH_MS = 5 * 60_000L;
@@ -41,11 +43,18 @@ final class Ticker {
     static final class Quote {
         final double price;
         final double changePct;
+        /** One USDT in VND on Remitano, or NaN. */
+        final double usdtVnd;
         final long at;
 
         Quote(double price, double changePct, long at) {
+            this(price, changePct, Double.NaN, at);
+        }
+
+        Quote(double price, double changePct, double usdtVnd, long at) {
             this.price = price;
             this.changePct = changePct;
+            this.usdtVnd = usdtVnd;
             this.at = at;
         }
 
@@ -74,10 +83,17 @@ final class Ticker {
         } catch (Exception e) {
             Log.w(TAG, "stats: " + e);
         }
+        double usdt = Double.NaN;
+        try {
+            usdt = parseUsdtVnd(get(VND_URL));
+        } catch (Exception e) {
+            Log.w(TAG, "usdt: " + e);
+        }
         if (Double.isNaN(price) && previous != null) price = previous.price;
         double change = change(price, open);
         if (Double.isNaN(change) && previous != null) change = previous.changePct;
-        return new Quote(price, change, System.currentTimeMillis());
+        if (Double.isNaN(usdt) && previous != null) usdt = previous.usdtVnd;
+        return new Quote(price, change, usdt, System.currentTimeMillis());
     }
 
     /** {"data":{"amount":"81002.12","base":"BTC","currency":"USD"}} */
@@ -94,6 +110,18 @@ final class Ticker {
         return positive(Double.parseDouble(new JSONObject(body).getString("open")));
     }
 
+
+    /** {"USDTVND":{"bid":25993.48,"ask":25993.48}, …}; a dollar's worth, so anything far from that is refused. */
+    static double parseUsdtVnd(String body) throws Exception {
+        double bid = positive(new JSONObject(body).getJSONObject("USDTVND").getDouble("bid"));
+        if (bid < 5_000 || bid > 200_000) throw new IllegalArgumentException("not a USDT price in VND: " + bid);
+        return bid;
+    }
+
+    /** "25.993 ₫", grouped the Vietnamese way. */
+    static String formatVnd(double vnd) {
+        return NumberFormat.getIntegerInstance(new Locale("vi", "VN")).format(Math.round(vnd)) + " ₫";
+    }
 
     static double change(double price, double open) {
         if (Double.isNaN(price) || Double.isNaN(open) || open <= 0) return Double.NaN;
