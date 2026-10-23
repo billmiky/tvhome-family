@@ -81,6 +81,17 @@ final class NowPlaying {
         return appInTitle ? who : who + " · " + appLabel;
     }
 
+    /**
+     * How far through the track playback is, 0 to 1, or -1 when it can't be told (no duration, as on a
+     * live stream, or no position). A playing session's position moves on from its last report at its speed.
+     */
+    static float progress(long position, long updatedAt, float speed, boolean playing, long duration, long now) {
+        if (duration <= 0 || position < 0) return -1f;
+        long at = position;
+        if (playing && updatedAt > 0 && now > updatedAt) at += (long) ((now - updatedAt) * (speed == 0f ? 1f : speed));
+        return Math.max(0f, Math.min(1f, (float) at / duration));
+    }
+
     private static boolean blank(String s) {
         return s == null || s.trim().isEmpty();
     }

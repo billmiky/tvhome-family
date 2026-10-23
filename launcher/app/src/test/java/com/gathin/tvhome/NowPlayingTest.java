@@ -80,4 +80,13 @@ public class NowPlayingTest {
         assertEquals("fallback", NowPlaying.run(() -> "value", "fallback"));
         assertEquals(1, reported.size());
     }
+
+    @Test
+    public void progressMovesOnWhilePlaying() {
+        assertEquals(0.5f, NowPlaying.progress(30_000, 0, 1f, false, 60_000, 99_999), 1e-6);
+        assertEquals(0.75f, NowPlaying.progress(30_000, 1_000, 1f, true, 60_000, 16_000), 1e-6);   // 15 s later
+        assertEquals(1f, NowPlaying.progress(59_000, 1_000, 1f, true, 60_000, 90_000), 1e-6);      // capped
+        assertEquals(-1f, NowPlaying.progress(30_000, 1_000, 1f, true, 0, 2_000), 1e-6);           // live: no duration
+        assertEquals(-1f, NowPlaying.progress(-1, 1_000, 1f, true, 60_000, 2_000), 1e-6);
+    }
 }

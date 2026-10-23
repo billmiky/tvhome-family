@@ -2043,7 +2043,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         cardSolid.setStroke(Math.max(1, Math.round(density)), 0x59FFFFFF);
         cardFold = new Tween(0f, this::foldCard);
         foldCard(0f);
+        // Progress along the bottom edge, inside the card's rounded corners.
+        progressStrip = new ProgressStrip(density);
+        nowPlaying.setForeground(progressStrip);
+        nowPlaying.setClipToOutline(true);
         nowPlaying.setOnFocusChangeListener((v, focused) -> {
+            progressStrip.setFocused(focused);
             float s = focused ? NOW_PLAYING_SCALE : 1.0f;
             v.setScaleX(s);
             v.setScaleY(s);
@@ -2133,6 +2138,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private void stopNowPlaying() {
         handler.removeCallbacks(nowPlayingRefresh);
+        handler.removeCallbacks(progressTick);
         NowPlaying.run(() -> {
             if (sessions != null) sessions.removeOnActiveSessionsChangedListener(sessionsChanged);
             unwatch();
@@ -2193,6 +2199,34 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         nowPlayingHasSession = shownSession != null;
         if (nowPlayingHasSession && todayPlay == null) bindNowPlaying(shownSession, states[pick]);
         placeNowPlaying();
+        updateProgress();
+    }
+
+    private ProgressStrip progressStrip;
+    private final Runnable progressTick = () -> NowPlaying.run(() -> {
+        updateProgress();
+        return null;
+    }, null);
+
+    /**
+     * Moves the strip to where the shown session is, and again each second while it plays and the card
+     * is up. Hidden on the occasion card and for streams with no duration.
+     */
+    private void updateProgress() {
+        handler.removeCallbacks(progressTick);
+        if (progressStrip == null) return;
+        MediaController c = shownSession;
+        PlaybackState st = c != null && todayPlay == null ? c.getPlaybackState() : null;
+        if (st == null) {
+            progressStrip.set(-1f);
+            return;
+        }
+        MediaMetadata md = c.getMetadata();
+        long duration = md != null ? md.getLong(MediaMetadata.METADATA_KEY_DURATION) : 0;
+        boolean playing = NowPlaying.isActive(st.getState());
+        progressStrip.set(NowPlaying.progress(st.getPosition(), st.getLastPositionUpdateTime(),
+                st.getPlaybackSpeed(), playing, duration, android.os.SystemClock.elapsedRealtime()));
+        if (playing && resumed && nowPlayingVisible) handler.postDelayed(progressTick, 1000);
     }
 
     private void bindNowPlaying(MediaController c, int state) {
