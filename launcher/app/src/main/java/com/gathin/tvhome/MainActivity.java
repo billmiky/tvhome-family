@@ -324,6 +324,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private View nowPlayingText;
     private final Runnable tidyUp = () -> setTidy(true, true);
 
+    /** The date's turn on the line: "FRI 23 OCT   Next PH: 8 NOV (SG)" (Singapore and Vietnam holidays). */
+    private String dateWithHoliday() {
+        String date = new java.text.SimpleDateFormat(getString(R.string.date_format), Locale.getDefault()).format(new java.util.Date());
+        String next = PublicHolidays.next(java.time.LocalDate.now());
+        return next == null ? date : date + "   Next PH: " + next;
+    }
+
     /** The greeting line's turns: greeting, date, Bitcoin price (TextCycle). */
     private TextCycle cycle;
     private CharSequence greetingLine = "", btcLine;
@@ -419,7 +426,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         };
         // The greeting line takes turns with the date and the Bitcoin price, which have no lines of their own.
         cycle = new TextCycle(greeting, handler, () -> java.util.Arrays.asList(greetingLine,
-                new java.text.SimpleDateFormat(getString(R.string.date_format), Locale.getDefault()).format(new java.util.Date()),
+                dateWithHoliday(),
                 btcOn ? btcLine : null));
         introDueAt = android.os.SystemClock.elapsedRealtime();   // a cold start is the TV coming on too
         btnWifi = findViewById(R.id.btnWifi);
