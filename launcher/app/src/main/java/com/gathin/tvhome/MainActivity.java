@@ -2838,10 +2838,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // USDT in VND (Remitano) takes the next turn, after Bitcoin.
         usdtLine = null;
         if (!Double.isNaN(q.usdtVnd)) {
-            SpannableStringBuilder usdt = new SpannableStringBuilder();
-            append(usdt, "USDT", 0xFF26A17B);
-            usdt.append("  ").append(Ticker.formatVnd(q.usdtVnd));
-            usdtLine = usdt;
+            usdtLine = "USDT " + Ticker.formatVnd(q.usdtVnd);   // in the line's own colour
         }
         if (cycle != null) cycle.refresh();
     }

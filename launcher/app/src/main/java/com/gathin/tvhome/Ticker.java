@@ -118,9 +118,9 @@ final class Ticker {
         return bid;
     }
 
-    /** "25,993": whole dong, comma-grouped like the Bitcoin price. */
+    /** "25,993 ₫": whole dong, comma-grouped like the Bitcoin price. */
     static String formatVnd(double vnd) {
-        return NumberFormat.getIntegerInstance(Locale.US).format(Math.round(vnd));
+        return NumberFormat.getIntegerInstance(Locale.US).format(Math.round(vnd)) + " ₫";
     }
 
     static double change(double price, double open) {
