@@ -60,7 +60,8 @@ if (-not $env:FORCE_HOME) {
         $claims = @(& $py -I (Join-Path $repo 'tools\tv.py') $claimQuery | ForEach-Object {
             # Keep the class: a vendor fallback is named FallbackHome and is not a usable launcher
             # (TCL Android TV sets register com.tcl.keycustomfunctionservice/.FallbackHome).
-            if ($_ -match '^\s*([A-Za-z0-9_.]+)/([A-Za-z0-9_.$]+)$') {
+            # Trim first: a trailing CR from the TV would stop the `$` anchor from matching any line.
+            if ("$_".Trim() -match '^([A-Za-z0-9_.]+)/([A-Za-z0-9_.$]+)$') {
                 if ($Matches[2] -notmatch 'FallbackHome$') { $Matches[1] }
             }
         } | Sort-Object -Unique)
@@ -80,7 +81,7 @@ if (-not $env:FORCE_HOME) {
 if (-not $env:TVINPUT_ALLOW -and $pkgs.Count -gt 0) {
     # Trailing `; true`: the loop's status is the last package's `grep -q`, which is nonzero whenever the
     # last listed package is not an input driver, and would look like a failed check.
-    $loop = 'for p in ' + ($pkgs -join ' ') + '; do dumpsys package $p | grep -q TV_INPUT_HARDWARE && echo $p; done; true'
+    $loop = 'for p in ' + ($pkgs -join ' ') + '; do dumpsys package $p | sed -n -E ''/requested permissions:/,/(install|runtime) permissions:|User [0-9]+:/p'' | grep -q TV_INPUT_HARDWARE && echo $p; done; true'
     # Windows PowerShell turns redirected stderr into an error that 'Stop' would throw (see getprop).
     $ErrorActionPreference = 'Continue'
     $tvhw = @(& $py -I (Join-Path $repo 'tools\tv.py') $loop 2>$null)
