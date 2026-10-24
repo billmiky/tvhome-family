@@ -272,11 +272,11 @@ export const PAGE = `<!doctype html>
           </div>
         </div>
         <div class="power">
-          <button id="btnPicture"><i id="pictureIcon" data-i="screenoff"></i><span id="pictureLabel">Picture off</span></button>
+          <button id="btnPicture"><i id="pictureIcon" data-i="screenoff"></i><span id="pictureLabel">Screen off</span></button>
           <button data-cmd="standby" class="red" id="btnStandby"><i data-i="power"></i>Standby</button>
           <button data-cmd="wake" class="green" id="btnWake" hidden><i data-i="power"></i>Turn on</button>
         </div>
-        <p class="hint">Picture off blanks the screen but keeps the TV running, so it always comes back. From standby the TV may not hear Turn on.</p>
+        <p class="hint">Screen off blanks the picture but keeps the TV running, so Screen on always works. From standby the TV may not hear Turn on.</p>
       </section>
     </div>
 
@@ -623,11 +623,11 @@ export const PAGE = `<!doctype html>
       drawGreeting();
     }
   }
-  // Picture: one button that turns the picture off or back on; the TV says which it is now.
+  // Screen off/on: one button that blanks the picture or brings it back; the TV says which it is now.
   let pictureOff = false;
   function drawPicture() {
     setIcon($("pictureIcon"), pictureOff ? "screen" : "screenoff");
-    $("pictureLabel").textContent = pictureOff ? "Picture on" : "Picture off";
+    $("pictureLabel").textContent = pictureOff ? "Screen on" : "Screen off";
     $("btnPicture").classList.toggle("green", pictureOff);
   }
   async function loadPicture() {
@@ -635,7 +635,7 @@ export const PAGE = `<!doctype html>
     if (j.ok && Array.isArray(j.data) && j.data[0]) { pictureOff = j.data[0].mode === "pictureOff"; drawPicture(); }
   }
   $("btnPicture").onclick = async (e) => {
-    const j = await run(pictureOff ? "screen_on" : "screen_off", {}, pictureOff ? "Picture on." : "Picture off.", e.currentTarget);
+    const j = await run(pictureOff ? "screen_on" : "screen_off", {}, pictureOff ? "Screen on." : "Screen off.", e.currentTarget);
     if (j.ok) { pictureOff = !pictureOff; drawPicture(); }
   };
 
