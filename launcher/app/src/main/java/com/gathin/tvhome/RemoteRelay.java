@@ -314,6 +314,38 @@ final class RemoteRelay {
         });
     }
 
+    // ---- live view -----------------------------------------------------------------------------------
+
+    private static final java.util.concurrent.atomic.AtomicBoolean frameInFlight = new java.util.concurrent.atomic.AtomicBoolean();
+
+    /** Connected and the last frame is out: a slow link drops frames instead of queueing them. */
+    static boolean canSendFrame() {
+        return online && !frameInFlight.get();
+    }
+
+    /** One JPEG of the screen, as a binary message the relay hands to the watching phones. */
+    static void sendFrame(byte[] jpeg) {
+        if (!frameInFlight.compareAndSet(false, true)) return;
+        try {
+            frame(0x2, jpeg);
+        } catch (IOException e) {
+            Log.i(TAG, "frame not sent: " + e);
+        } finally {
+            frameInFlight.set(false);
+        }
+    }
+
+    static void liveError(String why) {
+        if (app == null) return;
+        work.execute(() -> {
+            try {
+                send(new JSONObject().put("t", "live_error").put("msg", why).toString());
+            } catch (Exception ignored) {
+                // Offline: nobody is watching.
+            }
+        });
+    }
+
     private static boolean interactive() {
         android.os.PowerManager pm = app.getSystemService(android.os.PowerManager.class);
         return pm == null || pm.isInteractive();
@@ -334,7 +366,10 @@ final class RemoteRelay {
             f.write(0x80 | 126);
             f.write(data.length >> 8);
             f.write(data.length & 0xff);
-        } else throw new IOException("message too large");
+        } else {
+            f.write(0x80 | 127);
+            for (int i = 7; i >= 0; i--) f.write((int) ((long) data.length >>> (8 * i)) & 0xff);
+        }
         byte[] mask = bytes(4);
         f.write(mask, 0, 4);
         for (int i = 0; i < data.length; i++) f.write(data[i] ^ mask[i & 3]);
@@ -352,6 +387,13 @@ final class RemoteRelay {
         try {
             m = new JSONObject(text);
         } catch (Exception e) {
+            return;
+        }
+        if ("live".equals(m.optString("t"))) {
+            // A phone opened or closed the live view (the relay counts the viewers).
+            final boolean on = m.optBoolean("on");
+            final int fps = m.optInt("fps", 2);
+            main.post(() -> LiveService.setWanted(app, on, fps));
             return;
         }
         if (!"cmd".equals(m.optString("t"))) return;
@@ -394,7 +436,7 @@ final class RemoteRelay {
     static final String[] COMMANDS = {
             "ping", "caps", "info", "banner", "banner_clear", "lock", "unlock", "lock_timer", "lock_timer_cancel",
             "set_pin", "screen_off", "screen_on", "standby", "wake", "set_psk",
-            "sony", "button", "buttons", "intent", "launch", "apps", "global", "local",
+            "sony", "button", "buttons", "intent", "launch", "apps", "global", "local", "type",
     };
 
     /**
@@ -494,10 +536,25 @@ final class RemoteRelay {
                 if (names.length() > 20) throw new SonyIp.Failed("At most 20 buttons at once.");
                 for (int i = 0; i < names.length(); i++) {
                     if (i > 0) Thread.sleep(Math.max(50, Math.min(2000, args.optInt("gapMs", 250))));
-                    SonyIp.button(psk, names.optString(i));
+                    // "ActionMenu|Options": the first name this TV has.
+                    String[] choices = names.optString(i).split("[|]");
+                    SonyIp.Failed last = null;
+                    for (String c : choices) {
+                        try {
+                            SonyIp.button(psk, c.trim());
+                            last = null;
+                            break;
+                        } catch (SonyIp.Failed f) {
+                            last = f;
+                            if (!f.getMessage().startsWith("The TV has no button")) break;
+                        }
+                    }
+                    if (last != null) throw last;
                 }
                 return "";
             }
+            case "type":
+                return type(psk, args.optString("text", arg), args.optBoolean("enter"));
             case "buttons":
                 out.put("data", new JSONArray(new java.util.TreeSet<>(SonyIp.buttonCodes(psk).keySet())));
                 return "";
@@ -604,6 +661,46 @@ final class RemoteRelay {
         }
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return app.getPackageManager().resolveActivity(i, 0) != null ? i : null;
+    }
+
+    /**
+     * Text from the phone into the TV's focused text field: replaces what is there (the phone sends the
+     * whole text as it is typed). Through the accessibility service when it can see the field, else
+     * Sony's appControl.setTextForm (the on-screen keyboard must be open). enter: submit afterwards.
+     */
+    private static String type(String psk, String text, boolean enter) throws Exception {
+        InputKeyService a = InputKeyService.running;
+        android.view.accessibility.AccessibilityNodeInfo field = null;
+        if (a != null) {
+            try {
+                android.view.accessibility.AccessibilityNodeInfo root = a.getRootInActiveWindow();
+                if (root != null) field = root.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT);
+                if (field != null && !field.isEditable()) field = null;
+            } catch (Exception e) {
+                field = null;
+            }
+        }
+        if (field != null) {
+            android.os.Bundle b = new android.os.Bundle();
+            b.putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+            boolean ok = field.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT, b);
+            if (ok && enter && Build.VERSION.SDK_INT >= 30) {
+                field.performAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.getId());
+            }
+            if (ok) return enter ? "Sent." : "";
+        }
+        try {
+            SonyIp.call(psk, "appControl", "setTextForm", new JSONArray().put(new JSONObject().put("text", text)), "1.1");
+        } catch (SonyIp.Failed f) {
+            if (f.getMessage().startsWith("Set the Sony")) throw new SonyIp.Failed("Select a text field on the TV first.");
+            try {
+                SonyIp.call(psk, "appControl", "setTextForm", new JSONArray().put(text), "1.0");
+            } catch (SonyIp.Failed f2) {
+                throw new SonyIp.Failed("Select a text field on the TV first (" + f2.getMessage() + ")");
+            }
+        }
+        if (enter) SonyIp.button(psk, "Confirm");
+        return enter ? "Sent." : "";
     }
 
     /** back, home, recents, notifications, quick_settings, lock_screen through the accessibility service. */

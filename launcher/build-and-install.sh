@@ -151,6 +151,7 @@ printf '%s\n' \
   "cmd notification allow_listener $PKG/$PKG.NowPlayingListener 2>/dev/null && echo now-playing-granted || echo now-playing-not-granted" \
   "appops set $PKG GET_USAGE_STATS allow 2>/dev/null && echo usage-access-granted || echo usage-access-not-granted" \
   "appops set $PKG SYSTEM_ALERT_WINDOW allow 2>/dev/null && echo overlay-granted || echo overlay-not-granted" \
+  "appops set $PKG PROJECT_MEDIA allow 2>/dev/null && echo screen-capture-granted || echo screen-capture-not-granted" \
   "{ pm grant $PKG android.permission.READ_MEDIA_IMAGES || pm grant $PKG android.permission.READ_EXTERNAL_STORAGE; } 2>/dev/null && echo photos-granted || echo photos-not-granted" \
   "pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>/dev/null; echo location-granted" \
   "pm grant $PKG android.permission.READ_MEDIA_VIDEO 2>/dev/null && echo videos-granted || echo videos-not-granted" \

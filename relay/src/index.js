@@ -68,7 +68,7 @@ export default {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store",
           "content-security-policy":
-            "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
           "referrer-policy": "no-referrer",
         },
       });
@@ -203,6 +203,19 @@ export class Tv extends DurableObject {
   }
 
   async webSocketMessage(ws, data) {
+    // A binary message from the TV is a live-view frame (JPEG): to every phone watching.
+    if (typeof data !== "string") {
+      if (!this.ctx.getTags(ws).includes("tv")) return;
+      for (const p of this.ctx.getWebSockets("phone")) {
+        const a = p.deserializeAttachment();
+        if (a && a.auth && a.live) {
+          try {
+            p.send(data);
+          } catch {}
+        }
+      }
+      return;
+    }
     let m;
     try {
       m = JSON.parse(typeof data === "string" ? data : new TextDecoder().decode(data));
@@ -211,11 +224,18 @@ export class Tv extends DurableObject {
     }
     if (this.ctx.getTags(ws).includes("phone")) {
       if (m.t === "auth" && typeof m.key === "string" && KEY.test(m.key) && (await this.paired(m.key))) {
-        ws.serializeAttachment({ auth: true });
+        ws.serializeAttachment({ auth: true, live: false });
         ws.send(JSON.stringify({ t: "status", ...(await this.status()) }));
       } else if (m.t === "auth") {
         ws.send(JSON.stringify({ t: "unpaired" }));
         ws.close(4003, "not paired");
+      } else if (m.t === "live") {
+        const a = ws.deserializeAttachment() || {};
+        if (!a.auth) return;
+        a.live = m.on === true;
+        a.fps = Math.max(1, Math.min(5, Number(m.fps) || 2));
+        ws.serializeAttachment(a);
+        this.liveChanged();
       }
       return;
     }
@@ -225,10 +245,21 @@ export class Tv extends DurableObject {
       if (m.state && typeof m.state === "object") await this.ctx.storage.put("state", m.state);
       await this.setPower(m.power === "off" ? "off" : "on", true);
       await this.broadcast();
+      this.liveChanged();
     } else if (m.t === "event") {
       if (m.state && typeof m.state === "object") await this.ctx.storage.put("state", m.state);
       if (m.power === "on" || m.power === "off") await this.setPower(m.power, true);
       await this.broadcast();
+    } else if (m.t === "live_error") {
+      const msg = JSON.stringify({ t: "live_error", msg: String(m.msg || "").slice(0, 200) });
+      for (const p of this.ctx.getWebSockets("phone")) {
+        const a = p.deserializeAttachment();
+        if (a && a.auth && a.live) {
+          try {
+            p.send(msg);
+          } catch {}
+        }
+      }
     } else if (m.t === "ack") {
       const p = this.pending.get(m.n);
       const data = m.data === undefined ? undefined : JSON.stringify(m.data).length > MAX_DATA ? null : m.data;
@@ -249,6 +280,10 @@ export class Tv extends DurableObject {
     try {
       ws.close(code === 1005 || code === 1006 ? 1000 : code, "bye");
     } catch {}
+    if (this.ctx.getTags(ws).includes("phone")) {
+      const a = ws.deserializeAttachment();
+      if (a && a.live) this.liveChanged(ws);
+    }
     if (this.ctx.getTags(ws).includes("tv") && !this.ctx.getWebSockets("tv").some((s) => s !== ws)) {
       await this.ctx.storage.setAlarm(Date.now() + OFF_AFTER_MS);
       await this.broadcast(false);
@@ -262,6 +297,21 @@ export class Tv extends DurableObject {
   /** Still no TV after OFF_AFTER_MS: it is off (or unplugged, or offline). */
   async alarm() {
     if (!this.tv()) await this.setPower("off");
+  }
+
+  /** Tells the TV whether anyone watches the live view now (gone: a phone socket that is closing). */
+  liveChanged(gone) {
+    const tv = this.tv();
+    if (!tv) return;
+    let fps = 0;
+    for (const p of this.ctx.getWebSockets("phone")) {
+      if (p === gone) continue;
+      const a = p.deserializeAttachment();
+      if (a && a.auth && a.live) fps = Math.max(fps, a.fps || 2);
+    }
+    try {
+      tv.send(JSON.stringify({ t: "live", on: fps > 0, fps: fps || 2 }));
+    } catch {}
   }
 
   // ---- status, power, push ---------------------------------------------------------------------------

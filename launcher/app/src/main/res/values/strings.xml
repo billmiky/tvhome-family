@@ -84,6 +84,7 @@
     <string name="settings_menu_show">Show</string>
     <string name="settings_menu_hide">Hide</string>
     <string name="banner_title">Message</string>
+    <string name="live_channel">Live view for the phone remote</string>
     <string name="lock_title">This TV is locked</string>
     <string name="lock_subtitle">Enter the PIN to unlock</string>
     <string name="lock_pin_title">Enter PIN to unlock</string>

@@ -60,6 +60,20 @@ export const PAGE = `<!doctype html>
   .badge.locked { background:#3a1715; color:#ff8a80; }
   .count { font-size:12px; color:var(--dim); text-align:right; margin-top:6px; }
   .hint { font-size:13px; color:var(--dim); margin:10px 0 0; }
+  .tabs { display:flex; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:4px; gap:4px; margin-bottom:14px; }
+  .tabs button { padding:10px; border-radius:10px; background:transparent; color:var(--dim); font-weight:600; }
+  .tabs button.sel { background:#2c2c34; color:var(--text); }
+  .screen { position:relative; aspect-ratio:16/9; background:#000; border-radius:12px; overflow:hidden; }
+  .screen img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+  .screen .msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; color:var(--dim); font-size:14px; }
+  .dpad { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; max-width:300px; margin:4px auto 0; }
+  .dpad button { aspect-ratio:1; padding:0; font-size:22px; border-radius:18px; touch-action:manipulation; user-select:none; -webkit-user-select:none; }
+  .dpad .ok { border-radius:50%; background:var(--accent); color:#1a1000; font-size:18px; }
+  .dpad .gap { visibility:hidden; }
+  .keys { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:16px; }
+  .keys button { padding:14px 6px; touch-action:manipulation; user-select:none; -webkit-user-select:none; }
+  .rocker { display:flex; flex-direction:column; gap:6px; }
+  .rocker span { text-align:center; font-size:12px; color:var(--dim); font-weight:600; letter-spacing:.06em; }
   .steps { font-size:13px; color:var(--dim); margin:8px 0 12px; padding-left:20px; }
   .steps li { margin:4px 0; }
   .steps b { color:var(--text); font-weight:600; }
@@ -118,6 +132,42 @@ export const PAGE = `<!doctype html>
       <b id="offlineTitle">Connecting to the TV…</b>
       <span id="offlineText">The controls appear as soon as the TV answers.</span>
     </section>
+
+    <div class="tabs needs-tv" id="tabs"><button data-tab="remote" class="sel">Remote</button><button data-tab="live">Live control</button></div>
+
+    <div id="tabLive" hidden>
+      <section class="needs-tv">
+        <div class="screen"><img id="liveImg" alt=""><div class="msg" id="liveMsg">Starting the live view…</div></div>
+        <p class="hint">About two pictures a second. Netflix and other protected video, HDMI inputs and the TV tuner show black.</p>
+      </section>
+      <section class="needs-tv">
+        <div class="dpad">
+          <span class="gap"></span><button data-key="Up" data-repeat aria-label="Up">▲</button><span class="gap"></span>
+          <button data-key="Left" data-repeat aria-label="Left">◀</button><button class="ok" data-key="Confirm">OK</button><button data-key="Right" data-repeat aria-label="Right">▶</button>
+          <span class="gap"></span><button data-key="Down" data-repeat aria-label="Down">▼</button><span class="gap"></span>
+        </div>
+        <div class="keys">
+          <button data-key="Return">Back</button><button data-key="Home">Home</button><button data-key="ActionMenu|Options|SyncMenu">Menu</button>
+        </div>
+        <div class="keys">
+          <div class="rocker"><span>VOL</span><button data-key="VolumeUp" data-repeat aria-label="Volume up">+</button><button id="volDown" aria-label="Volume down, hold to mute">−</button></div>
+          <div class="rocker"><span>TEXT</span><button id="kbOpen" style="flex:1">⌨︎ Keyboard</button></div>
+          <div class="rocker"><span>CH</span><button data-key="ChannelUp" data-repeat aria-label="Channel up">+</button><button data-key="ChannelDown" data-repeat aria-label="Channel down">−</button></div>
+        </div>
+        <p class="hint">Hold − for a second to mute. The buttons use the TV's IP control.</p>
+      </section>
+      <section class="needs-tv" id="kb" hidden>
+        <div class="head"><h2>Keyboard</h2><button id="kbClose" style="flex:0 0 auto;padding:6px 12px">Done</button></div>
+        <textarea id="kbText" placeholder="Type or paste. It appears in the TV's selected text field." autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+        <div class="row">
+          <button class="primary" id="kbEnter">Enter</button>
+          <button id="kbClear">Clear</button>
+        </div>
+        <p class="hint">Select a text field on the TV first (a search box, say). What you type here replaces its text as you go.</p>
+      </section>
+    </div>
+
+    <div id="tabRemote">
 
     <section class="needs-tv">
       <h2>Message on the TV</h2>
@@ -223,6 +273,7 @@ export const PAGE = `<!doctype html>
         <div class="row"><button class="danger" id="forget">Forget this TV</button></div>
       </details>
     </section>
+    </div>
   </div>
 </main>
 <div id="toast"></div>
@@ -295,6 +346,7 @@ export const PAGE = `<!doctype html>
       $("offlineText").textContent = "Last seen " + (ago(lastSeen) || "a while ago") + ". The controls come back by themselves when it is on.";
     }
     if (on && was === false) { toast("The TV is back."); loadReport(); loadInfo(); }
+    if (on !== was) setLive(tab === "live");
     if (on && was === null) { loadReport(); loadInfo(); }
   }
   function setLock(st) {
@@ -325,14 +377,18 @@ export const PAGE = `<!doctype html>
     ws.onopen = () => {
       backoff = 1000;
       ws.send(JSON.stringify({ t: "auth", key: tv.key }));
+      if (liveOn) ws.send(JSON.stringify({ t: "live", on: true, fps: 2 }));
       clearInterval(pinger);
       pinger = setInterval(() => { try { ws.send("ping"); } catch (e) {} }, 30000);
     };
+    ws.binaryType = "blob";
     ws.onmessage = (e) => {
+      if (typeof e.data !== "string") { showFrame(e.data); return; }
       if (e.data === "pong") return;
       let msg;
       try { msg = JSON.parse(e.data); } catch (err) { return; }
       if (msg.t === "status") applyStatus(msg);
+      if (msg.t === "live_error") $("liveMsg").textContent = msg.msg || "No picture.";
       if (msg.t === "unpaired") toast("This phone is no longer paired. Scan the TV's QR code again.", true);
     };
     ws.onclose = () => {
@@ -374,6 +430,93 @@ export const PAGE = `<!doctype html>
     if (j.ok) { input.value = ""; $("ipSetup").hidden = true; }
     else loadInfo();
   }
+
+  // ---- live control -----------------------------------------------------------------------------
+  let liveOn = false, frameUrl = null, lastFrameAt = 0;
+  function setLive(on) {
+    on = on && !document.hidden && online !== false;
+    if (on === liveOn) return;
+    liveOn = on;
+    if (on) { $("liveMsg").textContent = "Starting the live view…"; $("liveMsg").hidden = false; lastFrameAt = 0; }
+    if (sock && sock.readyState === 1) sock.send(JSON.stringify({ t: "live", on: on, fps: 2 }));
+  }
+  function showFrame(blob) {
+    if (!liveOn) return;
+    const url = URL.createObjectURL(blob);
+    const img = $("liveImg");
+    img.onload = () => { if (frameUrl) URL.revokeObjectURL(frameUrl); frameUrl = url; };
+    img.src = url;
+    lastFrameAt = Date.now();
+    $("liveMsg").hidden = true;
+  }
+  setInterval(() => {
+    if (liveOn && lastFrameAt && Date.now() - lastFrameAt > 8000) { $("liveMsg").hidden = false; $("liveMsg").textContent = "No picture from the TV right now."; }
+  }, 2000);
+  let tab = "remote";
+  function showTab(t) {
+    tab = t;
+    document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("sel", b.dataset.tab === t));
+    $("tabLive").hidden = t !== "live";
+    $("tabRemote").hidden = t !== "remote";
+    setLive(t === "live");
+    try { sessionStorage.setItem("tvremote-tab", t); } catch (e) {}
+  }
+  document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+
+  // Remote buttons: one press at a time (a press waits for the last one), hold repeats where it makes sense.
+  let pressing = Promise.resolve();
+  function press(name) {
+    if (navigator.vibrate) navigator.vibrate(8);
+    pressing = pressing.then(() => run("button", { args: { name: name } }, null)).catch(() => {});
+    return pressing;
+  }
+  document.querySelectorAll("[data-key]").forEach((b) => {
+    let timer = null;
+    const stop = () => { clearTimeout(timer); clearInterval(timer); timer = null; };
+    b.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      press(b.dataset.key);
+      if (b.hasAttribute("data-repeat")) timer = setTimeout(() => (timer = setInterval(() => press(b.dataset.key), 220)), 450);
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => b.addEventListener(ev, stop));
+    b.addEventListener("contextmenu", (e) => e.preventDefault());
+  });
+  // Volume down: a press lowers it; held for a second it mutes instead.
+  (() => {
+    const b = $("volDown");
+    let timer = null, muted = false;
+    b.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      muted = false;
+      timer = setTimeout(() => {
+        muted = true;
+        if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+        press("Mute").then(() => toast("Mute"));
+      }, 1000);
+    });
+    const end = (fire) => {
+      if (!timer) return;
+      clearTimeout(timer);
+      timer = null;
+      if (fire && !muted) press("VolumeDown");
+    };
+    b.addEventListener("pointerup", () => end(true));
+    b.addEventListener("pointerleave", () => end(false));
+    b.addEventListener("pointercancel", () => end(false));
+    b.addEventListener("contextmenu", (e) => e.preventDefault());
+  })();
+
+  // Keyboard: the whole text goes to the TV's focused field as it is typed (a pause of 350 ms).
+  let typeTimer = null, typing = Promise.resolve();
+  function sendText(enter) {
+    const text = $("kbText").value;
+    typing = typing.then(() => run("type", { args: { text: text, enter: !!enter } }, enter ? "Sent." : null)).catch(() => {});
+  }
+  $("kbOpen").onclick = () => { $("kb").hidden = false; $("kbText").focus(); $("kb").scrollIntoView({ block: "start", behavior: "smooth" }); };
+  $("kbClose").onclick = () => { $("kb").hidden = true; $("kbText").blur(); };
+  $("kbText").addEventListener("input", () => { clearTimeout(typeTimer); typeTimer = setTimeout(() => sendText(false), 350); });
+  $("kbEnter").onclick = () => { clearTimeout(typeTimer); sendText(true); };
+  $("kbClear").onclick = () => { $("kbText").value = ""; clearTimeout(typeTimer); sendText(false); $("kbText").focus(); };
 
   // ---- screen time ------------------------------------------------------------------------------
   let range = "today";
@@ -561,7 +704,11 @@ export const PAGE = `<!doctype html>
   connect();
   refresh();
   setInterval(() => { if (!document.hidden) { refresh(); if (online) loadReport(); } }, 60000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { connect(); refresh(); } });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { connect(); refresh(); }
+    setLive(tab === "live");
+  });
+  try { if (sessionStorage.getItem("tvremote-tab") === "live") showTab("live"); } catch (e) {}
 })();
 </script>
 </body>

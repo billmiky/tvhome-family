@@ -17,6 +17,9 @@
     <!-- The lock timer's countdown over other apps (TvLock). Never asked for: the install script allows it
          with appops; without it the timer shows toasts instead. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- The phone remote's live view (LiveService): screen capture needs a foreground service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <!-- Gallery: read the owner's photos in Pictures/Launcher. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <!-- Gallery videos in Pictures/Launcher, granted over adb by the install script. -->
@@ -88,6 +91,19 @@
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.NoDisplay" />
+        <!-- Live view for the phone remote: LiveCapture asks for screen capture (answered without a dialog
+             after `appops set com.gathin.tvhome PROJECT_MEDIA allow`), LiveService holds it. -->
+        <activity
+            android:name=".LiveCapture"
+            android:exported="false"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <service
+            android:name=".LiveService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
         <!-- Home button for remotes that send KEYCODE_ALL_APPS (Xiaomi). Opt-in: HOME_KEY_SERVICE=1
              build-and-install.sh; see HomeKeyService. -->
         <service
