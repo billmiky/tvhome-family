@@ -150,7 +150,15 @@ export const PAGE = `<!doctype html>
   .chart .b.sel i { opacity:1; background:#ffc266; }
   .axis { display:flex; justify-content:space-between; font-size:11px; color:var(--faint); margin-top:6px; }
   .tip { position:absolute; top:-6px; transform:translate(-50%,-100%); background:rgba(40,40,44,.95); border:1px solid var(--hair); border-radius:10px; padding:4px 9px; font-size:12px; white-space:nowrap; pointer-events:none; }
-  .apps { margin-top:20px; display:flex; flex-direction:column; gap:14px; }
+  .apps { margin-top:16px; display:flex; flex-direction:column; gap:2px; }
+  .st-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }
+  .st-head .eyebrow { margin-bottom:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .st-head > div { min-width:0; }
+  .st-head .total { font-size:clamp(34px, 11vw, 48px); white-space:nowrap; }
+  .st-head .pill { flex:0 0 auto; white-space:nowrap; }
+  .apps .app { display:block; width:100%; text-align:left; padding:10px 12px; margin:0 -12px; width:calc(100% + 24px); border-radius:14px; }
+  .apps .app:active { background:rgba(255,255,255,.06); }
+  .apps .app.sel { background:rgba(255,255,255,.1); }
   .app .top { display:flex; justify-content:space-between; font-size:15px; gap:10px; }
   .app .top span:last-child { color:var(--dim); font-variant-numeric:tabular-nums; }
   .app .bar { height:5px; background:rgba(255,255,255,.08); border-radius:99px; margin-top:7px; overflow:hidden; }
@@ -739,17 +747,41 @@ export const PAGE = `<!doctype html>
     return Math.floor(min / 60) + " h" + (min % 60 ? " " + (min % 60) + " min" : "");
   }
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+  // The report: the total and its chart, or one app's when its row is tapped (as on the TV).
+  let report = null, picked = null;
   async function loadReport() {
     if (!online || tab !== "activity") return;
     const j = await run("local", { args: { method: "GET", path: "/api/report" + (range === "7d" ? "?range=7d" : "") } }, null);
     const box = $("stBody");
+    if (!j.ok) { box.textContent = ""; box.appendChild(el("p", "hint", j.msg || "Could not load the report.")); return; }
+    report = j.data || {};
+    if (picked && !(report.apps || []).some((a) => a.name === picked)) picked = null;
+    drawReport();
+  }
+  function drawReport() {
+    const box = $("stBody");
     box.textContent = "";
-    if (!j.ok) { box.appendChild(el("p", "hint", j.msg || "Could not load the report.")); return; }
-    const r = j.data || {};
+    const r = report || {};
     if (!r.allowed) { box.appendChild(el("p", "hint", "The TV needs usage access for Screen time (the install script grants it).")); return; }
-    box.appendChild(el("div", "total", hm(r.total || 0)));
+    const apps = r.apps || [];
+    const app = picked ? apps.find((a) => a.name === picked) : null;
+    const total = app ? app.ms : r.total || 0;
+    const buckets = app ? app.buckets || [] : r.buckets || [];
+    const labels = r.labels || [];
+
+    const head = el("div", "st-head");
+    const left = el("div");
+    left.appendChild(el("div", "eyebrow", app ? app.name : "All apps"));
+    left.appendChild(el("div", "total", hm(total)));
+    head.appendChild(left);
+    if (app) {
+      const back = el("button", "pill sm", "All apps");
+      back.onclick = () => { picked = null; drawReport(); };
+      head.appendChild(back);
+    }
+    box.appendChild(head);
     box.appendChild(el("p", "hint", range === "7d" ? "in the last 7 days" : "today")).style.marginTop = "6px";
-    const buckets = r.buckets || [], labels = r.labels || [];
+
     const max = Math.max(1, ...buckets);
     const chart = el("div", "chart");
     const tip = el("div", "tip");
@@ -776,12 +808,11 @@ export const PAGE = `<!doctype html>
       [0, Math.floor((labels.length - 1) / 2), labels.length - 1].forEach((k) => axis.appendChild(el("span", "", labels[k])));
       box.appendChild(axis);
     }
-    const apps = r.apps || [];
     if (apps.length) {
       const list = el("div", "apps");
       const top = Math.max(1, apps[0].ms);
       apps.forEach((a) => {
-        const row = el("div", "app");
+        const row = el("button", "app" + (a.name === picked ? " sel" : ""));
         const t = el("div", "top");
         t.appendChild(el("span", "", a.name));
         t.appendChild(el("span", "", hm(a.ms)));
@@ -791,6 +822,7 @@ export const PAGE = `<!doctype html>
         bar.appendChild(fill);
         row.appendChild(t);
         row.appendChild(bar);
+        row.onclick = () => { picked = a.name === picked ? null : a.name; drawReport(); };
         list.appendChild(row);
       });
       box.appendChild(list);
