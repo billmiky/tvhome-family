@@ -258,6 +258,85 @@ class RecoveryRecordTest(unittest.TestCase):
         self.assertNotIn("pm enable com.example.added_later", self.sent())
         self.assertIn("not in the record, leaving alone: com.example.added_later", result.stderr)
 
+    def clear_sent(self):
+        with open(self.state_path) as f:
+            state = json.load(f)
+        state["commands"] = []
+        self.state_path.write_text(json.dumps(state))
+
+    def test_rerun_with_edited_list_records_the_new_names(self):
+        self.tv()
+        self.assertEqual(self.run_script("disable.sh", str(self.list_path)).returncode, 0)
+        first = self.record()
+        # The list gains a name; the second run happens on a TV where the first list is applied.
+        self.write_list(["com.example.enabled", "com.example.already_off", "com.example.absent",
+                         "com.example.added_later"])
+        self.tv(installed=["com.example.enabled", "com.example.already_off",
+                           "com.example.added_later", "com.google.android.tvlauncher"],
+                disabled=["com.example.enabled", "com.example.already_off"])
+        result = self.run_script("disable.sh", str(self.list_path))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        packages = self.record()["packages"]
+        self.assertEqual(packages["com.example.added_later"], "enabled")
+        # Entries from the first run keep the state from before it, not the half-applied one.
+        for name, state in first["packages"].items():
+            self.assertEqual(packages[name], state, name)
+        self.assertEqual(self.record()["created"], first["created"])
+
+        self.clear_sent()
+        result = self.run_script("restore.sh", str(self.list_path))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        sent = self.sent()
+        self.assertIn("pm enable com.example.added_later", sent,
+                      "a name added to the list later is not left disabled forever")
+        self.assertIn("pm enable com.example.enabled", sent)
+        self.assertNotIn("pm enable com.example.already_off", sent)
+
+    def test_custom_launcher_home_restores_the_stock_launcher(self):
+        custom = "com.gathin.tvhome/.MainActivity"
+        self.tv(installed=["com.example.enabled", "com.example.already_off",
+                           "com.google.android.tvlauncher", "com.gathin.tvhome"],
+                home=custom)
+        self.assertEqual(self.run_script("disable.sh", str(self.list_path)).returncode, 0)
+        self.assertEqual(self.record()["home"], custom)
+        self.clear_sent()
+
+        result = self.run_script("restore.sh", str(self.list_path))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        sent = self.sent()
+        self.assertIn("pm enable com.google.android.tvlauncher", sent)
+        self.assertNotIn(f"cmd package set-home-activity --user 0 {custom}", sent)
+        home = [c for c in sent if c.startswith("cmd package set-home-activity")]
+        self.assertEqual(len(home), 1, sent)
+        self.assertIn("resolve-activity", home[0])
+        self.assertIn("com.google.android.tvlauncher", home[0])
+        self.assertLess(sent.index("pm enable com.google.android.tvlauncher"), sent.index(home[0]))
+
+    def test_stock_launcher_disabled_before_cleanup_stays_disabled(self):
+        custom = "com.gathin.tvhome/.MainActivity"
+        self.write_list(["com.example.enabled", "com.google.android.tvlauncher"])
+        self.tv(installed=["com.example.enabled", "com.google.android.tvlauncher",
+                           "com.gathin.tvhome"],
+                disabled=["com.google.android.tvlauncher"], home=custom)
+        self.assertEqual(self.run_script("disable.sh", str(self.list_path)).returncode, 0)
+        self.assertEqual(self.record()["packages"]["com.google.android.tvlauncher"], "disabled")
+        self.clear_sent()
+
+        result = self.run_script("restore.sh", str(self.list_path))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("pm enable com.google.android.tvlauncher", self.sent())
+
+    def test_stock_launcher_enabled_once_when_it_owned_home(self):
+        # The usual case: Home's package is recorded as enabled, so it is enabled exactly once.
+        self.tv()
+        self.assertEqual(self.run_script("disable.sh", str(self.list_path)).returncode, 0)
+        self.clear_sent()
+        result = self.run_script("restore.sh", str(self.list_path))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        sent = self.sent()
+        self.assertEqual(sent.count("pm enable com.google.android.tvlauncher"), 1)
+        self.assertIn(f"cmd package set-home-activity --user 0 {STOCK_HOME}", sent)
+
     def test_list_that_is_not_package_names_is_refused(self):
         self.tv()
         self.list_path.write_text("com.example.good\ncom.example.evil;settings put global adb_enabled 0\n")

@@ -11,7 +11,8 @@ before. Both scripts now go through this record: `disable.sh` writes it before t
 reaches the TV, and `restore.sh` replays it.
 
 Records live in ~/.cleanyourtv/, one per TV and list. The first one wins: a retry after a
-half-applied list must not record the broken state as the original.
+half-applied list must not record the broken state as the original. A later run only adds the names
+the list gained since then, with their state before this list disabled them.
 """
 import hashlib
 import json
@@ -27,6 +28,9 @@ PACKAGE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+")
 HOME_RE = re.compile(r"[A-Za-z_][\w.]*/[\w.$]+")
 SCALE_RE = re.compile(r"-?\d+(\.\d+)?")
 SETTINGS = ("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
+# This project's own launcher. When it already owned Home before debloating, restoring Home to it
+# would leave the stock launcher off, so restore goes back to the stock one instead.
+CUSTOM_LAUNCHER = "com.gathin.tvhome"
 VERSION = 1
 
 
@@ -139,12 +143,36 @@ def connect():
     return tv.connect()
 
 
+def package_state(name, installed, disabled):
+    return ("absent" if name not in installed
+            else "disabled" if name in disabled
+            else "enabled")
+
+
 def save(list_path, host):
     path = record_path(list_path, host)
     if path.exists():
         record = load_record(path)
+        packages = read_list(list_path)
+        # The list may have been edited since the record was taken. Entries already in the record are
+        # never overwritten (a retry must not record the broken state as the original), but names it
+        # does not hold yet have not been touched by this list, so their state now is their state
+        # before cleanup. Without them, restore would leave those packages disabled for good.
+        added = [name for name in packages if name not in record["packages"]]
         print(f"keeping the recovery record from {record.get('created')}: {path}")
-        print("nothing was recorded again: it holds the state from before the first run.")
+        if not added:
+            print("nothing was recorded again: it holds the state from before the first run.")
+            return 0
+        dev = connect()
+        try:
+            installed, disabled = query_packages(dev)
+        finally:
+            dev.close()
+        for name in added:
+            record["packages"][name] = package_state(name, installed, disabled)
+        write_record(path, record)
+        print(f"added {len(added)} names the list gained since then, entries already recorded "
+              f"are unchanged: {', '.join(added)}")
         return 0
 
     packages = read_list(list_path)
@@ -166,12 +194,7 @@ def save(list_path, host):
         "list": str(Path(list_path).resolve()),
         "home": home,
         "settings": scales,
-        "packages": {
-            name: ("absent" if name not in installed
-                   else "disabled" if name in disabled
-                   else "enabled")
-            for name in targets
-        },
+        "packages": {name: package_state(name, installed, disabled) for name in targets},
     }
     write_record(path, record)
 
@@ -217,13 +240,19 @@ def restore_commands(list_path, stock, host):
     for name, state in untouched:
         sys.stderr.write(f"  leaving {name} alone ({state} when the record was taken)\n")
 
+    # The stock launcher comes back unless the owner had disabled it before cleanup: the list may
+    # have disabled it even when it was not the recorded Home (e.g. the custom launcher owned Home).
+    fallback = stock or "com.google.android.tvlauncher"
+    if states.get(fallback) != "disabled" and fallback not in re_enable:
+        commands.append(f"pm enable {fallback}")
+
     home = record.get("home")
-    if home:
+    if home and home.split("/", 1)[0] != CUSTOM_LAUNCHER:
         commands.append(f"cmd package set-home-activity --user 0 {home}")
     else:
-        # Nothing handled HOME before cleanup (fresh TV, chooser only), so there is no component to
-        # replay; ask the TV to resolve the stock launcher the way restore.sh always did.
-        fallback = stock or "com.google.android.tvlauncher"
+        # Nothing handled HOME before cleanup (fresh TV, chooser only), or this project's launcher
+        # did, so there is no stock component to replay; ask the TV to resolve the stock launcher the
+        # way restore.sh always did.
         commands.append(f"cmd package set-home-activity --user 0 $(cmd package resolve-activity "
                         f"--brief -a android.intent.action.MAIN -c android.intent.category.HOME "
                         f"{fallback} | tail -n 1)")
@@ -235,8 +264,8 @@ def restore_commands(list_path, stock, host):
             commands.append(f"settings put global {key} {value}")
         else:
             sys.stderr.write(f"  skipping {key}: the record holds {value!r}, not a number\n")
-    # The list is not in the record (it may have been edited since); packages added afterwards are
-    # left as they are, which is what "leave the TV alone" means for them.
+    # disable.sh adds names the list gained to the record before disabling them, so a name still
+    # missing here was added after the last disable run and never disabled by it: leave it alone.
     edited = [name for name in packages if name not in states]
     if edited:
         sys.stderr.write(f"not in the record, leaving alone: {', '.join(edited)}\n")
