@@ -48,9 +48,10 @@ export const PAGE = `<!doctype html>
   svg { display:block; }
 
   .eyebrow { font-size:12px; font-weight:500; letter-spacing:.22em; text-transform:uppercase; color:var(--dim); }
-  header { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin:8px 2px 20px; }
+  header { margin:8px 2px 20px; }
+  header .hrow { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }
   #greeting { line-height:1.5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  header h1 { margin:2px 0 0; padding-bottom:4px; font-size:34px; font-weight:300; letter-spacing:-.01em; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  header h1 { min-width:0; margin:2px 0 0; padding-bottom:4px; font-size:34px; font-weight:300; letter-spacing:-.01em; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .status { flex:0 0 auto; display:flex; align-items:center; gap:8px; height:34px; padding:0 14px; border-radius:17px; font-size:14px; font-weight:500;
             background:var(--glass); border:1px solid var(--hair); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
   .dot { width:8px; height:8px; border-radius:50%; background:var(--faint); }
@@ -198,11 +199,11 @@ export const PAGE = `<!doctype html>
 <body class="tv-off">
 <main>
   <header>
-    <div style="min-width:0">
-      <div class="eyebrow" id="greeting">TV Remote</div>
+    <div class="eyebrow" id="greeting">TV Remote</div>
+    <div class="hrow">
       <h1 id="title">TV Remote</h1>
+      <span class="status" id="status"><span class="dot"></span><span id="statusText">…</span></span>
     </div>
-    <span class="status" id="status"><span class="dot"></span><span id="statusText">…</span></span>
   </header>
 
   <div id="unpaired" class="card empty" hidden>
