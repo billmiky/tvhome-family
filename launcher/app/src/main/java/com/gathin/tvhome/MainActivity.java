@@ -459,7 +459,28 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         hiddenApps = new HashSet<>(cfg.hiddenApps);
 
         grid = findViewById(R.id.grid);
-        grid.setLayoutManager(new GridLayoutManager(this, COLUMNS));
+        grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
+            /**
+             * Every "bring this tile on screen" scroll lands here. The stock version treats the grid's top padding as
+             * the visible top, but that padding only pushes the dock down the screen: Up into a row above it dragged
+             * the row down to the padding line, cut it off and could scroll the focused tile out, dropping focus into
+             * the top bar. Grid tiles now scroll just enough to show between the grid's top and bottom edges; dock
+             * tiles are left to onTileFocused (upstream 72e4cfa7, 564dcb22).
+             */
+            @Override
+            public boolean requestChildRectangleOnScreen(@NonNull RecyclerView parent, @NonNull View child,
+                                                         @NonNull Rect rect, boolean immediate, boolean focusedChildVisible) {
+                if (getPosition(child) < COLUMNS) return false;
+                int top = child.getTop() + rect.top;
+                int bottom = top + rect.height();
+                int limitBottom = getHeight();
+                int dy = top < 0 ? top : bottom > limitBottom ? Math.min(top, bottom - limitBottom) : 0;
+                if (dy == 0) return false;
+                if (immediate) parent.scrollBy(0, dy);
+                else parent.smoothScrollBy(0, dy);
+                return true;
+            }
+        });
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
         grid.addItemDecoration(new DockDecoration(COLUMNS, density));

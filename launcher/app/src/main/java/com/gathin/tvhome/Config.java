@@ -168,7 +168,7 @@ final class Config {
 
         File dir = dir(ctx);
         File file = dir != null ? new File(dir, FILE_NAME) : null;
-        JSONObject json = read(file);
+        JSONObject json = readOverlay(ctx, file);
         if (json != null) {
             applied = true;
             dock = stringList(json, "dock_apps", dock);
@@ -218,6 +218,32 @@ final class Config {
                 remoteRelay.startsWith("https://") ? remoteRelay : "", restoreKeyServices, occasions, holidays,
                 christmasVideo, newYearVideo, tetVideo, background,
                 wallpaper, applied);
+    }
+
+    /**
+     * The overlay, or before external storage is mounted, the copy kept from the last time it was read: Home can
+     * start before the card is mounted, and without the copy it came up with the built-in dock (upstream 820bddba).
+     * A missing file on mounted storage still means no overlay. The copy is written only when it changes, since
+     * the services load the config too.
+     */
+    private static JSONObject readOverlay(Context ctx, File file) {
+        File copy = new File(ctx.getFilesDir(), FILE_NAME);
+        if (!android.os.Environment.MEDIA_MOUNTED.equals(android.os.Environment.getExternalStorageState())) return read(copy);
+        JSONObject json = read(file);
+        if (json == null) {
+            copy.delete();
+            return null;
+        }
+        String text = json.toString();
+        JSONObject kept = read(copy);
+        if (kept == null || !kept.toString().equals(text)) {
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(copy)) {
+                out.write(text.getBytes(StandardCharsets.UTF_8));
+            } catch (java.io.IOException e) {
+                Log.w(TAG, "could not keep a copy of " + file + ": " + e.getMessage());
+            }
+        }
+        return json;
     }
 
     /** Reads and parses the overlay; any problem means "no overlay", never a crash on the home screen. */
