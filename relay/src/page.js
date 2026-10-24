@@ -122,11 +122,13 @@ export const PAGE = `<!doctype html>
   .rocker button:active { background:var(--key-on); }
   .rocker button + button, .rocker .tag + button { border-left:1px solid rgba(255,255,255,.08); }
   .rocker .tag { align-self:center; font-size:11px; font-weight:600; letter-spacing:.2em; color:var(--faint); padding:0 6px 0 8px; }
-  .power { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+  .power { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
   .power button { display:flex; flex-direction:column; align-items:center; gap:7px; padding:12px 2px 10px; border-radius:18px; background:var(--key);
                   border:1px solid var(--hair); font-size:11.5px; color:var(--dim); line-height:1.15; text-align:center; }
   .power button svg { color:var(--text); }
   .power button.red svg { color:#ff6961; }
+  .power button.green { background:rgba(52,199,89,.2); border-color:rgba(52,199,89,.45); color:#fff; }
+  .power button.green svg { color:#4cd964; }
   .power button:active { background:var(--key-on); }
 
   /* Lock */
@@ -257,7 +259,7 @@ export const PAGE = `<!doctype html>
       <section class="card needs-tv">
         <div class="card-head"><span class="eyebrow">Power</span></div>
         <div id="ipSetup" hidden style="margin-bottom:14px">
-          <p class="hint" style="margin-top:0">These use the TV's IP control, which isn't set up yet. On the TV:</p>
+          <p class="hint" style="margin-top:0" id="ipSetupText">These use the TV's IP control, which isn't set up yet. On the TV:</p>
           <ol class="steps">
             <li><b>Settings › Network &amp; Internet › Remote device settings › Control remotely</b>: On.</li>
             <li><b>Settings › Network &amp; Internet › Home network › IP control › Authentication</b>: Normal and Pre-Shared Key.</li>
@@ -272,8 +274,8 @@ export const PAGE = `<!doctype html>
         <div class="power">
           <button data-cmd="screen_off"><i data-i="screenoff"></i>Screen off</button>
           <button data-cmd="screen_on"><i data-i="screen"></i>Screen on</button>
-          <button data-cmd="standby" class="red"><i data-i="power"></i>Standby</button>
-          <button data-cmd="wake"><i data-i="sun"></i>Turn on</button>
+          <button data-cmd="standby" class="red" id="btnStandby"><i data-i="power"></i>Standby</button>
+          <button data-cmd="wake" class="green" id="btnWake" hidden><i data-i="power"></i>Turn on</button>
         </div>
         <p class="hint">Screen off keeps the TV running, so Screen on always works. From standby the TV may not hear Turn on.</p>
       </section>
@@ -519,6 +521,10 @@ export const PAGE = `<!doctype html>
   function setOnline(on, power) {
     const was = online;
     online = on;
+    // On: no Turn on. Standby (screen off, still connected): no Standby, a green Turn on instead.
+    const standby = on && power === "off";
+    $("btnStandby").hidden = standby;
+    $("btnWake").hidden = !standby;
     $("status").className = "status " + (on ? (power === "off" ? "standby" : "on") : "off");
     $("statusText").textContent = on ? (power === "off" ? "Standby" : "Online") : "Offline";
     document.body.classList.toggle("tv-off", !on);
@@ -607,6 +613,9 @@ export const PAGE = `<!doctype html>
     if (!j.ok || !j.data) return;
     caps = j.data.caps || null;
     $("ipSetup").hidden = !!j.data.ipControl;
+    $("ipSetupText").textContent = j.data.ipKeySaved
+      ? "The TV refuses the saved IP control key. Check it on the TV and enter it again:"
+      : "These use the TV's IP control, which isn't set up yet. On the TV:";
     const st = await run("local", { args: { method: "GET", path: "/api/state" } }, null);
     if (st.ok && st.data && typeof st.data.greeting === "string") {
       greetName = st.data.greeting.trim();

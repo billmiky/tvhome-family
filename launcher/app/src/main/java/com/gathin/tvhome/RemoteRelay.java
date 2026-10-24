@@ -610,13 +610,25 @@ final class RemoteRelay {
 
     private static JSONObject info() throws Exception {
         android.os.PowerManager pm = app.getSystemService(android.os.PowerManager.class);
+        // "Set up" means the saved key works: a method that needs it (getPowerStatus answers anyone).
+        String psk = prefs(app).getString(PREF_PSK, "");
+        boolean ipWorks = false;
+        if (!psk.isEmpty()) {
+            try {
+                SonyIp.call(psk, "system", "getSystemInformation", new JSONArray(), "1.0");
+                ipWorks = true;
+            } catch (SonyIp.Failed ignored) {
+                // Wrong key, or IP control off: the page asks for it again.
+            }
+        }
         return new JSONObject()
                 .put("model", Build.MODEL)
                 .put("android", Build.VERSION.RELEASE)
                 .put("sdk", Build.VERSION.SDK_INT)
                 .put("launcher", BuildConfig.VERSION_NAME)
                 .put("interactive", pm != null && pm.isInteractive())
-                .put("ipControl", !prefs(app).getString(PREF_PSK, "").isEmpty())
+                .put("ipKeySaved", !psk.isEmpty())
+                .put("ipControl", ipWorks)
                 .put("overlay", Settings.canDrawOverlays(app))
                 .put("accessibility", InputKeyService.running != null || HomeKeyService.running != null)
                 .put("caps", new JSONArray(java.util.Arrays.asList(COMMANDS)));
