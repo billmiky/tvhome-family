@@ -29,6 +29,8 @@ const MAX_SUBS = 10;
 const MAX_PHONE_SOCKETS = 20;
 // The TV gone this long (no socket) counts as off: a short drop is a network blip, not a power change.
 const OFF_AFTER_MS = 2 * 60 * 1000;
+// A dropped TV socket shows as offline only after this: a Wi-Fi blip reconnects within seconds.
+const GRACE_MS = 15 * 1000;
 const SUBJECT = "https://tv-remote.ptrinh.workers.dev";
 const ICONS = {
   "/icon-512.png": ICON512,
@@ -189,6 +191,7 @@ export class Tv extends DurableObject {
     this.ctx.acceptWebSocket(server, ["tv"]);
     await this.ctx.storage.put("lastSeen", Date.now());
     await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.delete(["droppedAt", "offlineSent"]);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -291,8 +294,9 @@ export class Tv extends DurableObject {
     }
     if (this.ctx.getTags(ws).includes("tv")) await this.seen(ws);
     if (this.ctx.getTags(ws).includes("tv") && !this.ctx.getWebSockets("tv").some((s) => s !== ws)) {
-      await this.ctx.storage.setAlarm(Date.now() + OFF_AFTER_MS);
-      await this.broadcast(false);
+      // Not offline yet: the alarm says so if the TV hasn't come back within GRACE_MS.
+      await this.ctx.storage.put({ droppedAt: Date.now(), offlineSent: false });
+      await this.ctx.storage.setAlarm(Date.now() + GRACE_MS);
     }
   }
 
@@ -300,9 +304,17 @@ export class Tv extends DurableObject {
     await this.webSocketClose(ws, 1006);
   }
 
-  /** Still no TV after OFF_AFTER_MS: it is off (or unplugged, or offline). */
+  /** No TV GRACE_MS after the drop: tell the phones it is offline; after OFF_AFTER_MS it is off. */
   async alarm() {
-    if (!this.tv()) await this.setPower("off");
+    if (this.tv()) return;
+    const s = await this.ctx.storage.get(["droppedAt", "offlineSent"]);
+    const dropped = s.get("droppedAt") || Date.now();
+    if (!s.get("offlineSent")) {
+      await this.ctx.storage.put("offlineSent", true);
+      await this.broadcast(false);
+    }
+    if (Date.now() - dropped >= OFF_AFTER_MS - 1000) await this.setPower("off");
+    else await this.ctx.storage.setAlarm(dropped + OFF_AFTER_MS);
   }
 
   /** Tells the TV whether anyone watches the live view now (gone: a phone socket that is closing). */
@@ -338,7 +350,12 @@ export class Tv extends DurableObject {
   // ---- status, power, push ---------------------------------------------------------------------------
 
   async status(online) {
-    const live = online === undefined ? !!this.tv() : online;
+    let live = online === undefined ? !!this.tv() : online;
+    if (!live && online === undefined) {
+      // Inside the grace after a drop the TV still counts as online (it is most likely reconnecting).
+      const g = await this.ctx.storage.get(["droppedAt", "offlineSent"]);
+      live = !!g.get("droppedAt") && !g.get("offlineSent") && Date.now() - g.get("droppedAt") < GRACE_MS;
+    }
     if (live) await this.ctx.storage.put("lastSeen", Date.now());
     const s = await this.ctx.storage.get(["name", "lastSeen", "state", "power"]);
     return {
