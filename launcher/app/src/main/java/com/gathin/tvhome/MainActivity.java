@@ -225,6 +225,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     static final String PREF_BTC = "btc_ticker";
     /** Settings menu: the phone links (relay QR code and the home-network page) in the network menu. */
     static final String PREF_REMOTE_QR = "remote_qr";
+    /** Plus the input id: the owner's name for that input (renameInput). */
+    static final String PREF_INPUT_NAME = "input_name:";
     /** A message from the phone remote (RemoteRelay) for Home to show when it starts or comes back. */
     static final String EXTRA_BANNER = "com.gathin.tvhome.BANNER";
     /** Overrides set from the phone page (WebControl); the config value is the default. */
@@ -1876,8 +1878,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 int state = hdmi && hdmiStateBogus ? -1 : tim.getInputState(id);
                 if (!hdmi && rows.getChildCount() > 0 && !sawNonHdmi) addSeparator(rows);
                 if (!hdmi) sawNonHdmi = true;
-                addInputRow(rows, popup, hdmi ? R.drawable.ic_input : R.drawable.ic_av, label, state,
-                        () -> openInput(id));
+                // A name the owner gave this port (hold OK on it): shown instead, with the port's own name beside it.
+                String custom = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_INPUT_NAME + id, "");
+                final String portName = label;
+                View row = addInputRow(rows, popup, hdmi ? R.drawable.ic_input : R.drawable.ic_av,
+                        custom.isEmpty() ? label : custom, state, () -> openInput(id));
+                if (!custom.isEmpty()) {
+                    TextView status = row.findViewById(R.id.status);
+                    CharSequence was = status.getVisibility() == View.VISIBLE ? status.getText() : null;
+                    status.setText(was == null ? portName : portName + " · " + was);
+                    status.setVisibility(View.VISIBLE);
+                }
+                row.setOnLongClickListener(v -> {
+                    popup.dismiss();
+                    renameInput(id, portName);
+                    return true;
+                });
             }
         }
         // Nothing to list where there is no TvInputManager: the TV's own source panel switches inputs.
@@ -1941,7 +1957,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         rows.addView(line, lp);
     }
 
-    private void addInputRow(LinearLayout rows, PopupWindow popup, int iconRes, String title, int state, Runnable action) {
+    private View addInputRow(LinearLayout rows, PopupWindow popup, int iconRes, String title, int state, Runnable action) {
         View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
         ((ImageView) row.findViewById(R.id.icon)).setImageResource(iconRes);
         ((TextView) row.findViewById(R.id.title)).setText(title);
@@ -1964,6 +1980,87 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             action.run();
         });
         rows.addView(row);
+        return row;
+    }
+
+    /**
+     * Hold OK on a port in Inputs: a name of the owner's for it ("PlayStation" for HDMI 4), typed on the TV's
+     * keyboard. Empty, or "Use HDMI 4", goes back to the port's own name. Kept per input id in the preferences.
+     */
+    private void renameInput(String id, String portName) {
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundResource(R.drawable.glass_panel);
+        int pad = (int) (24 * density);
+        panel.setPadding(pad, pad, pad, (int) (18 * density));
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.input_rename_title, portName));
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        title.setTypeface(UiFont.get(this));
+        panel.addView(title);
+
+        final android.widget.EditText name = new android.widget.EditText(this);
+        name.setSingleLine(true);
+        name.setText(p.getString(PREF_INPUT_NAME + id, ""));
+        name.setHint(portName);
+        name.setTextColor(Color.WHITE);
+        name.setHintTextColor(0x66FFFFFF);
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        name.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(24)});
+        name.setSelectAllOnFocus(true);
+        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        np.topMargin = (int) (14 * density);
+        panel.addView(name, np);
+
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bp.topMargin = (int) (16 * density);
+        panel.addView(buttons, bp);
+
+        final Dialog dialog = glassDialog(panel);
+        Runnable save = () -> {
+            String n = name.getText().toString().trim();
+            if (n.isEmpty() || n.equals(portName)) p.edit().remove(PREF_INPUT_NAME + id).apply();
+            else p.edit().putString(PREF_INPUT_NAME + id, n).apply();
+            dialog.dismiss();
+            showInputs();
+        };
+        name.setOnEditorActionListener((v, actionId, event) -> {
+            save.run();
+            return true;
+        });
+        buttons.addView(dialogButton(getString(R.string.input_rename_save), save));
+        buttons.addView(dialogButton(getString(R.string.input_rename_reset, portName), () -> {
+            name.setText("");
+            save.run();
+        }));
+        dialog.show();
+        name.requestFocus();
+    }
+
+    /** A pill-shaped button for the small dialogs built in code. */
+    private TextView dialogButton(String text, Runnable action) {
+        TextView b = new TextView(this);
+        b.setText(text);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        b.setTextColor(getResources().getColorStateList(R.drawable.pill_text, getTheme()));
+        b.setBackgroundResource(R.drawable.pill_bg);
+        b.setTypeface(UiFont.get(this));
+        b.setFocusable(true);
+        b.setClickable(true);
+        b.setGravity(Gravity.CENTER);
+        int h = (int) (18 * density), v = (int) (9 * density);
+        b.setPadding(h, v, h, v);
+        b.setOnClickListener(x -> action.run());
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMarginEnd((int) (10 * density));
+        b.setLayoutParams(lp);
+        return b;
     }
 
     // ---- module cards ----------------------------------------------------------------------------

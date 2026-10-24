@@ -141,4 +141,7 @@
     <string name="update_permission_adb">TV này ẩn mục cho phép. Cho phép một lần từ máy tính: adb shell appops set com.gathin.tvhome REQUEST_INSTALL_PACKAGES allow</string>
     <string name="updated_to">Đã cập nhật lên %1$s</string>
     <string name="updated_services_off">Đã cập nhật lên %1$s. Bật lại nút Home hoặc Input của launcher trong Cài đặt, Hỗ trợ tiếp cận.</string>
+    <string name="input_rename_title">Đổi tên %1$s</string>
+    <string name="input_rename_save">Lưu</string>
+    <string name="input_rename_reset">Dùng %1$s</string>
 </resources>
