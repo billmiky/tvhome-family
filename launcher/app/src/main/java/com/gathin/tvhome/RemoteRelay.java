@@ -467,9 +467,13 @@ final class RemoteRelay {
                 TvLock.cancelTimer(app);
                 return "Timer cancelled.";
             case "set_psk": {
-                prefs(app).edit().putString(PREF_PSK, arg).apply();
-                if (arg.isEmpty()) return "Key removed.";
+                if (arg.isEmpty()) {
+                    prefs(app).edit().remove(PREF_PSK).apply();
+                    return "Key removed.";
+                }
+                // Kept only once the TV accepts it, so "IP control set up" means it works.
                 String state = SonyIp.powerStatus(arg);
+                prefs(app).edit().putString(PREF_PSK, arg).apply();
                 return "Saved. IP control works (" + (state.isEmpty() ? "ok" : state) + ").";
             }
             case "caps":
@@ -626,43 +630,20 @@ final class RemoteRelay {
         if (port <= 0) throw new SonyIp.Failed("The phone page (web_control) is off on this TV.");
         if (path == null || !path.startsWith("/api/")) throw new SonyIp.Failed("path starts with /api/");
         if (!"GET".equals(method) && !"POST".equals(method)) throw new SonyIp.Failed("method is GET or POST");
-        String url = "http://127.0.0.1:" + port + path + (path.contains("?") ? "&" : "?") + "k=" + WebControl.code(app);
-        java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+        String full = path + (path.contains("?") ? "&" : "?") + "k=" + WebControl.code(app);
+        java.util.Map<String, String> h = new java.util.HashMap<>();
+        h.put("X-Requested-With", "tvhome");
+        byte[] b = null;
+        if ("POST".equals(method)) {
+            h.put("Content-Type", "application/json");
+            b = (body == null ? "" : body.toString()).getBytes(StandardCharsets.UTF_8);
+        }
+        LocalHttp.Response r = LocalHttp.request("127.0.0.1", port, method, full, h, b, 8000, MAX_FRAME);
+        if (r.status >= 400) throw new SonyIp.Failed("The phone page answered " + r.status + ": " + r.body);
         try {
-            c.setConnectTimeout(3000);
-            c.setReadTimeout(8000);
-            c.setRequestMethod(method);
-            c.setRequestProperty("X-Requested-With", "tvhome");
-            if ("POST".equals(method)) {
-                byte[] b = (body == null ? "" : body.toString()).getBytes(StandardCharsets.UTF_8);
-                c.setDoOutput(true);
-                c.setRequestProperty("Content-Type", "application/json");
-                c.setFixedLengthStreamingMode(b.length);
-                try (OutputStream o = c.getOutputStream()) {
-                    o.write(b);
-                }
-            }
-            int code = c.getResponseCode();
-            InputStream in = code < 400 ? c.getInputStream() : c.getErrorStream();
-            ByteArrayOutputStream b = new ByteArrayOutputStream();
-            if (in != null) {
-                try (InputStream i = in) {
-                    byte[] buf = new byte[4096];
-                    for (int n; (n = i.read(buf)) > 0; ) {
-                        b.write(buf, 0, n);
-                        if (b.size() > MAX_FRAME) throw new SonyIp.Failed("The answer is too large.");
-                    }
-                }
-            }
-            String text = b.toString("UTF-8");
-            if (code >= 400) throw new SonyIp.Failed("The phone page answered " + code + ": " + text);
-            try {
-                return text.trim().startsWith("[") ? new JSONArray(text) : new JSONObject(text);
-            } catch (Exception e) {
-                return text;
-            }
-        } finally {
-            c.disconnect();
+            return r.body.trim().startsWith("[") ? new JSONArray(r.body) : new JSONObject(r.body);
+        } catch (Exception e) {
+            return r.body;
         }
     }
 

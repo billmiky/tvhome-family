@@ -3,14 +3,9 @@ package com.gathin.tvhome;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -145,29 +140,14 @@ final class SonyIp {
     }
 
     private static String post(String host, String psk, String path, String body, String type, String soapAction) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL("http://" + host + path).openConnection();
-        try {
-            c.setConnectTimeout(TIMEOUT_MS);
-            c.setReadTimeout(TIMEOUT_MS);
-            c.setRequestMethod("POST");
-            c.setDoOutput(true);
-            c.setRequestProperty("Content-Type", type);
-            c.setRequestProperty("X-Auth-PSK", psk);
-            if (soapAction != null) c.setRequestProperty("SOAPACTION", soapAction);
-            byte[] b = body.getBytes(StandardCharsets.UTF_8);
-            c.setFixedLengthStreamingMode(b.length);
-            try (OutputStream o = c.getOutputStream()) {
-                o.write(b);
-            }
-            int code = c.getResponseCode();
-            if (code == 403 || code == 401) throw new Failed("The TV refused the IP control key. Check it in Settings.");
-            InputStream in = code < 400 ? c.getInputStream() : c.getErrorStream();
-            String text = in != null ? read(in) : "";
-            if (code >= 400 && !text.startsWith("{")) throw new Failed("The TV's IP control answered " + code + ".");
-            return text;
-        } finally {
-            c.disconnect();
-        }
+        Map<String, String> h = new HashMap<>();
+        h.put("Content-Type", type);
+        h.put("X-Auth-PSK", psk);
+        if (soapAction != null) h.put("SOAPACTION", soapAction);
+        LocalHttp.Response r = LocalHttp.request(host, 80, "POST", path, h, body.getBytes(StandardCharsets.UTF_8), TIMEOUT_MS, MAX_RESPONSE);
+        if (r.status == 403 || r.status == 401) throw new Failed("The TV refused the IP control key. Check it in Settings.");
+        if (r.status >= 400 && !r.body.startsWith("{")) throw new Failed("The TV's IP control answered " + r.status + ".");
+        return r.body;
     }
 
     /** The loopback first, then the TV's own IPv4 addresses (the API may listen only on the LAN side). */
@@ -199,19 +179,5 @@ final class SonyIp {
 
     private static String xml(String s) {
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-    }
-
-    private static String read(InputStream in) throws Exception {
-        try (InputStream i = in) {
-            ByteArrayOutputStream b = new ByteArrayOutputStream();
-            byte[] buf = new byte[4096];
-            int n, total = 0;
-            while ((n = i.read(buf)) > 0) {
-                total += n;
-                if (total > MAX_RESPONSE) break;
-                b.write(buf, 0, n);
-            }
-            return b.toString("UTF-8");
-        }
     }
 }

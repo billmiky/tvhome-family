@@ -152,6 +152,13 @@ export const PAGE = `<!doctype html>
 
     <section class="needs-tv">
       <h2>Power</h2>
+      <div id="ipSetup" hidden style="margin-bottom:14px">
+        <p class="hint" style="margin-top:0">These buttons use the TV's IP control, which is off. On the TV: <b>Settings › Network &amp; Internet › Home network › IP control</b>: Authentication <b>Normal and Pre-Shared Key</b>, then Pre-Shared Key: type any key (for example 4 digits). Enter the same key here:</p>
+        <div class="row">
+          <input id="psk2" type="password" autocomplete="off" maxlength="64" placeholder="Pre-Shared Key" style="flex:1">
+          <button class="primary" id="savePsk2" style="flex:0 0 auto">Save</button>
+        </div>
+      </div>
       <div class="grid">
         <button data-cmd="screen_off">Screen off</button>
         <button data-cmd="screen_on">Screen on</button>
@@ -255,8 +262,8 @@ export const PAGE = `<!doctype html>
       $("offlineTitle").textContent = power === "off" ? "The TV is off" : "The TV is offline";
       $("offlineText").textContent = "Last seen " + (ago(lastSeen) || "a while ago") + ". The controls come back by themselves when it is on.";
     }
-    if (on && was === false) { toast("The TV is back."); loadReport(); }
-    if (on && was === null) loadReport();
+    if (on && was === false) { toast("The TV is back."); loadReport(); loadInfo(); }
+    if (on && was === null) { loadReport(); loadInfo(); }
   }
   function setLock(st) {
     if (!st) return;
@@ -320,6 +327,20 @@ export const PAGE = `<!doctype html>
       toast("No connection.", true);
       return {};
     } finally { if (btn) btn.disabled = false; }
+  }
+
+  // What the TV has: IP control set up, and the commands it knows (an older launcher knows fewer).
+  let caps = null;
+  async function loadInfo() {
+    const j = await run("info", {}, null);
+    if (!j.ok || !j.data) return;
+    caps = j.data.caps || null;
+    $("ipSetup").hidden = !!j.data.ipControl;
+  }
+  async function savePsk(input, btn) {
+    const j = await run("set_psk", { text: input.value }, "Saved on the TV.", btn);
+    if (j.ok) { input.value = ""; $("ipSetup").hidden = true; }
+    else loadInfo();
   }
 
   // ---- screen time ------------------------------------------------------------------------------
@@ -468,9 +489,8 @@ export const PAGE = `<!doctype html>
     if (!/^[0-9]{4}$/.test(pin)) { toast("The PIN is 4 digits.", true); return; }
     if ((await run("set_pin", { text: pin }, "PIN saved.", e.currentTarget)).ok) $("pin").value = "";
   };
-  $("savePsk").onclick = async (e) => {
-    if ((await run("set_psk", { text: $("psk").value }, "Saved on the TV.", e.currentTarget)).ok) $("psk").value = "";
-  };
+  $("savePsk").onclick = (e) => savePsk($("psk"), e.currentTarget);
+  $("savePsk2").onclick = (e) => savePsk($("psk2"), e.currentTarget);
   $("forget").onclick = () => {
     try { localStorage.removeItem(STORE); } catch (e) {}
     location.replace(location.pathname);
