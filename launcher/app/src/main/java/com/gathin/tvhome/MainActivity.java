@@ -395,6 +395,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
         config = cfg;
+        // restore_key_services: after a force stop, put back the accessibility helpers (and with them the remote
+        // keys and the phone remote) that Android took off the list. Needs WRITE_SECURE_SETTINGS.
+        if (cfg.restoreKeyServices) ServiceRepair.restore(this);
         // The phone page lives as long as the process; a second onCreate finds it running.
         WebControl.start(this, cfg.webControl, cfg.webPort);
         // The phone remote through the relay, likewise.

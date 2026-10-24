@@ -29,6 +29,15 @@ public class InputKeyService extends AccessibilityService {
 
     /** The connected service, for RemoteRelay's standby without IP control; null when off. */
     static volatile InputKeyService running;
+    /** restore_key_services was on: this helper is noted for ServiceRepair. */
+    private boolean repairRecord;
+
+    /** Unbound by Android: the user turned the helper off, so Home doesn't put it back (ServiceRepair). */
+    @Override
+    public boolean onUnbind(Intent intent) {
+        if (repairRecord) ServiceRepair.disconnected(this, getClass());
+        return super.onUnbind(intent);
+    }
 
     @Override
     protected void onServiceConnected() {
@@ -37,6 +46,9 @@ public class InputKeyService extends AccessibilityService {
         // the phone remote, the lock timer and the local servers shouldn't wait for Home to be opened.
         try {
             Config cfg = Config.load(this);
+            // Noted so Home can put this helper back after a force stop (ServiceRepair).
+            repairRecord = cfg.restoreKeyServices;
+            if (repairRecord) ServiceRepair.connected(this, getClass());
             RemoteRelay.start(this, cfg.remoteRelay);
             TvLock.start(this);
             // Likewise the home-network phone page (the remote's Screen time goes through it), which

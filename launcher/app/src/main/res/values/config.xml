@@ -110,6 +110,12 @@
          TV and switch it off and on from anywhere. https:// only; empty: no connection at all. -->
     <string name="remote_relay" translatable="false">https://tv-remote.ptrinh.workers.dev</string>
 
+    <!-- After a force stop (Settings, a cleaner app, am force-stop) Android takes the launcher's accessibility
+         helpers off the enabled list, and with them the remote keys and the phone remote. With this on, Home puts
+         the helpers that were running back when it starts (ServiceRepair; needs WRITE_SECURE_SETTINGS, which the
+         install script grants). A helper turned off in Settings stays off. -->
+    <bool name="restore_key_services">true</bool>
+
     <!-- Occasions: days the greeting line (above the clock) says something else, as a JSON array of
          {"date": "MM-DD" every year or "YYYY-MM-DD" once, "text": "…", "video": optional YouTube link}, e.g.
          [{\"date\": \"03-14\", \"text\": \"Happy birthday, bé An\"}] (Android string resources drop
