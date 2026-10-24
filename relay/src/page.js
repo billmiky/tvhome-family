@@ -66,14 +66,22 @@ export const PAGE = `<!doctype html>
   .screen { position:relative; aspect-ratio:16/9; background:#000; border-radius:12px; overflow:hidden; }
   .screen img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
   .screen .msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; color:var(--dim); font-size:14px; }
-  .dpad { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; max-width:300px; margin:4px auto 0; }
-  .dpad button { aspect-ratio:1; padding:0; font-size:22px; border-radius:18px; touch-action:manipulation; user-select:none; -webkit-user-select:none; }
-  .dpad .ok { border-radius:50%; background:var(--accent); color:#1a1000; font-size:18px; }
-  .dpad .gap { visibility:hidden; }
-  .keys { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:16px; }
-  .keys button { padding:14px 6px; touch-action:manipulation; user-select:none; -webkit-user-select:none; }
-  .rocker { display:flex; flex-direction:column; gap:6px; }
-  .rocker span { text-align:center; font-size:12px; color:var(--dim); font-weight:600; letter-spacing:.06em; }
+  /* Live control remote, after the Google TV phone remote: a ring with the arrows, round keys, pill rockers. */
+  .remote { padding:22px 16px 16px; }
+  .remote button { touch-action:manipulation; user-select:none; -webkit-user-select:none; color:var(--text); display:flex; align-items:center; justify-content:center; padding:0; }
+  .remote button:active { filter:brightness(1.35); transform:none; }
+  .ring { position:relative; width:min(280px, 78vw); aspect-ratio:1; margin:0 auto; border-radius:50%; background:#2a2a31; }
+  .ring .arrow { position:absolute; width:34%; height:34%; background:transparent; border-radius:50%; color:var(--dim); }
+  .ring .up { top:0; left:33%; } .ring .down { bottom:0; left:33%; } .ring .left { left:0; top:33%; } .ring .right { right:0; top:33%; }
+  .ring .ok { position:absolute; inset:30%; border-radius:50%; background:#44444d; font-size:18px; font-weight:600; letter-spacing:.04em; }
+  .line { display:flex; align-items:center; justify-content:center; gap:14px; margin-top:22px; }
+  .round { flex:0 0 auto; width:60px; height:60px; border-radius:50%; background:#2a2a31; }
+  .round.big { width:76px; height:76px; }
+  .round.light { background:#f4f4f6; color:#111 !important; }
+  .pill2 { flex:0 1 220px; display:flex; align-items:stretch; height:60px; border-radius:30px; background:#2a2a31; overflow:hidden; }
+  .pill2 button { flex:1; border-radius:0; background:transparent; }
+  .pill2 button + button { border-left:1px solid #17171d; }
+  .pill2 .tag { align-self:center; font-size:12px; font-weight:700; color:var(--dim); letter-spacing:.08em; padding:0 2px; }
   .steps { font-size:13px; color:var(--dim); margin:8px 0 12px; padding-left:20px; }
   .steps li { margin:4px 0; }
   .steps b { color:var(--text); font-weight:600; }
@@ -137,24 +145,34 @@ export const PAGE = `<!doctype html>
 
     <div id="tabLive" hidden>
       <section class="needs-tv">
-        <div class="screen"><img id="liveImg" alt=""><div class="msg" id="liveMsg">Starting the live view…</div></div>
-        <p class="hint">About two pictures a second. Netflix and other protected video, HDMI inputs and the TV tuner show black.</p>
+        <div class="switch"><h2 style="margin:0">Live view</h2><input type="checkbox" id="liveToggle" checked aria-label="Show the live view"></div>
+        <div id="liveBox" style="margin-top:12px">
+          <div class="screen"><img id="liveImg" alt=""><div class="msg" id="liveMsg">Starting the live view…</div></div>
+          <p class="hint">About two pictures a second. Netflix and other protected video, HDMI inputs and the TV tuner show black.</p>
+        </div>
       </section>
-      <section class="needs-tv">
-        <div class="dpad">
-          <span class="gap"></span><button data-key="Up" data-repeat aria-label="Up">▲</button><span class="gap"></span>
-          <button data-key="Left" data-repeat aria-label="Left">◀</button><button class="ok" data-key="Confirm">OK</button><button data-key="Right" data-repeat aria-label="Right">▶</button>
-          <span class="gap"></span><button data-key="Down" data-repeat aria-label="Down">▼</button><span class="gap"></span>
+      <section class="needs-tv remote">
+        <div class="ring">
+          <button class="arrow up" data-key="Up" data-repeat aria-label="Up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button>
+          <button class="arrow left" data-key="Left" data-repeat aria-label="Left"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+          <button class="arrow right" data-key="Right" data-repeat aria-label="Right"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+          <button class="arrow down" data-key="Down" data-repeat aria-label="Down"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button class="ok" data-key="Confirm" aria-label="OK">OK</button>
         </div>
-        <div class="keys">
-          <button data-key="Return">Back</button><button data-key="Home">Home</button><button data-key="ActionMenu|Options|SyncMenu">Menu</button>
+        <div class="line">
+          <button class="round" data-key="Return" aria-label="Back"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg></button>
+          <button class="round big" data-key="Home" aria-label="Home"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5V20h-5v-5h-6v5H4z"/></svg></button>
+          <button class="round light" data-key="ActionMenu|Options|SyncMenu" aria-label="Menu"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
         </div>
-        <div class="keys">
-          <div class="rocker"><span>VOL</span><button data-key="VolumeUp" data-repeat aria-label="Volume up">+</button><button id="volDown" aria-label="Volume down, hold to mute">−</button></div>
-          <div class="rocker"><span>TEXT</span><button id="kbOpen" style="flex:1">⌨︎ Keyboard</button></div>
-          <div class="rocker"><span>CH</span><button data-key="ChannelUp" data-repeat aria-label="Channel up">+</button><button data-key="ChannelDown" data-repeat aria-label="Channel down">−</button></div>
+        <div class="line">
+          <button class="round" data-key="Mute" aria-label="Mute"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6M21 9l-5 6"/></svg></button>
+          <div class="pill2"><button id="volDown" aria-label="Volume down (hold to mute)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/></svg></button><button data-key="VolumeUp" data-repeat aria-label="Volume up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/></svg></button></div>
         </div>
-        <p class="hint">Hold − for a second to mute. The buttons use the TV's IP control.</p>
+        <div class="line">
+          <button class="round" id="kbOpen" aria-label="Keyboard"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
+          <div class="pill2"><button data-key="ChannelDown" data-repeat aria-label="Channel down"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 12h12"/></svg></button><span class="tag">CH</span><button data-key="ChannelUp" data-repeat aria-label="Channel up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg></button></div>
+        </div>
+        <p class="hint" style="text-align:center">Hold volume down for a second to mute.</p>
       </section>
       <section class="needs-tv" id="kb" hidden>
         <div class="head"><h2>Keyboard</h2><button id="kbClose" style="flex:0 0 auto;padding:6px 12px">Done</button></div>
@@ -433,8 +451,18 @@ export const PAGE = `<!doctype html>
 
   // ---- live control -----------------------------------------------------------------------------
   let liveOn = false, frameUrl = null, lastFrameAt = 0;
+  let liveShown = true;
+  try { liveShown = localStorage.getItem("tvremote-live") !== "hidden"; } catch (e) {}
+  $("liveToggle").checked = liveShown;
+  $("liveBox").hidden = !liveShown;
+  $("liveToggle").onchange = () => {
+    liveShown = $("liveToggle").checked;
+    $("liveBox").hidden = !liveShown;
+    try { localStorage.setItem("tvremote-live", liveShown ? "shown" : "hidden"); } catch (e) {}
+    setLive(tab === "live");
+  };
   function setLive(on) {
-    on = on && !document.hidden && online !== false;
+    on = on && liveShown && !document.hidden && online !== false;
     if (on === liveOn) return;
     liveOn = on;
     if (on) { $("liveMsg").textContent = "Starting the live view…"; $("liveMsg").hidden = false; lastFrameAt = 0; }
