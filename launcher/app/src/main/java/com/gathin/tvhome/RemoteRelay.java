@@ -671,13 +671,24 @@ final class RemoteRelay {
     private static String type(String psk, String text, boolean enter) throws Exception {
         InputKeyService a = InputKeyService.running;
         android.view.accessibility.AccessibilityNodeInfo field = null;
+        String where = "";
         if (a != null) {
             try {
-                android.view.accessibility.AccessibilityNodeInfo root = a.getRootInActiveWindow();
-                if (root != null) field = root.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT);
-                if (field != null && !field.isEditable()) field = null;
+                // Every window, not only the active one: with the keyboard up the field's window may not be.
+                java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows = a.getWindows();
+                for (android.view.accessibility.AccessibilityWindowInfo w : windows) {
+                    android.view.accessibility.AccessibilityNodeInfo root = w.getRoot();
+                    if (root == null) continue;
+                    if (w.isActive() && root.getPackageName() != null) where = String.valueOf(root.getPackageName());
+                    android.view.accessibility.AccessibilityNodeInfo f = root.findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT);
+                    if (f == null || !f.isEditable()) f = focusedEditable(root, 0);
+                    if (f != null && f.isEditable()) {
+                        field = f;
+                        break;
+                    }
+                }
             } catch (Exception e) {
-                field = null;
+                Log.w(TAG, "no text field: " + e);
             }
         }
         if (field != null) {
@@ -692,15 +703,29 @@ final class RemoteRelay {
         try {
             SonyIp.call(psk, "appControl", "setTextForm", new JSONArray().put(new JSONObject().put("text", text)), "1.1");
         } catch (SonyIp.Failed f) {
-            if (f.getMessage().startsWith("Set the Sony")) throw new SonyIp.Failed("Select a text field on the TV first.");
+            String hint = a == null ? " The launcher's accessibility service is off."
+                    : " No text field found" + (where.isEmpty() ? "" : " in " + where)
+                    + ": this app may draw its own keyboard, which can't be typed into from outside.";
+            if (f.getMessage().startsWith("Set the Sony")) throw new SonyIp.Failed("Select a text field on the TV first." + hint);
             try {
                 SonyIp.call(psk, "appControl", "setTextForm", new JSONArray().put(text), "1.0");
             } catch (SonyIp.Failed f2) {
-                throw new SonyIp.Failed("Select a text field on the TV first (" + f2.getMessage() + ")");
+                throw new SonyIp.Failed("Select a text field on the TV first." + hint);
             }
         }
         if (enter) SonyIp.button(psk, "Confirm");
         return enter ? "Sent." : "";
+    }
+
+    /** A focused editable node under n, depth-first, a bounded walk. */
+    private static android.view.accessibility.AccessibilityNodeInfo focusedEditable(android.view.accessibility.AccessibilityNodeInfo n, int depth) {
+        if (n == null || depth > 40) return null;
+        if (n.isEditable() && (n.isFocused() || n.isAccessibilityFocused())) return n;
+        for (int i = 0; i < Math.min(n.getChildCount(), 200); i++) {
+            android.view.accessibility.AccessibilityNodeInfo r = focusedEditable(n.getChild(i), depth + 1);
+            if (r != null) return r;
+        }
+        return null;
     }
 
     /** back, home, recents, notifications, quick_settings, lock_screen through the accessibility service. */
