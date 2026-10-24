@@ -83,6 +83,7 @@
     <string name="settings_menu_remote_qr">Remote QR</string>
     <string name="settings_menu_show">Show</string>
     <string name="settings_menu_hide">Hide</string>
+    <string name="remote_qr_pin">Enter PIN to show the Remote QR</string>
     <string name="banner_title">Message</string>
     <string name="live_channel">Live view for the phone remote</string>
     <string name="lock_title">This TV is locked</string>

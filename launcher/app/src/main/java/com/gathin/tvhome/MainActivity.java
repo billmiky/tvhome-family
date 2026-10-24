@@ -3208,8 +3208,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         final TextView qrStatus = qrRow.findViewById(R.id.status);
         qrRow.setOnClickListener(v -> {
             SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
-            p.edit().putBoolean(PREF_REMOTE_QR, !p.getBoolean(PREF_REMOTE_QR, true)).apply();
-            qrStatus.setText(remoteQrState());
+            boolean show = !p.getBoolean(PREF_REMOTE_QR, true);
+            Runnable apply = () -> {
+                p.edit().putBoolean(PREF_REMOTE_QR, show).apply();
+                qrStatus.setText(remoteQrState());
+            };
+            // Showing the QR code lets a phone pair, and a paired phone controls the TV: the PIN first, if any.
+            if (show && AppLock.hasPin(p)) verifyPin(getString(R.string.remote_qr_pin), apply);
+            else apply.run();
         });
 
         View lockRow = addMenuRow(rows, getString(R.string.settings_menu_app_lock), appLockState());
