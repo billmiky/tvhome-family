@@ -22,6 +22,14 @@ public class HomeKeyService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         running = this;
+        // The process can start for this service alone (after an update, with another app in front):
+        // the phone remote and the lock timer shouldn't wait for Home to be opened.
+        try {
+            RemoteRelay.start(this, Config.load(this).remoteRelay);
+            TvLock.start(this);
+        } catch (Exception e) {
+            android.util.Log.w(RemoteRelay.TAG, "remote not started: " + e);
+        }
     }
 
     @Override

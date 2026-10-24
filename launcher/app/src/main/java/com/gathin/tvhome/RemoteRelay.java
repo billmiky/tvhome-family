@@ -159,11 +159,18 @@ final class RemoteRelay {
         }
     }
 
-    /** Drops the current socket (or ends the wait between attempts) so the loop connects again now. */
+    /**
+     * Drops the current socket (or ends the wait between attempts) so the loop connects again now.
+     * Off the caller's thread: closing a TLS socket writes to the network, which the main thread may not.
+     */
     static void kick() {
-        closeQuietly();
-        Thread t = thread;
-        if (t != null) t.interrupt();
+        Thread k = new Thread(() -> {
+            closeQuietly();
+            Thread t = thread;
+            if (t != null) t.interrupt();
+        }, "remote-kick");
+        k.setDaemon(true);
+        k.start();
     }
 
     private static void connect() throws Exception {
