@@ -39,10 +39,9 @@ public class InputKeyService extends AccessibilityService {
             Config cfg = Config.load(this);
             RemoteRelay.start(this, cfg.remoteRelay);
             TvLock.start(this);
-            // Likewise the home-network phone page (the remote's Screen time goes through it) and the
-            // IPTV link proxy on 127.0.0.1:8790: both used to wait for Home's onCreate.
+            // Likewise the home-network phone page (the remote's Screen time goes through it), which
+            // used to wait for Home's onCreate.
             WebControl.start(this, cfg.webControl, cfg.webPort);
-            StreamProxy.start(this);
         } catch (Exception e) {
             android.util.Log.w(RemoteRelay.TAG, "remote not started: " + e);
         }
