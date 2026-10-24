@@ -4076,10 +4076,23 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             columns.setOrientation(LinearLayout.HORIZONTAL);
             columns.addView(rows, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             int side = (int) (160 * density);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(side, side);
+            // The code, with a small dim credit line under it.
+            LinearLayout qrColumn = new LinearLayout(this);
+            qrColumn.setOrientation(LinearLayout.VERTICAL);
+            qrColumn.setGravity(Gravity.CENTER_HORIZONTAL);
+            qrColumn.addView(qr, new LinearLayout.LayoutParams(side, side));
+            TextView credit = new TextView(this);
+            credit.setText(R.string.remote_credit);
+            credit.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+            credit.setTextColor(0x4DFFFFFF);
+            credit.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(side, ViewGroup.LayoutParams.WRAP_CONTENT);
+            cp.topMargin = (int) (8 * density);
+            qrColumn.addView(credit, cp);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             lp.gravity = Gravity.CENTER_VERTICAL;
             lp.setMargins((int) (12 * density), 0, (int) (8 * density), 0);
-            columns.addView(qr, lp);
+            columns.addView(qrColumn, lp);
             outer.addView(columns);
         }
         dropIn(popup, panel, btnWifi, Gravity.END);

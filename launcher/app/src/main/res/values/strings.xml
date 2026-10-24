@@ -184,4 +184,5 @@
         <item quantity="one">%1$d app</item>
         <item quantity="other">%1$d apps</item>
     </plurals>
+    <string name="remote_credit" translatable="false">Remote Add-on by Phil Trinh</string>
 </resources>
