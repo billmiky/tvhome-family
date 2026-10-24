@@ -33,10 +33,16 @@ in [docs/cleanyourtv.md](docs/cleanyourtv.md).
 
 ## TV Remote on the phone
 
-![The phone remote: live control, message, lock, screen time, settings](docs/tv/remote-app.jpg)
+**Nothing to install, on the phone or anywhere else.** The remote is a web page: scan the QR code on the TV,
+add the page to the home screen if you like, and it controls the TV from anywhere, at home or away,
+through a small **Cloudflare relay** (a Worker with one Durable Object per TV, on the free plan). No app
+store, no account, no port forwarding, no VPN.
 
-A web app you add to the home screen (iPhone or Android), paired by scanning the QR code on the TV.
-It works from anywhere, not only at home:
+<p align="center"><img src="docs/tv/remote-full.jpg" alt="The Remote tab: live view of the TV, d-pad, keys and power" width="300"></p>
+
+![The other tabs: message, lock and timer, screen time, settings](docs/tv/remote-app.jpg)
+
+What it does:
 
 - **Live control**: a live view of the TV's screen (about two pictures a second; protected video shows
   black), a d-pad with OK, Back, Home, Menu, volume, mute, channel, and a **keyboard** that types or pastes
