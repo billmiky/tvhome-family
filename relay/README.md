@@ -26,7 +26,7 @@ installable web app) posts commands to `/api/cmd`.
   IP control, Authentication "Normal and Pre-Shared Key"); save the same key from the phone page. Without
   a key, standby falls back to the launcher's accessibility service. Wake from standby is best effort: the
   TV usually stops the launcher's connection in standby.
-- **Stored**: TV key hash, phone key hashes, TV name, last seen. Nothing else.
+- **Stored**: TV key hash, phone key hashes, push subscriptions, TV name, power and lock state, last seen.
 
 Deploy (personal account): `npx wrangler deploy`. The launcher's relay address is `remote_relay` in
 `launcher/app/src/main/res/values/config.xml` (or `remote_relay` in a theme's `config.json`); empty turns
