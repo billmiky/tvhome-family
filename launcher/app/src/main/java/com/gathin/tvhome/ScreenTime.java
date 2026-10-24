@@ -35,12 +35,20 @@ final class ScreenTime {
     static final int RESUMED = 1, PAUSED = 2, SCREEN_ON = 15, SCREEN_OFF = 16, SHUTDOWN = 26;
 
     /**
-     * Counted in the total but not listed: the TV's settings, its own TV app (Sony's tuner and HDMI
-     * screen) and the stock Google TV home, which are not something anyone sits down to watch as an app.
+     * Counted in the total but not listed: the TV's settings and the stock Google TV home, which are not
+     * something anyone sits down to watch as an app.
      */
     static final java.util.Set<String> UNLISTED = new java.util.HashSet<>(java.util.Arrays.asList(
-            "com.android.tv.settings", "com.sony.dtv.tvlin", "com.google.android.apps.tv.launcherx",
+            "com.android.tv.settings", "com.google.android.apps.tv.launcherx",
             "com.google.android.tvlauncher"));
+
+    /**
+     * The TV's own TV app shows the tuner and every HDMI input (Android records the app, not the input), so its
+     * time is one row, named for what it is rather than the app's label.
+     */
+    static final java.util.Set<String> TV_APPS = new java.util.HashSet<>(java.util.Arrays.asList(
+            "com.sony.dtv.tvlin", "com.android.tv", "com.google.android.tv"));
+    static final String TV_LABEL = "TV & HDMI";
 
     /** One usage event: when, what kind, which app. */
     static final class Event {
@@ -255,6 +263,7 @@ final class ScreenTime {
 
     /** An app's name for the report, or its package when it is gone. */
     static String label(Context ctx, String pkg) {
+        if (TV_APPS.contains(pkg)) return TV_LABEL;
         try {
             PackageManager pm = ctx.getPackageManager();
             ApplicationInfo ai = pm.getApplicationInfo(pkg, PackageManager.MATCH_DISABLED_COMPONENTS);
