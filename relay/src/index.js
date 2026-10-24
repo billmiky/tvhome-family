@@ -70,7 +70,14 @@ export default {
       });
     }
     if (path === "/manifest.webmanifest") {
-      return new Response(JSON.stringify(MANIFEST), { headers: { "content-type": "application/manifest+json", "cache-control": "public, max-age=3600" } });
+      // ?p=<id>.<key> from a paired page: the home-screen app starts paired. iOS opens it at start_url
+      // with storage of its own, so without this it would always say "Not paired".
+      const p = url.searchParams.get("p") || "";
+      const m = /^([A-Za-z0-9_-]{12,32})[.]([A-Za-z0-9_-]{22,64})$/.exec(p);
+      const manifest = m ? { ...MANIFEST, start_url: "/#" + m[1] + "." + m[2] } : MANIFEST;
+      return new Response(JSON.stringify(manifest), {
+        headers: { "content-type": "application/manifest+json", "cache-control": m ? "private, no-store" : "public, max-age=3600" },
+      });
     }
     if (path in ICONS || path === "/favicon.ico") {
       const bytes = Uint8Array.from(atob(ICONS[path] || ICON192), (c) => c.charCodeAt(0));

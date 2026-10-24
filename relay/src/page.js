@@ -1,6 +1,6 @@
 // The phone remote: one page, no build step, installable (Add to Home Screen). Paired by the TV's QR code
-// (#<id>.<key> in the address), which the page keeps in localStorage and in the address: iOS starts a
-// home-screen app at the address it was added from, with storage of its own.
+// (#<id>.<key> in the address), which the page keeps in localStorage, in the address and in the manifest's
+// start_url (/manifest.webmanifest?p=…): iOS starts a home-screen app at start_url, with storage of its own.
 // A WebSocket to the relay (/phone) keeps the status live: controls go away while the TV is offline and
 // come back the moment it is on. Commands go through run(cmd, {text, args}); the TV's building blocks
 // (sony, button, intent, launch, apps, global, local, info) let new features live here alone.
@@ -206,6 +206,8 @@ export const PAGE = `<!doctype html>
   } else if (tv) {
     history.replaceState(null, "", location.pathname + "#" + tv.id + "." + tv.key);
   }
+  // The manifest's start_url carries the pairing, so Add to Home Screen makes an app that starts paired.
+  if (tv) document.querySelector("link[rel=manifest]").href = "/manifest.webmanifest?p=" + tv.id + "." + tv.key;
   let swReg = null;
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").then((r) => (swReg = r)).catch(() => {});
 

@@ -9,5 +9,6 @@
     "bindings": [{ "name": "TV", "class_name": "Tv" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Tv"] }],
-  "observability": { "enabled": true }
+  // Invocation logs would keep request URLs, and the manifest URL carries the phone key.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }
