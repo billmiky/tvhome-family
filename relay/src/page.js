@@ -10,7 +10,7 @@ export const PAGE = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -23,8 +23,12 @@ export const PAGE = `<!doctype html>
 <style>
   :root { --bg:#0b0b0f; --card:#17171d; --line:#2a2a33; --text:#f4f4f6; --dim:#9a9aa6; --accent:#ff9f0a; --ok:#30d158; --bad:#ff453a; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  [hidden] { display:none !important; }   /* .row and friends set display, which would beat the attribute */
-  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  [hidden] { display:none !important; }
+  /* Nothing may be wider than the phone: a wider page makes iOS open the app zoomed and shifted. */
+  html, body { overflow-x:hidden; max-width:100%; -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  .row > *, .grid > *, .head > * { min-width:0; }
+  input[type=number] { -moz-appearance:textfield; }   /* .row and friends set display, which would beat the attribute */
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
          padding:max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
   main { max-width:520px; margin:0 auto; }
   header { display:flex; align-items:center; justify-content:space-between; margin:4px 0 18px; gap:12px; }
@@ -47,7 +51,7 @@ export const PAGE = `<!doctype html>
   .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
   .chips button { flex:0 0 auto; padding:10px 14px; border-radius:99px; font-weight:500; }
   .seg { display:flex; background:#0f0f14; border:1px solid var(--line); border-radius:12px; padding:3px; gap:3px; }
-  .seg button { padding:8px; border-radius:9px; background:transparent; font-weight:500; color:var(--dim); }
+  .seg button { padding:8px 12px; border-radius:9px; background:transparent; font-weight:500; color:var(--dim); white-space:nowrap; }
   .seg button.sel { background:#2c2c34; color:var(--text); }
   .countdown { font-size:34px; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
   .head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px; }
