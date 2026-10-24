@@ -72,8 +72,10 @@ A label is rejected when:
 - it contains `verified` or `official` anywhere: words that imply endorsement are reserved, and
   nothing a module declares is ever presented as endorsed (the same two words are refused in the
   caption);
-- it is one of the names the launcher's own UI uses, in English or in the TV's language:
-  `Home`, `Settings`, `Inputs`, `Wi-Fi`, `Live TV`, `Default home`, `Clock`, `cleanyourtv`, `tv-vibehack`;
+- it is one of the names the launcher's own UI uses, in English or in the TV's language: what its
+  pills and dialogs say (`Home`, `Settings`, `Inputs`, `Wi-Fi`, `Live TV`, `App library`,
+  `Choose default home`), the name of the clock screensaver in the TV's screensaver picker (`Clock`),
+  `Default home` word for word, and the two project names `cleanyourtv` and `tv-vibehack`;
 - it names an input the Inputs menu shows: `HDMI` and anything starting with it, `AV`;
 - while the prompt is due (a new card, or one whose signing key or label changed): it equals the label of
   another app installed on this TV (the names on the home screen), or the app's own label equals
@@ -135,8 +137,10 @@ any violation drops that one card, with a log line and no other effect.
    next to it. A package in `hidden_apps` (`config.xml`) shows neither a tile nor a card. A package in
    `dock_apps` gets its card in that dock slot. Other cards sort right after the configured dock apps
    and before the alphabetical grid, by label. On the default configuration, four dock apps and four
-   columns, that is the first grid tile. With fewer `dock_apps` than columns, a shown card fills the
-   empty dock slot, since the dock is simply the first row. In the dock, the top shelf shows the label and the glow uses
+   columns, that is the first grid tile. With fewer `dock_apps` than columns, the free dock slots take
+   the first grid apps (`fill_dock`, on by default), so a shown card fills the free dock slot, since
+   the dock is then simply the first row; with `fill_dock` false the free slots stay empty and a
+   shown card is the first grid tile. In the dock, the top shelf shows the label and the glow uses
    the accent; in the grid, the name line under the focused tile shows the label and the caption,
    as far as they fit on one line. A card uses the app's own banner (or icon) for its artwork.
 7. Hide. A hidden card leaves the app's ordinary tile exactly as before: hiding a card never
