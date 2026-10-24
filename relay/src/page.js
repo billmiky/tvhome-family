@@ -37,7 +37,7 @@ export const PAGE = `<!doctype html>
   html, body { overflow-x:hidden; max-width:100%; -webkit-text-size-adjust:100%; text-size-adjust:100%; }
   body { margin:0; min-height:100vh; color:var(--text); background:#000;
          font:16px/1.4 "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         padding:max(14px, env(safe-area-inset-top)) 16px calc(var(--tabbar) + 18px); }
+         padding:calc(env(safe-area-inset-top) + 18px) 16px calc(var(--tabbar) + 18px); }
   /* The ambient glow behind Home, here warm and soft. */
   body::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
          background:radial-gradient(90% 55% at 18% -8%, rgba(255,92,38,.34), transparent 62%),
@@ -48,7 +48,8 @@ export const PAGE = `<!doctype html>
   svg { display:block; }
 
   .eyebrow { font-size:12px; font-weight:500; letter-spacing:.22em; text-transform:uppercase; color:var(--dim); }
-  header { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin:6px 2px 18px; }
+  header { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin:8px 2px 20px; }
+  #greeting { line-height:1.5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   header h1 { margin:4px 0 0; font-size:34px; font-weight:300; letter-spacing:-.01em; line-height:1.05; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .status { flex:0 0 auto; display:flex; align-items:center; gap:8px; height:34px; padding:0 14px; border-radius:17px; font-size:14px; font-weight:500;
             background:var(--glass); border:1px solid var(--hair); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
@@ -471,8 +472,16 @@ export const PAGE = `<!doctype html>
   let swReg = null;
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").then((r) => (swReg = r)).catch(() => {});
 
-  const h = new Date().getHours();
-  $("greeting").textContent = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 22 ? "Good evening" : "Good night";
+  // The TV's own greeting: "Good afternoon, Mr Trịnh 👋", the name from its settings (kept for the next start).
+  let greetName = "";
+  try { greetName = localStorage.getItem("tvremote-greet") || ""; } catch (e) {}
+  function drawGreeting() {
+    const h = new Date().getHours();
+    const g = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 22 ? "Good evening" : "Good night";
+    $("greeting").textContent = (greetName ? g + ", " + greetName : g) + " 👋";
+  }
+  drawGreeting();
+  setInterval(drawGreeting, 60000);
 
   let toastTimer;
   function toast(msg, bad) {
@@ -598,6 +607,12 @@ export const PAGE = `<!doctype html>
     if (!j.ok || !j.data) return;
     caps = j.data.caps || null;
     $("ipSetup").hidden = !!j.data.ipControl;
+    const st = await run("local", { args: { method: "GET", path: "/api/state" } }, null);
+    if (st.ok && st.data && typeof st.data.greeting === "string") {
+      greetName = st.data.greeting.trim();
+      try { localStorage.setItem("tvremote-greet", greetName); } catch (e) {}
+      drawGreeting();
+    }
   }
   async function savePsk(input, btn) {
     const j = await run("set_psk", { text: input.value }, "Saved on the TV.", btn);
