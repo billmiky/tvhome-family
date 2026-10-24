@@ -60,6 +60,9 @@ export const PAGE = `<!doctype html>
   .badge.locked { background:#3a1715; color:#ff8a80; }
   .count { font-size:12px; color:var(--dim); text-align:right; margin-top:6px; }
   .hint { font-size:13px; color:var(--dim); margin:10px 0 0; }
+  .steps { font-size:13px; color:var(--dim); margin:8px 0 12px; padding-left:20px; }
+  .steps li { margin:4px 0; }
+  .steps b { color:var(--text); font-weight:600; }
   #toast { position:fixed; left:50%; bottom:max(24px, env(safe-area-inset-bottom)); transform:translateX(-50%) translateY(20px); opacity:0;
            background:#2c2c34; border:1px solid var(--line); padding:11px 16px; border-radius:12px; font-size:15px; transition:.2s; max-width:calc(100% - 32px); pointer-events:none; z-index:9; }
   #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
@@ -164,7 +167,13 @@ export const PAGE = `<!doctype html>
     <section class="needs-tv">
       <h2>Power</h2>
       <div id="ipSetup" hidden style="margin-bottom:14px">
-        <p class="hint" style="margin-top:0">These buttons use the TV's IP control, which is off. On the TV: <b>Settings › Network &amp; Internet › Home network › IP control</b>: Authentication <b>Normal and Pre-Shared Key</b>, then Pre-Shared Key: type any key (for example 4 digits). Enter the same key here:</p>
+        <p class="hint" style="margin-top:0">These buttons use the TV's IP control, which isn't set up yet. On the TV:</p>
+        <ol class="steps">
+          <li><b>Settings › Network &amp; Internet › Remote device settings › Control remotely</b>: On.</li>
+          <li><b>Settings › Network &amp; Internet › Home network › IP control › Authentication</b>: Normal and Pre-Shared Key.</li>
+          <li><b>Pre-Shared Key</b> (same menu): type any key, for example 4 digits.</li>
+          <li>Enter the same key here and save.</li>
+        </ol>
         <div class="row">
           <input id="psk2" type="password" autocomplete="off" maxlength="64" placeholder="Pre-Shared Key" style="flex:1">
           <button class="primary" id="savePsk2" style="flex:0 0 auto">Save</button>
@@ -203,7 +212,13 @@ export const PAGE = `<!doctype html>
           <h2 style="margin-top:20px">Sony IP control key</h2>
           <input id="psk" type="password" autocomplete="off" maxlength="64" placeholder="Pre-Shared Key">
           <div class="row"><button id="savePsk">Save on TV</button></div>
-          <p class="hint">Screen off/on and standby use the TV's IP control. On the TV: Settings › Network › Home network › IP control: Authentication "Normal and Pre-Shared Key", then set the same key here.</p>
+          <p class="hint" style="margin-bottom:0">Screen off/on and standby use the TV's IP control. On the TV:</p>
+          <ol class="steps">
+          <li><b>Settings › Network &amp; Internet › Remote device settings › Control remotely</b>: On.</li>
+          <li><b>Settings › Network &amp; Internet › Home network › IP control › Authentication</b>: Normal and Pre-Shared Key.</li>
+          <li><b>Pre-Shared Key</b> (same menu): type any key, for example 4 digits.</li>
+          <li>Enter the same key above and save.</li>
+        </ol>
         </div>
         <div class="row"><button class="danger" id="forget">Forget this TV</button></div>
       </details>

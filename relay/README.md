@@ -22,7 +22,7 @@ installable web app) posts commands to `/api/cmd`.
 - **Notifications**: Web Push (VAPID keys in the Worker secrets `VAPID_PRIVATE`/`VAPID_PUBLIC`, a copy in
   `~/.config/tv-remote-vapid.json`). "On" when the TV says hello, "off" on its screen-off event or after two
   minutes without a connection. On iPhone only from the Home Screen app.
-- **Power**: screen off/on, standby and wake use the TV's Sony IP control (Settings › Network › Home network ›
+- **Power**: screen off/on, standby and wake use the TV's Sony IP control (Settings › Network & Internet › Remote device settings › Control remotely On, then Home network ›
   IP control, Authentication "Normal and Pre-Shared Key"); save the same key from the phone page. Without
   a key, standby falls back to the launcher's accessibility service. Wake from standby is best effort: the
   TV usually stops the launcher's connection in standby.
