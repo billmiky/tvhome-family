@@ -102,6 +102,11 @@ export const PAGE = `<!doctype html>
 
   /* Remote */
   .screen { position:relative; aspect-ratio:16/9; background:#000; border-radius:14px; overflow:hidden; border:1px solid rgba(255,255,255,.08); }
+  /* Full screen: the real Fullscreen API where the browser has it, this overlay where it doesn't (iPhone). */
+  .screen.full { position:fixed; inset:0; z-index:20; aspect-ratio:auto; border-radius:0; border:0; }
+  .screen .exit { position:absolute; top:max(12px, env(safe-area-inset-top)); right:12px; z-index:2; width:44px; height:44px; border-radius:22px;
+                  background:rgba(0,0,0,.45); color:#fff; display:none; align-items:center; justify-content:center; }
+  .screen.full .exit { display:flex; }
   .screen img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
   .screen .msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; color:var(--dim); font-size:14px; }
   .remote button { touch-action:manipulation; user-select:none; -webkit-user-select:none; display:flex; align-items:center; justify-content:center; }
@@ -223,11 +228,15 @@ export const PAGE = `<!doctype html>
       <section class="card needs-tv">
         <div class="card-head">
           <span class="eyebrow">Live view</span>
-          <button class="pill sm icon" id="liveToggle" aria-label="Show or hide the live view" style="width:40px"><i data-i="eye"></i></button>
+          <div style="display:flex;gap:8px">
+            <button class="pill sm icon" id="liveFull" aria-label="Full screen" style="width:40px"><i data-i="expand"></i></button>
+            <button class="pill sm icon" id="liveToggle" aria-label="Show or hide the live view" style="width:40px"><i data-i="eye"></i></button>
+          </div>
         </div>
         <div id="liveBox">
-          <div class="screen"><img id="liveImg" alt=""><div class="msg" id="liveMsg">Starting the live view…</div></div>
-          <p class="hint">About two pictures a second. Netflix and other protected video, HDMI and the tuner show black.</p>
+          <div class="screen" id="liveScreen"><img id="liveImg" alt=""><div class="msg" id="liveMsg">Starting the live view…</div>
+            <button class="exit" id="liveExit" aria-label="Leave full screen"><i data-i="shrink"></i></button></div>
+          <p class="hint">About two pictures a second through the relay, smoother on the home network. Netflix and other protected video, HDMI and the tuner show black.</p>
         </div>
       </section>
 
@@ -437,6 +446,8 @@ export const PAGE = `<!doctype html>
     enter: '<path d="M20 5v6a3 3 0 0 1-3 3H5"/><path d="m9 10-4 4 4 4"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
     eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+    shrink: '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>',
     eyeoff: '<path d="M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-2.6 3.5M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2M3 3l18 18"/>',
     screen: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
     screenoff: '<path d="M7 4h12a2 2 0 0 1 2 2v8a2 2 0 0 1-1 1.7M17 16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 .6-1.4"/><path d="M8 20h8M12 16v4M3 3l18 18"/>',
@@ -584,7 +595,7 @@ export const PAGE = `<!doctype html>
     ws.onopen = () => {
       backoff = 1000;
       ws.send(JSON.stringify({ t: "auth", key: tv.key }));
-      if (liveOn) ws.send(JSON.stringify({ t: "live", on: true, fps: 2 }));
+      if (liveOn) ws.send(JSON.stringify({ t: "live", on: true, fps: LIVE_FPS }));
       clearInterval(pinger);
       pinger = setInterval(() => { try { ws.send("ping"); } catch (e) {} }, 30000);
     };
@@ -686,6 +697,9 @@ export const PAGE = `<!doctype html>
   document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 
   // ---- live view and remote keys -------------------------------------------------------------------
+  // Over the relay about 2 pictures a second; straight from the TV on the home network (the TV serves this page
+  // over http there) up to 30, the TV dropping frames it can't keep up with.
+  const LIVE_FPS = location.protocol === "http:" ? 30 : 2;
   let liveOn = false, frameUrl = null, lastFrameAt = 0;
   let liveShown = true;
   try { liveShown = localStorage.getItem("tvremote-live") !== "hidden"; } catch (e) {}
@@ -700,12 +714,34 @@ export const PAGE = `<!doctype html>
     try { localStorage.setItem("tvremote-live", liveShown ? "shown" : "hidden"); } catch (e) {}
     setLive(tab === "remote");
   };
+  // Full screen: the Fullscreen API (Android, desktop), else a fixed overlay (iPhone has the API only for video).
+  let fullHome = null;
+  function setFull(on) {
+    const el = $("liveScreen");
+    if (on === el.classList.contains("full")) return;
+    // Out to <body> while full: the card's backdrop-filter would make position:fixed relative to the card.
+    if (on) { fullHome = document.createComment("live"); el.replaceWith(fullHome); document.body.appendChild(el); }
+    else if (fullHome) { fullHome.replaceWith(el); fullHome = null; }
+    el.classList.toggle("full", on);
+    document.body.style.overflow = on ? "hidden" : "";
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (on && req) { try { const r = req.call(el); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
+    if (!on && (document.fullscreenElement || document.webkitFullscreenElement)) {
+      try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) {}
+    }
+    if (on && screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {});
+  }
+  $("liveFull").onclick = () => { if (!liveShown) { $("liveToggle").click(); } setFull(true); };
+  $("liveExit").onclick = () => setFull(false);
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement) setFull(false); });
+  document.addEventListener("webkitfullscreenchange", () => { if (!document.webkitFullscreenElement) setFull(false); });
+
   function setLive(on) {
     on = on && liveShown && !document.hidden && online !== false;
     if (on === liveOn) return;
     liveOn = on;
     if (on) { $("liveMsg").textContent = "Starting the live view…"; $("liveMsg").hidden = false; lastFrameAt = 0; }
-    if (sock && sock.readyState === 1) sock.send(JSON.stringify({ t: "live", on: on, fps: 2 }));
+    if (sock && sock.readyState === 1) sock.send(JSON.stringify({ t: "live", on: on, fps: LIVE_FPS }));
   }
   function showFrame(blob) {
     if (!liveOn) return;
