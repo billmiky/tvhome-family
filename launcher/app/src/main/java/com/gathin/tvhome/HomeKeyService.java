@@ -56,6 +56,9 @@ public class HomeKeyService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
+        // Remote buttons set on the TV (KeyRemap), unless InputKeyService is on too: every filtering service is
+        // asked about each key, so only one of them may run the action.
+        if (InputKeyService.running == null && KeyRemap.onKey(this, event)) return true;
         if (event.getKeyCode() != KeyEvent.KEYCODE_ALL_APPS) return false;
         if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
             Intent home = new Intent(Intent.ACTION_MAIN)

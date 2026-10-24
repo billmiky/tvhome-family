@@ -26,4 +26,32 @@
     <string name="input_key_service_description">Открывает список источников при нажатии кнопки выбора источника на пульте.</string>
     <string name="home_key_name">Кнопка «Домой»</string>
     <string name="home_key_description">Кнопка «Домой» на пульте открывает этот главный экран.</string>
+
+    <!-- Settings menu › Remote buttons (KeyRemap) -->
+    <string name="remap_menu">Кнопки пульта</string>
+    <string name="remap_count">Назначено: %1$d</string>
+    <string name="remap_none">Нет</string>
+    <string name="remap_helper_off">Помощник клавиш выключен</string>
+    <string name="remap_add">Добавить кнопку</string>
+    <string name="remap_add_hint">Нажмите или удерживайте</string>
+    <string name="remap_helper_needed">Сначала включите помощник клавиш лаунчера в Настройки › Специальные возможности.</string>
+    <string name="remap_press_title">Нажмите кнопку на пульте</string>
+    <string name="remap_press_hint">Удерживайте, чтобы назначить действие для удержания. «Назад» — отмена.</string>
+    <string name="remap_hold">%1$s, удержание</string>
+    <string name="remap_action_app">Открыть приложение</string>
+    <string name="remap_action_picture">Изображение вкл/выкл</string>
+    <string name="remap_action_adb">Отладка по Wi-Fi вкл/выкл</string>
+    <string name="remap_action_mute">Без звука</string>
+    <string name="remap_action_inputs">Входы</string>
+    <string name="remap_action_home">Главный экран</string>
+    <string name="remap_action_back">Назад</string>
+    <string name="remap_action_recents">Недавние приложения</string>
+    <string name="remap_action_settings">Настройки</string>
+    <string name="remap_action_webhook">Вебхук</string>
+    <string name="remap_remove">Удалить</string>
+    <string name="remap_save">Сохранить</string>
+    <string name="remap_webhook_title">URL вебхука (получает POST при каждом нажатии)</string>
+    <string name="remap_webhook_bad">Введите URL, начинающийся с http:// или https://</string>
+    <string name="remap_webhook_failed">Ошибка вебхука: %1$s</string>
+    <string name="remap_no_permission">Лаунчер не может это изменить (WRITE_SECURE_SETTINGS выдаётся скриптом установки).</string>
 </resources>

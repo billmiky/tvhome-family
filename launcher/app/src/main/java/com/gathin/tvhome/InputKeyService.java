@@ -84,6 +84,8 @@ public class InputKeyService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
+        // Buttons the owner set on the TV (KeyRemap) come before the config's.
+        if (KeyRemap.onKey(this, event)) return true;
         // app_keys: a scancode entry is more specific than any keycode, so it goes first.
         int scan = event.getScanCode();
         if (RemoteKeys.handle(this, event, appScancodes.get(scan), holdAppScancodes.get(scan))) return true;

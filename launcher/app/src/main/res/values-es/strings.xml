@@ -20,4 +20,32 @@
     <string name="cant_open">No se puede abrir %1$s</string>
     <string name="date_format">EEEE d \'de\' MMMM</string>
     <string name="dream_name">Reloj</string>
+
+    <!-- Settings menu › Remote buttons (KeyRemap) -->
+    <string name="remap_menu">Botones del mando</string>
+    <string name="remap_count">%1$d asignados</string>
+    <string name="remap_none">Ninguno</string>
+    <string name="remap_helper_off">Asistente de teclas desactivado</string>
+    <string name="remap_add">Añadir un botón</string>
+    <string name="remap_add_hint">Púlsalo o mantenlo</string>
+    <string name="remap_helper_needed">Activa primero el asistente de teclas del launcher en Ajustes › Accesibilidad.</string>
+    <string name="remap_press_title">Pulsa un botón del mando</string>
+    <string name="remap_press_hint">Mantenlo pulsado para asignar la pulsación larga. Atrás cancela.</string>
+    <string name="remap_hold">%1$s, mantenido</string>
+    <string name="remap_action_app">Abrir una app</string>
+    <string name="remap_action_picture">Imagen sí/no</string>
+    <string name="remap_action_adb">Depuración inalámbrica sí/no</string>
+    <string name="remap_action_mute">Silencio</string>
+    <string name="remap_action_inputs">Entradas</string>
+    <string name="remap_action_home">Inicio</string>
+    <string name="remap_action_back">Atrás</string>
+    <string name="remap_action_recents">Apps recientes</string>
+    <string name="remap_action_settings">Ajustes</string>
+    <string name="remap_action_webhook">Webhook</string>
+    <string name="remap_remove">Quitar</string>
+    <string name="remap_save">Guardar</string>
+    <string name="remap_webhook_title">URL del webhook (recibe un POST en cada pulsación)</string>
+    <string name="remap_webhook_bad">Escribe una URL que empiece por http:// o https://</string>
+    <string name="remap_webhook_failed">Error del webhook: %1$s</string>
+    <string name="remap_no_permission">El launcher no puede cambiar esto (WRITE_SECURE_SETTINGS, concedido por el script de instalación).</string>
 </resources>

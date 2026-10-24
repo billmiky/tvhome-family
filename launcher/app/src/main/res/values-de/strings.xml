@@ -21,4 +21,32 @@
     <string name="date_format">EEEE, d. MMMM</string>
     <string name="dream_name">Uhr</string>
     <string name="input_key_service_description">Öffnet die Quellenauswahl, wenn die Input-Taste der Fernbedienung gedrückt wird.</string>
+
+    <!-- Settings menu › Remote buttons (KeyRemap) -->
+    <string name="remap_menu">Fernbedienungstasten</string>
+    <string name="remap_count">%1$d belegt</string>
+    <string name="remap_none">Keine</string>
+    <string name="remap_helper_off">Tastenhelfer aus</string>
+    <string name="remap_add">Taste hinzufügen</string>
+    <string name="remap_add_hint">Drücken oder halten</string>
+    <string name="remap_helper_needed">Schalte zuerst den Tastenhelfer des Launchers unter Einstellungen › Bedienungshilfen ein.</string>
+    <string name="remap_press_title">Drücke eine Taste auf der Fernbedienung</string>
+    <string name="remap_press_hint">Halte sie gedrückt, um das Halten zu belegen. Zurück bricht ab.</string>
+    <string name="remap_hold">%1$s, gehalten</string>
+    <string name="remap_action_app">App öffnen</string>
+    <string name="remap_action_picture">Bild ein/aus</string>
+    <string name="remap_action_adb">Drahtloses Debugging ein/aus</string>
+    <string name="remap_action_mute">Stumm</string>
+    <string name="remap_action_inputs">Eingänge</string>
+    <string name="remap_action_home">Startseite</string>
+    <string name="remap_action_back">Zurück</string>
+    <string name="remap_action_recents">Letzte Apps</string>
+    <string name="remap_action_settings">Einstellungen</string>
+    <string name="remap_action_webhook">Webhook</string>
+    <string name="remap_remove">Entfernen</string>
+    <string name="remap_save">Speichern</string>
+    <string name="remap_webhook_title">Webhook-URL (erhält bei jedem Druck ein POST)</string>
+    <string name="remap_webhook_bad">Gib eine URL ein, die mit http:// oder https:// beginnt</string>
+    <string name="remap_webhook_failed">Webhook fehlgeschlagen: %1$s</string>
+    <string name="remap_no_permission">Der Launcher darf das nicht ändern (WRITE_SECURE_SETTINGS, vom Installationsskript erteilt).</string>
 </resources>

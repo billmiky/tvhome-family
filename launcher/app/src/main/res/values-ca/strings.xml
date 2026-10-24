@@ -19,4 +19,32 @@
     <string name="not_available">No disponible en aquest televisor</string>
     <string name="cant_open">No s\'ha pogut obrir %1$s</string>
     <string name="dream_name">Rellotge</string>
+
+    <!-- Settings menu › Remote buttons (KeyRemap) -->
+    <string name="remap_menu">Botons del comandament</string>
+    <string name="remap_count">%1$d assignats</string>
+    <string name="remap_none">Cap</string>
+    <string name="remap_helper_off">Assistent de tecles desactivat</string>
+    <string name="remap_add">Afegeix un botó</string>
+    <string name="remap_add_hint">Prem-lo o mantén-lo</string>
+    <string name="remap_helper_needed">Activa primer l\'assistent de tecles del launcher a Configuració › Accessibilitat.</string>
+    <string name="remap_press_title">Prem un botó del comandament</string>
+    <string name="remap_press_hint">Mantén-lo premut per assignar la pulsació llarga. Enrere cancel·la.</string>
+    <string name="remap_hold">%1$s, mantingut</string>
+    <string name="remap_action_app">Obre una app</string>
+    <string name="remap_action_picture">Imatge sí/no</string>
+    <string name="remap_action_adb">Depuració sense fil sí/no</string>
+    <string name="remap_action_mute">Silenci</string>
+    <string name="remap_action_inputs">Entrades</string>
+    <string name="remap_action_home">Inici</string>
+    <string name="remap_action_back">Enrere</string>
+    <string name="remap_action_recents">Apps recents</string>
+    <string name="remap_action_settings">Configuració</string>
+    <string name="remap_action_webhook">Webhook</string>
+    <string name="remap_remove">Elimina</string>
+    <string name="remap_save">Desa</string>
+    <string name="remap_webhook_title">URL del webhook (rep un POST a cada pulsació)</string>
+    <string name="remap_webhook_bad">Escriu una URL que comenci per http:// o https://</string>
+    <string name="remap_webhook_failed">Error del webhook: %1$s</string>
+    <string name="remap_no_permission">El launcher no pot canviar això (WRITE_SECURE_SETTINGS, concedit per l\'script d\'instal·lació).</string>
 </resources>

@@ -89,9 +89,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -3918,6 +3920,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             openAppLock();
         });
 
+        View remapRow = addMenuRow(rows, getString(R.string.remap_menu), remapState());
+        remapRow.setOnClickListener(v -> {
+            popup.dismiss();
+            showRemoteButtons();
+        });
+
         int hiddenCount = HiddenApps.get(getSharedPreferences(PREFS, MODE_PRIVATE)).size();
         View hiddenRow = addMenuRow(rows, getString(R.string.settings_menu_hidden_apps), hiddenCount == 0
                 ? getString(R.string.hidden_apps_none) : getString(R.string.hidden_apps_count, hiddenCount));
@@ -3954,6 +3962,242 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         fitBelow(popup, panel, anchor);
         dropIn(popup, panel, anchor, Gravity.END);
         rows.getChildAt(0).requestFocus();
+    }
+
+    // ---- remote buttons (KeyRemap) ---------------------------------------------------------------
+
+    /** The Remote buttons row: how many buttons are set, or that the key helper is off. */
+    private String remapState() {
+        if (!KeyRemap.helperOn()) return getString(R.string.remap_helper_off);
+        int n = KeyRemap.entries(this).size();
+        return n == 0 ? getString(R.string.remap_none) : getString(R.string.remap_count, n);
+    }
+
+    /** Settings menu, Remote buttons: Add a button, then every button set; OK on one changes or removes it. */
+    private void showRemoteButtons() {
+        View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
+        ((TextView) panel.findViewById(R.id.heading)).setText(R.string.remap_menu);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (420 * density));
+        final boolean on = KeyRemap.helperOn();
+        addMenuRow(rows, getString(R.string.remap_add), getString(on ? R.string.remap_add_hint : R.string.remap_helper_off))
+                .setOnClickListener(v -> {
+                    if (!KeyRemap.helperOn()) {
+                        Toast.makeText(this, R.string.remap_helper_needed, Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    popup.dismiss();
+                    recordButton();
+                });
+        List<KeyRemap.Entry> list = KeyRemap.entries(this);
+        for (KeyRemap.Entry e : list) {
+            addMenuRow(rows, buttonName(list, e.code, e.scan, e.hold), actionName(e)).setOnClickListener(v -> {
+                popup.dismiss();
+                showButtonActions(e.code, e.scan, e.hold);
+            });
+        }
+        fitBelow(popup, panel, btnSettings);
+        dropIn(popup, panel, btnSettings, Gravity.END);
+        rows.getChildAt(rows.getChildCount() > 1 ? 1 : 0).requestFocus();
+    }
+
+    /** "1", "PROG_RED", "MEDIA_PLAY_PAUSE, held"; the scancode too when another set button shares the keycode. */
+    private String buttonName(List<KeyRemap.Entry> list, int code, int scan, boolean hold) {
+        String name = KeyEvent.keyCodeToString(code);
+        if (name.startsWith("KEYCODE_")) name = name.substring(8);
+        for (KeyRemap.Entry x : list) {
+            if (x.code == code && x.scan != scan && scan > 0) {
+                name += " #" + scan;
+                break;
+            }
+        }
+        return hold ? getString(R.string.remap_hold, name) : name;
+    }
+
+    private String actionName(KeyRemap.Entry e) {
+        switch (e.action) {
+            case KeyRemap.APP: {
+                String input = RemoteKeys.inputId(e.arg);
+                return input != null ? input : appLabel(e.arg);
+            }
+            case KeyRemap.WEBHOOK:
+                try {
+                    return getString(R.string.remap_action_webhook) + " · " + new java.net.URL(e.arg).getHost();
+                } catch (Exception x) {
+                    return getString(R.string.remap_action_webhook);
+                }
+            default:
+                return getString(actionTitle(e.action));
+        }
+    }
+
+    private static int actionTitle(String action) {
+        switch (action) {
+            case KeyRemap.APP: return R.string.remap_action_app;
+            case KeyRemap.PICTURE: return R.string.remap_action_picture;
+            case KeyRemap.ADB_WIFI: return R.string.remap_action_adb;
+            case KeyRemap.MUTE: return R.string.remap_action_mute;
+            case KeyRemap.INPUTS: return R.string.remap_action_inputs;
+            case KeyRemap.HOME: return R.string.remap_action_home;
+            case KeyRemap.BACK: return R.string.remap_action_back;
+            case KeyRemap.RECENTS: return R.string.remap_action_recents;
+            case KeyRemap.SETTINGS: return R.string.remap_action_settings;
+            default: return R.string.remap_action_webhook;
+        }
+    }
+
+    /** Waits for one button from the key helper (KeyRemap.recorder); a held button sets what holding it does. */
+    private void recordButton() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundResource(R.drawable.glass_panel);
+        int pad = (int) (24 * density);
+        panel.setPadding(pad, pad, pad, pad);
+        TextView title = new TextView(this);
+        title.setText(R.string.remap_press_title);
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        title.setTypeface(UiFont.get(this));
+        panel.addView(title);
+        TextView hint = new TextView(this);
+        hint.setText(R.string.remap_press_hint);
+        hint.setTextColor(0xB3FFFFFF);
+        hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        hint.setTypeface(UiFont.get(this));
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hp.topMargin = (int) (10 * density);
+        panel.addView(hint, hp);
+        final Dialog dialog = glassDialog(panel);
+        final KeyRemap.Recorder r = (code, scan, hold) -> {
+            dialog.dismiss();
+            if (!isDestroyed()) showButtonActions(code, scan, hold);
+        };
+        dialog.setOnDismissListener(d -> {
+            if (KeyRemap.recorder == r) KeyRemap.recorder = null;
+        });
+        KeyRemap.recorder = r;
+        dialog.show();
+    }
+
+    /** What a button does: every action, the current one marked; OK sets it. Remove when it is set. */
+    private void showButtonActions(int code, int scan, boolean hold) {
+        List<KeyRemap.Entry> list = KeyRemap.entries(this);
+        KeyRemap.Entry now = null;
+        for (KeyRemap.Entry e : list) if (e.sameButton(code, scan, hold)) now = e;
+        View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
+        ((TextView) panel.findViewById(R.id.heading)).setText(buttonName(list, code, scan, hold));
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (420 * density));
+        View focus = null;
+        for (String action : KeyRemap.ACTIONS) {
+            boolean current = now != null && now.action.equals(action);
+            String status = current ? actionName(now) : "";
+            View row = addMenuRow(rows, getString(actionTitle(action)), status);
+            if (current) focus = row;
+            row.setOnClickListener(v -> {
+                popup.dismiss();
+                if (KeyRemap.APP.equals(action)) {
+                    pickButtonApp(code, scan, hold);
+                } else if (KeyRemap.WEBHOOK.equals(action)) {
+                    editWebhook(code, scan, hold);
+                } else {
+                    setButton(code, scan, hold, action, "");
+                }
+            });
+        }
+        if (now != null) {
+            addMenuRow(rows, getString(R.string.remap_remove), "").setOnClickListener(v -> {
+                popup.dismiss();
+                KeyRemap.save(this, KeyRemap.with(KeyRemap.entries(this), code, scan, hold, null));
+                showRemoteButtons();
+            });
+        }
+        fitBelow(popup, panel, btnSettings);
+        dropIn(popup, panel, btnSettings, Gravity.END);
+        (focus != null ? focus : rows.getChildAt(0)).requestFocus();
+    }
+
+    private void setButton(int code, int scan, boolean hold, String action, String arg) {
+        KeyRemap.save(this, KeyRemap.with(KeyRemap.entries(this), code, scan, hold, new KeyRemap.Entry(code, scan, hold, action, arg)));
+        showRemoteButtons();
+    }
+
+    /** Every app with a launcher entry, TV or phone, by name; OK sets it. */
+    private void pickButtonApp(int code, int scan, boolean hold) {
+        PackageManager pm = getPackageManager();
+        Map<String, String> apps = new HashMap<>();   // package -> label
+        for (String category : new String[] {Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER}) {
+            for (ResolveInfo ri : pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(category), 0)) {
+                String pkg = ri.activityInfo.packageName;
+                if (!pkg.equals(getPackageName()) && !apps.containsKey(pkg)) apps.put(pkg, String.valueOf(ri.loadLabel(pm)));
+            }
+        }
+        List<Map.Entry<String, String>> sorted = new ArrayList<>(apps.entrySet());
+        Collections.sort(sorted, (a, b) -> a.getValue().compareToIgnoreCase(b.getValue()));
+        View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
+        ((TextView) panel.findViewById(R.id.heading)).setText(R.string.remap_action_app);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (420 * density));
+        for (Map.Entry<String, String> app : sorted) {
+            addMenuRow(rows, app.getValue(), "").setOnClickListener(v -> {
+                popup.dismiss();
+                setButton(code, scan, hold, KeyRemap.APP, app.getKey());
+            });
+        }
+        fitBelow(popup, panel, btnSettings);
+        dropIn(popup, panel, btnSettings, Gravity.END);
+        if (rows.getChildCount() > 0) rows.getChildAt(0).requestFocus();
+    }
+
+    /** The webhook's URL (the phone remote's keyboard can type it); it gets a JSON POST on every press. */
+    private void editWebhook(int code, int scan, boolean hold) {
+        KeyRemap.Entry now = KeyRemap.find(KeyRemap.entries(this), code, scan, hold);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundResource(R.drawable.glass_panel);
+        int pad = (int) (24 * density);
+        panel.setPadding(pad, pad, pad, (int) (18 * density));
+        TextView title = new TextView(this);
+        title.setText(R.string.remap_webhook_title);
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        title.setTypeface(UiFont.get(this));
+        panel.addView(title);
+        final android.widget.EditText url = new android.widget.EditText(this);
+        url.setSingleLine(true);
+        url.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        url.setText(now != null && KeyRemap.WEBHOOK.equals(now.action) ? now.arg : "");
+        url.setHint("http://192.168.1.10:8123/api/webhook/tv");
+        url.setTextColor(Color.WHITE);
+        url.setHintTextColor(0x66FFFFFF);
+        url.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        url.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        url.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(500)});
+        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        np.topMargin = (int) (14 * density);
+        panel.addView(url, np);
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bp.topMargin = (int) (16 * density);
+        panel.addView(buttons, bp);
+        final Dialog dialog = glassDialog(panel);
+        Runnable save = () -> {
+            String u = url.getText().toString().trim();
+            if (!KeyRemap.webhookUrl(u)) {
+                Toast.makeText(this, R.string.remap_webhook_bad, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            dialog.dismiss();
+            setButton(code, scan, hold, KeyRemap.WEBHOOK, u);
+        };
+        url.setOnEditorActionListener((v, actionId, event) -> {
+            save.run();
+            return true;
+        });
+        buttons.addView(dialogButton(getString(R.string.remap_save), save));
+        dialog.show();
+        url.requestFocus();
     }
 
     // ---- network menu (hold OK on the network pill) ---------------------------------------------

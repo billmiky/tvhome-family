@@ -20,4 +20,32 @@
     <string name="cant_open">无法打开 %1$s</string>
     <string name="date_format">M月d日 EEEE</string>
     <string name="dream_name">时钟</string>
+
+    <!-- Settings menu › Remote buttons (KeyRemap) -->
+    <string name="remap_menu">遥控器按键</string>
+    <string name="remap_count">已设置 %1$d 个</string>
+    <string name="remap_none">无</string>
+    <string name="remap_helper_off">按键助手已关闭</string>
+    <string name="remap_add">添加按键</string>
+    <string name="remap_add_hint">按下或长按</string>
+    <string name="remap_helper_needed">请先在 设置 › 无障碍 中开启启动器的按键助手。</string>
+    <string name="remap_press_title">请按遥控器上的一个按键</string>
+    <string name="remap_press_hint">长按可设置长按时的操作。按返回取消。</string>
+    <string name="remap_hold">%1$s，长按</string>
+    <string name="remap_action_app">打开应用</string>
+    <string name="remap_action_picture">画面开/关</string>
+    <string name="remap_action_adb">无线调试开/关</string>
+    <string name="remap_action_mute">静音</string>
+    <string name="remap_action_inputs">信号源</string>
+    <string name="remap_action_home">主屏幕</string>
+    <string name="remap_action_back">返回</string>
+    <string name="remap_action_recents">最近使用的应用</string>
+    <string name="remap_action_settings">设置</string>
+    <string name="remap_action_webhook">Webhook</string>
+    <string name="remap_remove">移除</string>
+    <string name="remap_save">保存</string>
+    <string name="remap_webhook_title">Webhook 网址（每次按下都会收到 POST）</string>
+    <string name="remap_webhook_bad">请输入以 http:// 或 https:// 开头的网址</string>
+    <string name="remap_webhook_failed">Webhook 失败：%1$s</string>
+    <string name="remap_no_permission">启动器无权更改此项（WRITE_SECURE_SETTINGS，由安装脚本授予）。</string>
 </resources>

@@ -21,4 +21,31 @@
     <string name="date_format">EEEE  d MMMM</string>
     <string name="dream_name">นาฬิกา</string>
 
+    <!-- Settings menu › Remote buttons (KeyRemap) -->
+    <string name="remap_menu">ปุ่มรีโมต</string>
+    <string name="remap_count">ตั้งไว้ %1$d ปุ่ม</string>
+    <string name="remap_none">ไม่มี</string>
+    <string name="remap_helper_off">ตัวช่วยปุ่มปิดอยู่</string>
+    <string name="remap_add">เพิ่มปุ่ม</string>
+    <string name="remap_add_hint">กดหรือกดค้าง</string>
+    <string name="remap_helper_needed">เปิดตัวช่วยปุ่มของ launcher ใน การตั้งค่า › การช่วยเหลือพิเศษ ก่อน</string>
+    <string name="remap_press_title">กดปุ่มบนรีโมต</string>
+    <string name="remap_press_hint">กดค้างเพื่อตั้งการทำงานเมื่อกดค้าง กด Back เพื่อยกเลิก</string>
+    <string name="remap_hold">%1$s, กดค้าง</string>
+    <string name="remap_action_app">เปิดแอป</string>
+    <string name="remap_action_picture">เปิด/ปิดภาพ</string>
+    <string name="remap_action_adb">เปิด/ปิดการแก้ไขข้อบกพร่องผ่านไร้สาย</string>
+    <string name="remap_action_mute">ปิดเสียง</string>
+    <string name="remap_action_inputs">อินพุต</string>
+    <string name="remap_action_home">หน้าหลัก</string>
+    <string name="remap_action_back">ย้อนกลับ</string>
+    <string name="remap_action_recents">แอปล่าสุด</string>
+    <string name="remap_action_settings">การตั้งค่า</string>
+    <string name="remap_action_webhook">Webhook</string>
+    <string name="remap_remove">ลบ</string>
+    <string name="remap_save">บันทึก</string>
+    <string name="remap_webhook_title">URL ของ webhook (ได้รับ POST ทุกครั้งที่กด)</string>
+    <string name="remap_webhook_bad">ใส่ URL ที่ขึ้นต้นด้วย http:// หรือ https://</string>
+    <string name="remap_webhook_failed">Webhook ล้มเหลว: %1$s</string>
+    <string name="remap_no_permission">launcher เปลี่ยนค่านี้ไม่ได้ (WRITE_SECURE_SETTINGS ได้จากสคริปต์ติดตั้ง)</string>
 </resources>
