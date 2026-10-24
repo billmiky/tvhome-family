@@ -166,13 +166,12 @@ export const PAGE = `<!doctype html>
         </div>
         <div class="line">
           <button class="round" data-key="Mute" aria-label="Mute"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6M21 9l-5 6"/></svg></button>
-          <div class="pill2"><button id="volDown" aria-label="Volume down (hold to mute)"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/></svg></button><button data-key="VolumeUp" data-repeat aria-label="Volume up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/></svg></button></div>
+          <div class="pill2"><button data-key="VolumeDown" data-repeat aria-label="Volume down"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/></svg></button><button data-key="VolumeUp" data-repeat aria-label="Volume up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/></svg></button></div>
         </div>
         <div class="line">
           <button class="round" id="kbOpen" aria-label="Keyboard"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
           <div class="pill2"><button data-key="ChannelDown" data-repeat aria-label="Channel down"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 12h12"/></svg></button><span class="tag">CH</span><button data-key="ChannelUp" data-repeat aria-label="Channel up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg></button></div>
         </div>
-        <p class="hint" style="text-align:center">Hold volume down for a second to mute.</p>
       </section>
       <section class="needs-tv" id="kb" hidden>
         <div class="head"><h2>Keyboard</h2><button id="kbClose" style="flex:0 0 auto;padding:6px 12px">Done</button></div>
@@ -509,30 +508,6 @@ export const PAGE = `<!doctype html>
     ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => b.addEventListener(ev, stop));
     b.addEventListener("contextmenu", (e) => e.preventDefault());
   });
-  // Volume down: a press lowers it; held for a second it mutes instead.
-  (() => {
-    const b = $("volDown");
-    let timer = null, muted = false;
-    b.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      muted = false;
-      timer = setTimeout(() => {
-        muted = true;
-        if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-        press("Mute").then(() => toast("Mute"));
-      }, 1000);
-    });
-    const end = (fire) => {
-      if (!timer) return;
-      clearTimeout(timer);
-      timer = null;
-      if (fire && !muted) press("VolumeDown");
-    };
-    b.addEventListener("pointerup", () => end(true));
-    b.addEventListener("pointerleave", () => end(false));
-    b.addEventListener("pointercancel", () => end(false));
-    b.addEventListener("contextmenu", (e) => e.preventDefault());
-  })();
 
   // Keyboard: the whole text goes to the TV's focused field as it is typed (a pause of 350 ms).
   let typeTimer = null, typing = Promise.resolve();
