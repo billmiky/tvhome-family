@@ -120,7 +120,7 @@ export const PAGE = `<!doctype html>
   .rocker { flex:0 1 220px; display:flex; align-items:stretch; height:58px; border-radius:29px; background:var(--key); border:1px solid var(--hair); overflow:hidden; }
   .rocker button { flex:1; }
   .rocker button:active { background:var(--key-on); }
-  .rocker button + button, .rocker .tag + button { border-left:1px solid rgba(255,255,255,.08); }
+  .rocker button + button { border-left:1px solid rgba(255,255,255,.08); }
   .rocker .tag { align-self:center; font-size:11px; font-weight:600; letter-spacing:.2em; color:var(--faint); padding:0 6px 0 8px; }
   .power { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; }
   .power button { display:flex; flex-direction:column; align-items:center; gap:7px; padding:12px 2px 10px; border-radius:18px; background:var(--key);
