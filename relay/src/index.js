@@ -289,6 +289,7 @@ export class Tv extends DurableObject {
       const a = ws.deserializeAttachment();
       if (a && a.live) this.liveChanged(ws);
     }
+    if (this.ctx.getTags(ws).includes("tv")) await this.seen(ws);
     if (this.ctx.getTags(ws).includes("tv") && !this.ctx.getWebSockets("tv").some((s) => s !== ws)) {
       await this.ctx.storage.setAlarm(Date.now() + OFF_AFTER_MS);
       await this.broadcast(false);
@@ -319,12 +320,29 @@ export class Tv extends DurableObject {
     } catch {}
   }
 
+  /**
+   * Last seen: the TV's keep-alive pings are answered without waking the object, so lastSeen alone is
+   * when it last connected or answered; the latest ping (or this moment, for a socket closing) is fresher.
+   */
+  async seen(ws) {
+    let t = Date.now();
+    if (ws) {
+      try {
+        const ping = this.ctx.getWebSocketAutoResponseTimestamp(ws);
+        if (ping) t = Math.max(ping.getTime(), (await this.ctx.storage.get("lastSeen")) || 0);
+      } catch {}
+    }
+    await this.ctx.storage.put("lastSeen", t);
+  }
+
   // ---- status, power, push ---------------------------------------------------------------------------
 
   async status(online) {
+    const live = online === undefined ? !!this.tv() : online;
+    if (live) await this.ctx.storage.put("lastSeen", Date.now());
     const s = await this.ctx.storage.get(["name", "lastSeen", "state", "power"]);
     return {
-      online: online === undefined ? !!this.tv() : online,
+      online: live,
       name: s.get("name") || "TV",
       lastSeen: s.get("lastSeen") || 0,
       state: s.get("state") || null,
