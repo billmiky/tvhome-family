@@ -130,8 +130,18 @@ export class Tv extends DurableObject {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
-  tv() {
-    return this.ctx.getWebSockets("tv")[0] || null;
+  /**
+   * The TV's newest open socket. A replaced one stays in getWebSockets while CLOSING (its peer, usually dead,
+   * never answers the close), and it comes first: commands sent to it fail as "offline" while the TV is here.
+   */
+  tv(except) {
+    let best = null, since = -1;
+    for (const s of this.ctx.getWebSockets("tv")) {
+      if (s === except || s.readyState !== WebSocket.OPEN) continue;
+      const t = (s.deserializeAttachment() || {}).since || 0;
+      if (t > since) (best = s), (since = t);
+    }
+    return best;
   }
 
   async paired(key) {
@@ -190,6 +200,7 @@ export class Tv extends DurableObject {
     }
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server, ["tv"]);
+    server.serializeAttachment({ since: Date.now() });
     await this.ctx.storage.put("lastSeen", Date.now());
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.delete(["droppedAt", "offlineSent"]);
@@ -294,7 +305,7 @@ export class Tv extends DurableObject {
       if (a && a.live) this.liveChanged(ws);
     }
     if (this.ctx.getTags(ws).includes("tv")) await this.seen(ws);
-    if (this.ctx.getTags(ws).includes("tv") && !this.ctx.getWebSockets("tv").some((s) => s !== ws)) {
+    if (this.ctx.getTags(ws).includes("tv") && !this.tv(ws)) {
       // Not offline yet: the alarm says so if the TV hasn't come back within GRACE_MS.
       await this.ctx.storage.put({ droppedAt: Date.now(), offlineSent: false });
       await this.ctx.storage.setAlarm(Date.now() + GRACE_MS);
@@ -462,7 +473,8 @@ export class Tv extends DurableObject {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pending.delete(n);
-        resolve({ ok: false, offline: true, msg: "The TV did not answer." });
+        // Connected but slow (or the path is half-dead): not "offline", which makes the phone hide the controls.
+        resolve({ ok: false, timeout: true, msg: "The TV did not answer." });
       }, ms);
       this.pending.set(n, (r) => {
         clearTimeout(timer);

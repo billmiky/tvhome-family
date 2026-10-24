@@ -43,9 +43,10 @@ import javax.net.ssl.SSLSocketFactory;
  * set_psk, set_pin, lock, unlock, lock_timer, lock_timer_cancel and ping; each is answered with an ack
  * the phone page shows, carrying the lock state (TvLock).
  *
- * One daemon thread for the socket, reconnecting with backoff; a ping every 45 s keeps it open through
- * NATs (the relay answers without waking up), and silence for 100 s or the screen coming on reconnects.
- * Off when remote_relay is empty.
+ * One daemon thread for the socket, reconnecting with backoff; a ping every 20 s keeps it open through
+ * NATs and a VPN's userspace TCP stack (Proxy Switchboard drops a flow idle for 60 s), and the relay answers
+ * it without waking up. No pong within 10 s, silence for 60 s, a new default network or the screen coming
+ * on reconnects. Off when remote_relay is empty.
  */
 final class RemoteRelay {
     static final String TAG = "TvHomeRemote";
@@ -54,8 +55,12 @@ final class RemoteRelay {
     private static final String PREF_TV_KEY = "remote_tv_key";
     private static final String PREF_PHONE_KEY = "remote_phone_key";
     static final String PREF_PSK = "sony_psk";
-    private static final int PING_MS = 45_000;
-    private static final int READ_TIMEOUT_MS = 100_000;
+    private static final int PING_MS = 20_000;
+    /** A ping not answered this soon: the path is dead one way (a half-open socket), drop it. */
+    private static final int PONG_MS = 10_000;
+    private static final int READ_TIMEOUT_MS = 60_000;
+    /** TLS handshake and the 101: a VPN accepts the TCP connection at once, so a dead path stalls here. */
+    private static final int HANDSHAKE_MS = 15_000;
     /** A Wi-Fi blip fails a few attempts in a row (no route, no DNS): keep the wait short so it comes back soon. */
     private static final long MAX_BACKOFF_MS = 30_000;
     private static final int MAX_FRAME = 64 * 1024;
@@ -75,6 +80,10 @@ final class RemoteRelay {
     private static volatile Socket socket;
     private static volatile boolean online;
     private static volatile long startedAt;
+    /** When the relay last sent anything (elapsedRealtime): a pong, a command, a frame. */
+    private static volatile long lastHeard;
+    /** The default network the last connect went out on: a different one means the socket is stale. */
+    private static volatile android.net.Network network;
     private static Context app;
     private static final Object writeLock = new Object();
     private static final ExecutorService work = Executors.newSingleThreadExecutor(r -> {
@@ -111,9 +120,14 @@ final class RemoteRelay {
             if (cm != null) {
                 cm.registerDefaultNetworkCallback(new android.net.ConnectivityManager.NetworkCallback() {
                     @Override
-                    public void onAvailable(android.net.Network network) {
+                    public void onAvailable(android.net.Network n) {
                         // Android calls this once at registration too, while the first connect is under way.
-                        if (!online && android.os.SystemClock.elapsedRealtime() - startedAt > 5000) kick();
+                        android.net.Network was = network;
+                        network = n;
+                        if (android.os.SystemClock.elapsedRealtime() - startedAt <= 5000) return;
+                        // A VPN coming up or going away is a new default network: the open socket went out on
+                        // the old one and may be dead without knowing it, so reconnect even when online.
+                        if (!online || (was != null && !was.equals(n))) kick();
                     }
                 });
             }
@@ -198,6 +212,7 @@ final class RemoteRelay {
         if (tls) {
             Socket raw = new Socket();
             raw.connect(new InetSocketAddress(host, port), 10_000);
+            raw.setSoTimeout(HANDSHAKE_MS);
             SSLSocket ssl = (SSLSocket) ((SSLSocketFactory) SSLSocketFactory.getDefault()).createSocket(raw, host, port, true);
             // A layered socket checks the chain but not the name: ask for the HTTPS host check.
             SSLParameters params = ssl.getSSLParameters();
@@ -210,7 +225,7 @@ final class RemoteRelay {
             s.connect(new InetSocketAddress(host, port), 10_000);
         }
         socket = s;
-        s.setSoTimeout(READ_TIMEOUT_MS);
+        s.setSoTimeout(HANDSHAKE_MS);
         s.setKeepAlive(true);
         OutputStream out = s.getOutputStream();
         InputStream in = new BufferedInputStream(s.getInputStream());
@@ -238,15 +253,26 @@ final class RemoteRelay {
         String want = Base64.encodeToString(MessageDigest.getInstance("SHA-1")
                 .digest((wsKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes(StandardCharsets.US_ASCII)), Base64.NO_WRAP);
         if (!want.equals(accept)) throw new IOException("bad handshake");
+        s.setSoTimeout(READ_TIMEOUT_MS);
 
         online = true;
+        lastHeard = android.os.SystemClock.elapsedRealtime();
         hello();
         final Socket mine = s;
         Thread pinger = new Thread(() -> {
             try {
                 while (socket == mine) {
                     Thread.sleep(PING_MS);
-                    if (socket == mine) send("ping");
+                    if (socket != mine) break;
+                    long sent = android.os.SystemClock.elapsedRealtime();
+                    send("ping");
+                    Thread.sleep(PONG_MS);
+                    // Writes still succeed into a path that drops what comes back (a VPN's TCP stack ACKs them
+                    // itself): only the missing pong shows it. Closing makes the read loop end and reconnect.
+                    if (socket == mine && lastHeard < sent) {
+                        Log.i(TAG, "no pong in " + PONG_MS + " ms: reconnecting");
+                        closeQuietly();
+                    }
                 }
             } catch (Exception ignored) {
                 // The read loop notices the socket is gone.
@@ -275,6 +301,7 @@ final class RemoteRelay {
                 off += n;
             }
             if (mask != null) for (int i = 0; i < data.length; i++) data[i] ^= mask[i & 3];
+            lastHeard = android.os.SystemClock.elapsedRealtime();
             if (op == 0x8) throw new EOFException("closed by relay");
             if (op == 0x9) {
                 frame(0xA, data);
