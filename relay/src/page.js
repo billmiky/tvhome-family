@@ -237,7 +237,7 @@ export const PAGE = `<!doctype html>
           <button class="arrow left" data-key="Left" data-repeat aria-label="Left"><i data-i="left"></i></button>
           <button class="arrow right" data-key="Right" data-repeat aria-label="Right"><i data-i="right"></i></button>
           <button class="arrow down" data-key="Down" data-repeat aria-label="Down"><i data-i="down"></i></button>
-          <button class="ok" data-key="Confirm" aria-label="OK">OK</button>
+          <button class="ok" id="okBtn" aria-label="OK, hold for the long press">OK</button>
         </div>
         <div class="line">
           <button class="key" data-key="Return" aria-label="Back"><i data-i="back"></i></button>
@@ -738,6 +738,31 @@ export const PAGE = `<!doctype html>
     ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => b.addEventListener(ev, stop));
     b.addEventListener("contextmenu", (e) => e.preventDefault());
   });
+
+  // OK: a tap presses OK; held for 0.6 s it is the remote's long press (IRCC has no key hold, so the TV's
+  // accessibility service long-clicks whatever has the focus).
+  (() => {
+    const b = $("okBtn");
+    let timer = null, held = false;
+    b.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      held = false;
+      timer = setTimeout(() => {
+        timer = null;
+        held = true;
+        if (navigator.vibrate) navigator.vibrate([15, 40, 15]);
+        if (caps && caps.indexOf("longpress") < 0) { toast("Holding OK needs a newer launcher on the TV.", true); return; }
+        pressing = pressing.then(() => run("longpress", {}, null)).catch(() => {});
+      }, 600);
+    });
+    const end = (tap) => {
+      if (timer) { clearTimeout(timer); timer = null; if (tap && !held) press("Confirm"); }
+    };
+    b.addEventListener("pointerup", () => end(true));
+    b.addEventListener("pointerleave", () => end(false));
+    b.addEventListener("pointercancel", () => end(false));
+    b.addEventListener("contextmenu", (e) => e.preventDefault());
+  })();
 
   // Keyboard: the whole text goes to the TV's focused field as it is typed (a pause of 350 ms).
   let typeTimer = null, typing = Promise.resolve();
