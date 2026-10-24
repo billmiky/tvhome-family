@@ -365,6 +365,11 @@ export const PAGE = `<!doctype html>
           <div class="txt"><b>Notifications</b><span id="notifyHint">When the TV turns on or off</span></div>
           <input type="checkbox" class="switch" id="notify" aria-label="Notify me when the TV turns on or off">
         </div>
+        <div class="setting" id="notifyOffRow" hidden>
+          <span class="ic"><i data-i="power"></i></span>
+          <div class="txt"><b>When it turns off</b><span>Off: only when the TV turns on</span></div>
+          <input type="checkbox" class="switch" id="notifyOff" aria-label="Also notify me when the TV turns off">
+        </div>
         <div class="setting" id="install" hidden>
           <span class="ic"><i data-i="add"></i></span>
           <div class="txt"><b>Add to Home Screen</b><span id="installHint"></span></div>
@@ -937,6 +942,14 @@ export const PAGE = `<!doctype html>
   const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const NOTIFY = "tvremote-notify";
+  const NOTIFY_OFF = "tvremote-notify-off";
+  function notifyOff() {
+    try { return localStorage.getItem(NOTIFY_OFF) !== "0"; } catch (e) { return true; }
+  }
+  function showNotifyOff(on) {
+    $("notifyOffRow").hidden = !on;
+    $("notifyOff").checked = notifyOff();
+  }
   function canPush() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
   function b64ToBytes(s) {
     const t = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
@@ -951,6 +964,7 @@ export const PAGE = `<!doctype html>
     let on = false;
     try { on = localStorage.getItem(NOTIFY) === "1" && Notification.permission === "granted"; } catch (e) {}
     $("notify").checked = on;
+    showNotifyOff(on);
     if (Notification.permission === "denied") $("notifyHint").textContent = "Blocked in the phone's settings";
   }
   $("notify").onchange = async (e) => {
@@ -962,9 +976,10 @@ export const PAGE = `<!doctype html>
         if (perm !== "granted") throw new Error("Notifications were not allowed.");
         const v = await (await fetch("/api/vapid")).json();
         const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(v.key) });
-        const j = await post("/api/push", { sub: sub.toJSON(), test: true });
+        const j = await post("/api/push", { sub: sub.toJSON(), test: true, off: notifyOff() });
         if (!j.ok) throw new Error(j.msg || j.error || "The relay refused.");
         try { localStorage.setItem(NOTIFY, "1"); } catch (err) {}
+        showNotifyOff(true);
         toast("Notifications on.");
       } catch (err) {
         box.checked = false;
@@ -976,7 +991,23 @@ export const PAGE = `<!doctype html>
         if (sub) { await post("/api/push", { unsubscribe: sub.endpoint }); await sub.unsubscribe(); }
       } catch (err) {}
       try { localStorage.removeItem(NOTIFY); } catch (err) {}
+      showNotifyOff(false);
       toast("Notifications off.");
+    }
+  };
+  $("notifyOff").onchange = async (e) => {
+    const box = e.currentTarget;
+    try {
+      const reg = swReg || (await navigator.serviceWorker.ready);
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) throw new Error("Switch notifications on first.");
+      const j = await post("/api/push", { endpoint: sub.endpoint, off: box.checked });
+      if (!j.ok) throw new Error(j.msg || j.error || "The relay refused.");
+      try { localStorage.setItem(NOTIFY_OFF, box.checked ? "1" : "0"); } catch (err) {}
+      toast(box.checked ? "You will be told when the TV turns on or off." : "Only when the TV turns on.");
+    } catch (err) {
+      box.checked = !box.checked;
+      toast(err.message || "Could not change it.", true);
     }
   };
 

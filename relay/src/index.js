@@ -391,15 +391,20 @@ export class Tv extends DurableObject {
       title: power === "on" ? `${name} is on` : `${name} is off`,
       body: power === "on" ? "The TV was switched on." : "The TV was switched off.",
       tag: "tv-power",
-    });
+    }, power === "off" ? (sub) => sub.off !== false : null);
   }
 
-  async notify(payload) {
+  /** Pushes to every subscriber, or to those {@code only} accepts (the others are kept as they are). */
+  async notify(payload, only) {
     const subs = (await this.ctx.storage.get("subs")) || [];
     if (!subs.length) return;
     const keys = await vapidKeys(this.env);
     const keep = [];
     for (const sub of subs) {
+      if (only && !only(sub)) {
+        keep.push(sub);
+        continue;
+      }
       try {
         const status = await push(sub, payload, keys, this.env.VAPID_SUBJECT || SUBJECT);
         if (status !== 404 && status !== 410) keep.push(sub);
@@ -417,13 +422,21 @@ export class Tv extends DurableObject {
       await this.ctx.storage.put("subs", subs);
       return json(200, { ok: true, msg: "Notifications off." });
     }
+    // Only "TV is off" switched on or off for a phone that is already subscribed.
+    if (typeof body.endpoint === "string" && typeof body.off === "boolean") {
+      const sub = subs.find((x) => x.endpoint === body.endpoint);
+      if (!sub) return json(404, { ok: false, error: "not subscribed" });
+      sub.off = body.off;
+      await this.ctx.storage.put("subs", subs);
+      return json(200, { ok: true });
+    }
     const s = body.sub;
     if (!s || typeof s.endpoint !== "string" || !s.endpoint.startsWith("https://") || s.endpoint.length > 1000
       || !s.keys || typeof s.keys.p256dh !== "string" || typeof s.keys.auth !== "string") {
       return json(400, { ok: false, error: "bad subscription" });
     }
     subs = subs.filter((x) => x.endpoint !== s.endpoint);
-    subs.push({ endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth } });
+    subs.push({ endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth }, off: body.off !== false });
     await this.ctx.storage.put("subs", subs.slice(-MAX_SUBS));
     if (body.test) {
       const name = (await this.ctx.storage.get("name")) || "TV";
