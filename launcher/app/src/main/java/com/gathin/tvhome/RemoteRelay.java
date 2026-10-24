@@ -97,14 +97,18 @@ final class RemoteRelay {
         t.setPriority(Thread.MIN_PRIORITY);
         thread = t;
         t.start();
-        // Back from standby the old socket is usually dead: reconnect at once instead of waiting it out.
+        // Back from standby the old socket is usually dead: reconnect at once instead of waiting it out
+        // (the new hello says the TV is on). Going off, tell the relay first: the socket may not survive.
         try {
+            IntentFilter screenOnOff = new IntentFilter(Intent.ACTION_SCREEN_ON);
+            screenOnOff.addAction(Intent.ACTION_SCREEN_OFF);
             app.registerReceiver(new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context c, Intent i) {
-                    kick();
+                    if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) event("off");
+                    else kick();
                 }
-            }, new IntentFilter(Intent.ACTION_SCREEN_ON));
+            }, screenOnOff);
         } catch (Exception e) {
             Log.w(TAG, "no screen-on receiver: " + e);
         }
@@ -280,11 +284,32 @@ final class RemoteRelay {
                     .put("t", "hello")
                     .put("name", name)
                     .put("v", BuildConfig.VERSION_NAME)
-                    .put("phones", new JSONArray().put(sha256(p.getString(PREF_PHONE_KEY, ""))));
+                    .put("phones", new JSONArray().put(sha256(p.getString(PREF_PHONE_KEY, ""))))
+                    .put("power", interactive() ? "on" : "off")
+                    .put("state", TvLock.state(app));
             send(m.toString());
         } catch (Exception e) {
             Log.w(TAG, "hello failed: " + e);
         }
+    }
+
+    /** Power ("on"/"off", or null to leave it) and the lock state, for the phone pages and notifications. */
+    static void event(String power) {
+        if (app == null || base == null) return;
+        work.execute(() -> {
+            try {
+                JSONObject m = new JSONObject().put("t", "event").put("state", TvLock.state(app));
+                if (power != null) m.put("power", power);
+                send(m.toString());
+            } catch (Exception e) {
+                // Offline: the next hello carries the state.
+            }
+        });
+    }
+
+    private static boolean interactive() {
+        android.os.PowerManager pm = app.getSystemService(android.os.PowerManager.class);
+        return pm == null || pm.isInteractive();
     }
 
     private static void send(String text) throws IOException {
@@ -326,11 +351,13 @@ final class RemoteRelay {
         final String n = m.optString("n");
         final String cmd = m.optString("cmd");
         final String arg = m.optString("text", "");
+        final JSONObject args = m.optJSONObject("args") != null ? m.optJSONObject("args") : new JSONObject();
         work.execute(() -> {
             boolean ok = true;
             String msg;
+            JSONObject out = new JSONObject();
             try {
-                msg = run(cmd, arg);
+                msg = run(cmd, arg, args, out);
             } catch (SonyIp.Failed f) {
                 ok = false;
                 msg = f.getMessage();
@@ -339,16 +366,37 @@ final class RemoteRelay {
                 msg = "The TV could not do that: " + e.getMessage();
             }
             try {
-                send(new JSONObject().put("t", "ack").put("n", n).put("ok", ok).put("msg", msg)
-                        .put("state", TvLock.state(app)).toString());
+                JSONObject ack = new JSONObject().put("t", "ack").put("n", n).put("ok", ok).put("msg", msg)
+                        .put("state", TvLock.state(app));
+                if (out.has("data")) ack.put("data", out.get("data"));
+                String json = ack.toString();
+                if (json.length() > MAX_FRAME - 64) {
+                    // Too large for one frame: say so instead of dropping the answer.
+                    ack.remove("data");
+                    ack.put("ok", false).put("msg", "The answer is too large.");
+                    json = ack.toString();
+                }
+                send(json);
             } catch (Exception e) {
                 Log.w(TAG, "ack failed: " + e);
             }
         });
     }
 
-    /** Runs one command on the work thread; returns the message for the phone. */
-    private static String run(String cmd, String arg) throws Exception {
+    /** Every command the TV knows, for the phone page to check before it offers a feature. */
+    static final String[] COMMANDS = {
+            "ping", "caps", "info", "banner", "banner_clear", "lock", "unlock", "lock_timer", "lock_timer_cancel",
+            "set_pin", "screen_off", "screen_on", "standby", "wake", "set_psk",
+            "sony", "button", "buttons", "intent", "launch", "apps", "global", "local",
+    };
+
+    /**
+     * Runs one command on the work thread; returns the message for the phone and may put "data" in out.
+     * Besides the fixed features there are building blocks, so a new feature on the phone page needs no
+     * new launcher: sony (any IP control method), button (any remote button), intent and launch (open an
+     * app or a link), apps, global (Back, Home…), local (the home-network phone page's API) and info.
+     */
+    private static String run(String cmd, String arg, JSONObject args, JSONObject out) throws Exception {
         String psk = prefs(app).getString(PREF_PSK, "");
         switch (cmd) {
             case "ping":
@@ -417,8 +465,197 @@ final class RemoteRelay {
                 String state = SonyIp.powerStatus(arg);
                 return "Saved. IP control works (" + (state.isEmpty() ? "ok" : state) + ").";
             }
+            case "caps":
+                out.put("data", new JSONArray(java.util.Arrays.asList(COMMANDS)));
+                return "";
+            case "info":
+                out.put("data", info());
+                return "";
+            case "sony": {
+                JSONArray params = args.optJSONArray("params");
+                out.put("data", SonyIp.call(psk, args.optString("service"), args.optString("method"),
+                        params != null ? params : new JSONArray(), args.optString("version", "1.0")));
+                return "";
+            }
+            case "button": {
+                JSONArray names = args.optJSONArray("names");
+                if (names == null) names = new JSONArray().put(args.optString("name", arg));
+                if (names.length() > 20) throw new SonyIp.Failed("At most 20 buttons at once.");
+                for (int i = 0; i < names.length(); i++) {
+                    if (i > 0) Thread.sleep(Math.max(50, Math.min(2000, args.optInt("gapMs", 250))));
+                    SonyIp.button(psk, names.optString(i));
+                }
+                return "";
+            }
+            case "buttons":
+                out.put("data", new JSONArray(new java.util.TreeSet<>(SonyIp.buttonCodes(psk).keySet())));
+                return "";
+            case "intent":
+            case "launch": {
+                if (TvLock.locked(app)) throw new SonyIp.Failed("The TV is locked.");
+                final Intent i = "launch".equals(cmd) ? launchIntent(args.optString("package", arg)) : intent(args);
+                if (i == null) throw new SonyIp.Failed("Nothing on the TV opens that.");
+                final Exception[] failed = new Exception[1];
+                final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+                main.post(() -> {
+                    try {
+                        app.startActivity(i);
+                    } catch (Exception e) {
+                        failed[0] = e;
+                    }
+                    done.countDown();
+                });
+                done.await(3, java.util.concurrent.TimeUnit.SECONDS);
+                if (failed[0] != null) throw new SonyIp.Failed("Could not open it: " + failed[0].getMessage());
+                return "Opened.";
+            }
+            case "apps":
+                out.put("data", apps());
+                return "";
+            case "global":
+                return global(args.optString("action", arg));
+            case "local":
+                out.put("data", local(args.optString("method", "GET"), args.optString("path"), args.opt("body")));
+                return "";
             default:
-                throw new Exception("unknown command " + cmd);
+                throw new SonyIp.Failed("This TV does not know \"" + cmd + "\" yet. Update the launcher.");
+        }
+    }
+
+    // ---- building blocks ---------------------------------------------------------------------------
+
+    private static JSONObject info() throws Exception {
+        android.os.PowerManager pm = app.getSystemService(android.os.PowerManager.class);
+        return new JSONObject()
+                .put("model", Build.MODEL)
+                .put("android", Build.VERSION.RELEASE)
+                .put("sdk", Build.VERSION.SDK_INT)
+                .put("launcher", BuildConfig.VERSION_NAME)
+                .put("interactive", pm != null && pm.isInteractive())
+                .put("ipControl", !prefs(app).getString(PREF_PSK, "").isEmpty())
+                .put("overlay", Settings.canDrawOverlays(app))
+                .put("accessibility", InputKeyService.running != null || HomeKeyService.running != null)
+                .put("caps", new JSONArray(java.util.Arrays.asList(COMMANDS)));
+    }
+
+    /** The TV's apps (the ones with a TV entry), label and package, by label. */
+    private static JSONArray apps() throws Exception {
+        android.content.pm.PackageManager pm = app.getPackageManager();
+        Intent q = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
+        java.util.TreeMap<String, String> byLabel = new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (android.content.pm.ResolveInfo r : pm.queryIntentActivities(q, 0)) {
+            String pkg = r.activityInfo.packageName;
+            if (pkg.equals(app.getPackageName())) continue;
+            byLabel.put(String.valueOf(r.loadLabel(pm)) + "\u0000" + pkg, pkg);
+        }
+        JSONArray a = new JSONArray();
+        for (java.util.Map.Entry<String, String> e : byLabel.entrySet()) {
+            a.put(new JSONObject().put("label", e.getKey().substring(0, e.getKey().indexOf('\u0000'))).put("package", e.getValue()));
+        }
+        return a;
+    }
+
+    private static Intent launchIntent(String pkg) {
+        if (pkg == null || pkg.isEmpty()) return null;
+        android.content.pm.PackageManager pm = app.getPackageManager();
+        Intent i = pm.getLeanbackLaunchIntentForPackage(pkg);
+        if (i == null) i = pm.getLaunchIntentForPackage(pkg);
+        if (i != null) i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return i;
+    }
+
+    /** {action, data, type, package, component "pkg/.Activity", categories [], extras {k: string|number|bool}}. */
+    private static Intent intent(JSONObject a) throws Exception {
+        Intent i = new Intent(a.optString("action", Intent.ACTION_VIEW));
+        String data = a.optString("data", ""), type = a.optString("type", "");
+        if (!data.isEmpty() && !type.isEmpty()) i.setDataAndType(android.net.Uri.parse(data), type);
+        else if (!data.isEmpty()) i.setData(android.net.Uri.parse(data));
+        else if (!type.isEmpty()) i.setType(type);
+        if (!a.optString("package").isEmpty()) i.setPackage(a.optString("package"));
+        if (!a.optString("component").isEmpty()) {
+            android.content.ComponentName c = android.content.ComponentName.unflattenFromString(a.optString("component"));
+            if (c == null) throw new SonyIp.Failed("component is package/.Activity");
+            i.setComponent(c);
+        }
+        JSONArray cats = a.optJSONArray("categories");
+        if (cats != null) for (int k = 0; k < cats.length(); k++) i.addCategory(cats.optString(k));
+        JSONObject extras = a.optJSONObject("extras");
+        if (extras != null) {
+            for (java.util.Iterator<String> it = extras.keys(); it.hasNext(); ) {
+                String k = it.next();
+                Object v = extras.get(k);
+                if (v instanceof Boolean) i.putExtra(k, (Boolean) v);
+                else if (v instanceof Integer) i.putExtra(k, (Integer) v);
+                else if (v instanceof Long) i.putExtra(k, (Long) v);
+                else if (v instanceof Number) i.putExtra(k, ((Number) v).doubleValue());
+                else i.putExtra(k, String.valueOf(v));
+            }
+        }
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return app.getPackageManager().resolveActivity(i, 0) != null ? i : null;
+    }
+
+    /** back, home, recents, notifications, quick_settings, lock_screen through the accessibility service. */
+    private static String global(String action) throws Exception {
+        final AccessibilityService a = InputKeyService.running != null ? InputKeyService.running : HomeKeyService.running;
+        if (a == null) throw new SonyIp.Failed("The launcher's accessibility service is off.");
+        final int id;
+        switch (action) {
+            case "back": id = AccessibilityService.GLOBAL_ACTION_BACK; break;
+            case "home": id = AccessibilityService.GLOBAL_ACTION_HOME; break;
+            case "recents": id = AccessibilityService.GLOBAL_ACTION_RECENTS; break;
+            case "notifications": id = AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS; break;
+            case "quick_settings": id = AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS; break;
+            case "lock_screen": id = AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN; break;
+            default: throw new SonyIp.Failed("Unknown action " + action + ".");
+        }
+        main.post(() -> a.performGlobalAction(id));
+        return "";
+    }
+
+    /** The home-network phone page's API (WebControl) from inside the TV: GET /api/state, POST /api/settings… */
+    private static Object local(String method, String path, Object body) throws Exception {
+        int port = WebControl.port();
+        if (port <= 0) throw new SonyIp.Failed("The phone page (web_control) is off on this TV.");
+        if (path == null || !path.startsWith("/api/")) throw new SonyIp.Failed("path starts with /api/");
+        if (!"GET".equals(method) && !"POST".equals(method)) throw new SonyIp.Failed("method is GET or POST");
+        String url = "http://127.0.0.1:" + port + path + (path.contains("?") ? "&" : "?") + "k=" + WebControl.code(app);
+        java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+        try {
+            c.setConnectTimeout(3000);
+            c.setReadTimeout(8000);
+            c.setRequestMethod(method);
+            c.setRequestProperty("X-Requested-With", "tvhome");
+            if ("POST".equals(method)) {
+                byte[] b = (body == null ? "" : body.toString()).getBytes(StandardCharsets.UTF_8);
+                c.setDoOutput(true);
+                c.setRequestProperty("Content-Type", "application/json");
+                c.setFixedLengthStreamingMode(b.length);
+                try (OutputStream o = c.getOutputStream()) {
+                    o.write(b);
+                }
+            }
+            int code = c.getResponseCode();
+            InputStream in = code < 400 ? c.getInputStream() : c.getErrorStream();
+            ByteArrayOutputStream b = new ByteArrayOutputStream();
+            if (in != null) {
+                try (InputStream i = in) {
+                    byte[] buf = new byte[4096];
+                    for (int n; (n = i.read(buf)) > 0; ) {
+                        b.write(buf, 0, n);
+                        if (b.size() > MAX_FRAME) throw new SonyIp.Failed("The answer is too large.");
+                    }
+                }
+            }
+            String text = b.toString("UTF-8");
+            if (code >= 400) throw new SonyIp.Failed("The phone page answered " + code + ": " + text);
+            try {
+                return text.trim().startsWith("[") ? new JSONArray(text) : new JSONObject(text);
+            } catch (Exception e) {
+                return text;
+            }
+        } finally {
+            c.disconnect();
         }
     }
 

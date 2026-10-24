@@ -2,28 +2,44 @@
 //
 // The TV keeps one WebSocket open to its Durable Object (GET /tv?id=…, Authorization: Bearer <tv key>);
 // the first connection for an id claims it. Over that socket the TV lists the phones it paired (SHA-256
-// of each phone key, shown to the phone in the TV's QR code). A phone POSTs /api/cmd with the TV id and
-// its key; the object checks the key, hands the command to the TV and waits for its answer.
-// Nothing is stored but the hashes, the TV's name and when it was last seen.
+// of each phone key, shown to the phone in the TV's QR code), its power and lock state. A phone POSTs
+// /api/cmd with the TV id and its key; the object checks the key, hands the command to the TV and waits
+// for its answer. Commands pass through by name, so a new feature on the phone page needs no relay change.
+// Phones may also hold a WebSocket (/phone) for live status, and a Web Push subscription for "TV on/off".
+// Stored: the key hashes, push subscriptions, the TV's name, power and lock state, when it was last seen.
 
 import { DurableObject } from "cloudflare:workers";
 import { PAGE } from "./page.js";
+import { SW } from "./sw.js";
 import { ICON512, ICON192, APPLE180 } from "./icons.js";
+import { push } from "./webpush.js";
 
 const ID = /^[A-Za-z0-9_-]{12,32}$/;
 const KEY = /^[A-Za-z0-9_-]{22,64}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
-const COMMANDS = new Set([
-  "ping", "banner", "banner_clear", "screen_off", "screen_on", "standby", "wake", "set_psk",
-  "set_pin", "lock", "unlock", "lock_timer", "lock_timer_cancel",
-]);
+const CMD = /^[a-z][a-z0-9_.-]{0,40}$/;
 const MAX_TEXT = 500;
-const ANSWER_MS = 8000;
+const MAX_ARGS = 3000;
+const MAX_DATA = 256 * 1024;
+const ANSWER_MS = 10000;
 const MAX_PHONES = 10;
-const ICONS = { "/icon-512.png": ICON512, "/icon-192.png": ICON192, "/apple-touch-icon.png": APPLE180 };
+const MAX_SUBS = 10;
+const MAX_PHONE_SOCKETS = 20;
+// The TV gone this long (no socket) counts as off: a short drop is a network blip, not a power change.
+const OFF_AFTER_MS = 2 * 60 * 1000;
+const SUBJECT = "https://tv-remote.ptrinh.workers.dev";
+const ICONS = {
+  "/icon-512.png": ICON512,
+  "/icon-192.png": ICON192,
+  "/apple-touch-icon.png": APPLE180,
+  "/apple-touch-icon-precomposed.png": APPLE180,
+  "/apple-touch-icon-180x180.png": APPLE180,
+  "/favicon.png": ICON192,
+};
 // start_url is "/": Android keeps the pairing in the browser's storage, which the installed app shares.
 // iOS starts the home-screen app at the address it was added from, which keeps #<id>.<key> (see page.js).
 const MANIFEST = {
+  id: "/",
   name: "TV Remote",
   short_name: "TV Remote",
   start_url: "/",
@@ -32,15 +48,17 @@ const MANIFEST = {
   background_color: "#0b0b0f",
   theme_color: "#0b0b0f",
   icons: [
-    { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
-    { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+    { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+    { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
   ],
 };
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
-    if (url.pathname === "/" && req.method === "GET") {
+    const path = url.pathname;
+    if (path === "/" && (req.method === "GET" || req.method === "HEAD")) {
       return new Response(PAGE, {
         headers: {
           "content-type": "text/html; charset=utf-8",
@@ -51,26 +69,26 @@ export default {
         },
       });
     }
-    if (url.pathname === "/manifest.webmanifest") {
+    if (path === "/manifest.webmanifest") {
       return new Response(JSON.stringify(MANIFEST), { headers: { "content-type": "application/manifest+json", "cache-control": "public, max-age=3600" } });
     }
-    if (url.pathname in ICONS) {
-      const bytes = Uint8Array.from(atob(ICONS[url.pathname]), (c) => c.charCodeAt(0));
+    if (path in ICONS || path === "/favicon.ico") {
+      const bytes = Uint8Array.from(atob(ICONS[path] || ICON192), (c) => c.charCodeAt(0));
       return new Response(bytes, { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
     }
-    if (url.pathname === "/sw.js") {
-      // Only so the page counts as an installable app; every request still goes to the network.
-      return new Response("self.addEventListener('fetch', () => {});\n", { headers: { "content-type": "text/javascript", "cache-control": "no-cache" } });
+    if (path === "/sw.js") {
+      return new Response(SW, { headers: { "content-type": "text/javascript", "cache-control": "no-cache" } });
     }
-    if (url.pathname === "/tv") {
+    if (path === "/api/vapid") return json(200, { key: env.VAPID_PUBLIC || "" });
+    if (path === "/tv" || path === "/phone") {
       const id = url.searchParams.get("id") || "";
       if (!ID.test(id)) return text(400, "bad id");
       return env.TV.get(env.TV.idFromName(id)).fetch(req);
     }
-    if (url.pathname === "/api/cmd" || url.pathname === "/api/status") {
+    if (path === "/api/cmd" || path === "/api/status" || path === "/api/push") {
       if (req.method !== "POST") return json(405, { ok: false, error: "POST only" });
       const len = Number(req.headers.get("content-length") || 0);
-      if (len > 4096) return json(413, { ok: false, error: "too large" });
+      if (len > 8192) return json(413, { ok: false, error: "too large" });
       let body;
       try {
         body = await req.json();
@@ -79,7 +97,7 @@ export default {
       }
       if (!body || !ID.test(body.id || "") || !KEY.test(body.key || "")) return json(400, { ok: false, error: "not paired" });
       const stub = env.TV.get(env.TV.idFromName(body.id));
-      return stub.fetch(new Request("https://tv" + url.pathname, { method: "POST", body: JSON.stringify(body) }));
+      return stub.fetch(new Request("https://tv" + path, { method: "POST", body: JSON.stringify(body) }));
     }
     return text(404, "not found");
   },
@@ -88,43 +106,56 @@ export default {
 export class Tv extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.env = env;
     this.pending = new Map();
-    // Keep-alive pings are answered without waking the object.
+    // Keep-alive pings (TV and phones) are answered without waking the object.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
+  }
+
+  tv() {
+    return this.ctx.getWebSockets("tv")[0] || null;
+  }
+
+  async paired(key) {
+    const phones = (await this.ctx.storage.get("phones")) || [];
+    return phones.includes(await sha256(key));
   }
 
   async fetch(req) {
     const url = new URL(req.url);
-    if (url.pathname === "/tv") return this.connect(req);
+    if (url.pathname === "/tv") return this.connectTv(req);
+    if (url.pathname === "/phone") return this.connectPhone(req);
     const body = await req.json();
-    const phones = (await this.ctx.storage.get("phones")) || [];
-    if (!phones.includes(await sha256(body.key))) return json(403, { ok: false, error: "not paired" });
-    const name = (await this.ctx.storage.get("name")) || "TV";
-    const lastSeen = (await this.ctx.storage.get("lastSeen")) || 0;
+    if (!(await this.paired(body.key))) return json(403, { ok: false, error: "not paired" });
+
     if (url.pathname === "/api/status") {
-      const r = await this.ask({ cmd: "ping" }, 4000);
-      return json(200, { ok: true, online: r.ok, name, lastSeen: r.ok ? Date.now() : lastSeen, state: r.state || null });
+      if (this.tv()) await this.ask({ cmd: "ping" }, 4000);
+      return json(200, { ok: true, ...(await this.status()) });
     }
+    if (url.pathname === "/api/push") return this.subscribe(body);
+
     const cmd = String(body.cmd || "");
-    if (!COMMANDS.has(cmd)) return json(400, { ok: false, error: "unknown command" });
+    if (!CMD.test(cmd)) return json(400, { ok: false, error: "bad command name" });
     const msg = { cmd };
-    if (cmd === "set_pin" || cmd === "lock_timer") {
-      const t = typeof body.text === "string" ? body.text.trim() : "";
-      if (cmd === "set_pin" && !/^[0-9]{4}$/.test(t)) return json(400, { ok: false, error: "The PIN is 4 digits." });
-      if (cmd === "lock_timer" && !(/^[0-9]{1,3}$/.test(t) && +t >= 1 && +t <= 720)) return json(400, { ok: false, error: "The timer is 1 to 720 minutes." });
-      msg.text = t;
+    const t = typeof body.text === "string" ? body.text.trim() : "";
+    if (t.length > MAX_TEXT) return json(400, { ok: false, error: "text is at most 500 characters" });
+    if (t) msg.text = t;
+    if (body.args !== undefined) {
+      if (!body.args || typeof body.args !== "object" || Array.isArray(body.args)) return json(400, { ok: false, error: "args is an object" });
+      if (JSON.stringify(body.args).length > MAX_ARGS) return json(413, { ok: false, error: "args too large" });
+      msg.args = body.args;
     }
-    if (cmd === "banner" || cmd === "set_psk") {
-      const t = typeof body.text === "string" ? body.text.trim() : "";
-      if (cmd === "banner" && (t.length === 0 || t.length > MAX_TEXT)) return json(400, { ok: false, error: "text is 1 to 500 characters" });
-      if (cmd === "set_psk" && t.length > 64) return json(400, { ok: false, error: "PSK is at most 64 characters" });
-      msg.text = t;
-    }
+    if (cmd === "banner" && !t) return json(400, { ok: false, error: "Type a message first." });
+    if (cmd === "set_pin" && !/^[0-9]{4}$/.test(t)) return json(400, { ok: false, error: "The PIN is 4 digits." });
+    if (cmd === "lock_timer" && !(/^[0-9]{1,3}$/.test(t) && +t >= 1 && +t <= 720)) return json(400, { ok: false, error: "The timer is 1 to 720 minutes." });
+    if (cmd === "set_psk" && t.length > 64) return json(400, { ok: false, error: "PSK is at most 64 characters" });
     const r = await this.ask(msg, ANSWER_MS);
     return json(r.offline ? 503 : 200, r);
   }
 
-  async connect(req) {
+  // ---- sockets ---------------------------------------------------------------------------------------
+
+  async connectTv(req) {
     if (req.headers.get("upgrade") !== "websocket") return text(426, "websocket only");
     const auth = req.headers.get("authorization") || "";
     const key = auth.startsWith("Bearer ") ? auth.slice(7) : "";
@@ -133,14 +164,30 @@ export class Tv extends DurableObject {
     const owner = await this.ctx.storage.get("tv");
     if (owner && owner !== hash) return text(403, "this id belongs to another TV");
     if (!owner) await this.ctx.storage.put("tv", hash);
-    for (const old of this.ctx.getWebSockets()) {
+    for (const old of this.ctx.getWebSockets("tv")) {
       try {
         old.close(4000, "replaced");
       } catch {}
     }
     const [client, server] = Object.values(new WebSocketPair());
-    this.ctx.acceptWebSocket(server);
+    this.ctx.acceptWebSocket(server, ["tv"]);
     await this.ctx.storage.put("lastSeen", Date.now());
+    await this.ctx.storage.deleteAlarm();
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** A phone's live status. The key comes in the first message ({t:"auth", key}), not in the address. */
+  async connectPhone(req) {
+    if (req.headers.get("upgrade") !== "websocket") return text(426, "websocket only");
+    const phones = this.ctx.getWebSockets("phone");
+    if (phones.length >= MAX_PHONE_SOCKETS) {
+      try {
+        phones[0].close(4001, "too many");
+      } catch {}
+    }
+    const [client, server] = Object.values(new WebSocketPair());
+    this.ctx.acceptWebSocket(server, ["phone"]);
+    server.serializeAttachment({ auth: false });
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -151,20 +198,39 @@ export class Tv extends DurableObject {
     } catch {
       return;
     }
+    if (this.ctx.getTags(ws).includes("phone")) {
+      if (m.t === "auth" && typeof m.key === "string" && KEY.test(m.key) && (await this.paired(m.key))) {
+        ws.serializeAttachment({ auth: true });
+        ws.send(JSON.stringify({ t: "status", ...(await this.status()) }));
+      } else if (m.t === "auth") {
+        ws.send(JSON.stringify({ t: "unpaired" }));
+        ws.close(4003, "not paired");
+      }
+      return;
+    }
     if (m.t === "hello") {
       const phones = Array.isArray(m.phones) ? m.phones.filter((h) => typeof h === "string" && HEX64.test(h)).slice(0, MAX_PHONES) : [];
-      await this.ctx.storage.put({
-        phones,
-        name: typeof m.name === "string" ? m.name.slice(0, 60) : "TV",
-        lastSeen: Date.now(),
-      });
+      await this.ctx.storage.put({ phones, name: typeof m.name === "string" ? m.name.slice(0, 60) : "TV", lastSeen: Date.now() });
+      if (m.state && typeof m.state === "object") await this.ctx.storage.put("state", m.state);
+      await this.setPower(m.power === "off" ? "off" : "on", true);
+      await this.broadcast();
+    } else if (m.t === "event") {
+      if (m.state && typeof m.state === "object") await this.ctx.storage.put("state", m.state);
+      if (m.power === "on" || m.power === "off") await this.setPower(m.power, true);
+      await this.broadcast();
     } else if (m.t === "ack") {
       const p = this.pending.get(m.n);
+      const data = m.data === undefined ? undefined : JSON.stringify(m.data).length > MAX_DATA ? null : m.data;
       if (p) {
         this.pending.delete(m.n);
-        p({ ok: m.ok === true, msg: typeof m.msg === "string" ? m.msg.slice(0, 200) : "", state: m.state || null });
+        p({ ok: m.ok === true, msg: typeof m.msg === "string" ? m.msg.slice(0, 300) : "", state: m.state || null, data });
       }
+      const prev = JSON.stringify((await this.ctx.storage.get("state")) || null);
       await this.ctx.storage.put("lastSeen", Date.now());
+      if (m.state && typeof m.state === "object" && JSON.stringify(m.state) !== prev) {
+        await this.ctx.storage.put("state", m.state);
+        await this.broadcast();
+      }
     }
   }
 
@@ -172,10 +238,99 @@ export class Tv extends DurableObject {
     try {
       ws.close(code === 1005 || code === 1006 ? 1000 : code, "bye");
     } catch {}
+    if (this.ctx.getTags(ws).includes("tv") && !this.ctx.getWebSockets("tv").some((s) => s !== ws)) {
+      await this.ctx.storage.setAlarm(Date.now() + OFF_AFTER_MS);
+      await this.broadcast(false);
+    }
+  }
+
+  async webSocketError(ws) {
+    await this.webSocketClose(ws, 1006);
+  }
+
+  /** Still no TV after OFF_AFTER_MS: it is off (or unplugged, or offline). */
+  async alarm() {
+    if (!this.tv()) await this.setPower("off");
+  }
+
+  // ---- status, power, push ---------------------------------------------------------------------------
+
+  async status(online) {
+    const s = await this.ctx.storage.get(["name", "lastSeen", "state", "power"]);
+    return {
+      online: online === undefined ? !!this.tv() : online,
+      name: s.get("name") || "TV",
+      lastSeen: s.get("lastSeen") || 0,
+      state: s.get("state") || null,
+      power: s.get("power") || null,
+    };
+  }
+
+  async broadcast(online) {
+    const msg = JSON.stringify({ t: "status", ...(await this.status(online)) });
+    for (const ws of this.ctx.getWebSockets("phone")) {
+      const a = ws.deserializeAttachment();
+      if (!a || !a.auth) continue;
+      try {
+        ws.send(msg);
+      } catch {}
+    }
+  }
+
+  /** Stores a power change and tells the push subscribers; quiet makes the caller broadcast instead. */
+  async setPower(power, quiet) {
+    const before = await this.ctx.storage.get("power");
+    if (before === power) return;
+    await this.ctx.storage.put("power", power);
+    if (!quiet) await this.broadcast();
+    if (!before) return;   // first time we learn it: nothing changed
+    const name = (await this.ctx.storage.get("name")) || "TV";
+    await this.notify({
+      title: power === "on" ? `${name} is on` : `${name} is off`,
+      body: power === "on" ? "The TV was switched on." : "The TV was switched off.",
+      tag: "tv-power",
+    });
+  }
+
+  async notify(payload) {
+    const subs = (await this.ctx.storage.get("subs")) || [];
+    if (!subs.length || !this.env.VAPID_PRIVATE) return;
+    const keep = [];
+    for (const sub of subs) {
+      try {
+        const status = await push(sub, payload, this.env, SUBJECT);
+        if (status !== 404 && status !== 410) keep.push(sub);
+      } catch {
+        keep.push(sub);
+      }
+    }
+    if (keep.length !== subs.length) await this.ctx.storage.put("subs", keep);
+  }
+
+  async subscribe(body) {
+    let subs = (await this.ctx.storage.get("subs")) || [];
+    if (body.unsubscribe) {
+      subs = subs.filter((s) => s.endpoint !== body.unsubscribe);
+      await this.ctx.storage.put("subs", subs);
+      return json(200, { ok: true, msg: "Notifications off." });
+    }
+    const s = body.sub;
+    if (!s || typeof s.endpoint !== "string" || !s.endpoint.startsWith("https://") || s.endpoint.length > 1000
+      || !s.keys || typeof s.keys.p256dh !== "string" || typeof s.keys.auth !== "string") {
+      return json(400, { ok: false, error: "bad subscription" });
+    }
+    subs = subs.filter((x) => x.endpoint !== s.endpoint);
+    subs.push({ endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth } });
+    await this.ctx.storage.put("subs", subs.slice(-MAX_SUBS));
+    if (body.test) {
+      const name = (await this.ctx.storage.get("name")) || "TV";
+      await this.notify({ title: "TV Remote", body: `You will be told when ${name} turns on or off.`, tag: "tv-test" });
+    }
+    return json(200, { ok: true, msg: "Notifications on." });
   }
 
   ask(msg, ms) {
-    const ws = this.ctx.getWebSockets()[0];
+    const ws = this.tv();
     if (!ws) return Promise.resolve({ ok: false, offline: true, msg: "The TV is offline." });
     const n = crypto.randomUUID();
     return new Promise((resolve) => {

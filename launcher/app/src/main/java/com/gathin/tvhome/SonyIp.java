@@ -14,15 +14,24 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
- * Sony BRAVIA IP control (the TV's own REST API, /sony/system) for the phone remote's power buttons.
- * Needs Settings › Network › Home network › IP control › Authentication "Normal and Pre-Shared Key" and
- * the same key saved from the phone page. Blocking: call it off the main thread.
+ * Sony BRAVIA IP control (the TV's own REST API under /sony/ and the IRCC remote-button service) for the
+ * phone remote. Needs Settings › Network › Home network › IP control › Authentication "Normal and
+ * Pre-Shared Key" and the same key saved from the phone page. Blocking: call it off the main thread.
+ *
+ * Besides the power helpers, {@link #call} reaches any service and method (audio, avContent, appControl…)
+ * and {@link #button} presses any remote button, so the phone page can add features without a new launcher.
  */
 final class SonyIp {
     private static final int TIMEOUT_MS = 3000;
+    private static final int MAX_RESPONSE = 256 * 1024;
+    /** Remote button names (lower case) to IRCC codes, from system.getRemoteControllerInfo; asked once. */
+    private static volatile Map<String, String> buttons;
 
     private SonyIp() {
     }
@@ -36,56 +45,115 @@ final class SonyIp {
 
     /** Picture off keeps the TV running (and reachable); "off" turns the picture back on. */
     static void pictureOff(String psk, boolean off) throws Failed {
-        call(psk, "setPowerSavingMode", "mode", off ? "pictureOff" : "off");
+        call(psk, "system", "setPowerSavingMode", params("mode", off ? "pictureOff" : "off"), "1.0");
     }
 
     /** false: standby, like the remote's power button. true: wake. */
     static void power(String psk, boolean on) throws Failed {
-        call(psk, "setPowerStatus", "status", on);
+        call(psk, "system", "setPowerStatus", params("status", on), "1.0");
     }
 
     /** "active" or "standby"; a working call also proves the key. */
     static String powerStatus(String psk) throws Failed {
-        JSONArray r = call(psk, "getPowerStatus", null, null);
+        JSONArray r = call(psk, "system", "getPowerStatus", new JSONArray(), "1.0");
         JSONObject first = r.optJSONObject(0);
         return first != null ? first.optString("status", "") : "";
     }
 
-    private static JSONArray call(String psk, String method, String key, Object value) throws Failed {
-        if (psk == null || psk.isEmpty()) throw new Failed("Set the Sony IP control key in Settings on the phone page first.");
+    /** Any method of any service: /sony/{service}, {"method", "params", "version"}. Returns "result". */
+    static JSONArray call(String psk, String service, String method, JSONArray params, String version) throws Failed {
+        if (!name(service) || method == null || method.isEmpty()) throw new Failed("Bad service or method.");
         String body;
         try {
-            JSONObject req = new JSONObject()
+            body = new JSONObject()
                     .put("method", method)
                     .put("id", 1)
-                    .put("version", "1.0")
-                    .put("params", key != null ? new JSONArray().put(new JSONObject().put(key, value)) : new JSONArray());
-            body = req.toString();
+                    .put("version", version == null || version.isEmpty() ? "1.0" : version)
+                    .put("params", params != null ? params : new JSONArray())
+                    .toString();
         } catch (Exception e) {
             throw new Failed("Bad request.");
         }
-        Failed last = new Failed("The TV's IP control did not answer. Is IP control switched on?");
+        String text = post(psk, "/sony/" + service, body, "application/json; charset=UTF-8", null);
+        try {
+            JSONObject res = new JSONObject(text);
+            JSONArray err = res.optJSONArray("error");
+            if (err != null) {
+                int ec = err.optInt(0);
+                if (ec == 403 || ec == 401) throw new Failed("The TV refused the IP control key. Check it in Settings.");
+                throw new Failed("The TV said: " + err.optString(1, "error " + ec));
+            }
+            JSONArray result = res.optJSONArray("result");
+            if (result == null) result = res.optJSONArray("results");
+            return result != null ? result : new JSONArray();
+        } catch (Failed f) {
+            throw f;
+        } catch (Exception e) {
+            throw new Failed("The TV's answer was not JSON.");
+        }
+    }
+
+    /** Presses a remote button: an IRCC code (base64) or a name such as VolumeUp, Netflix, Num1, Home. */
+    static void button(String psk, String nameOrCode) throws Failed {
+        if (nameOrCode == null || nameOrCode.isEmpty()) throw new Failed("Which button?");
+        String code = nameOrCode.endsWith("=") || nameOrCode.startsWith("AAAA") ? nameOrCode : buttonCodes(psk).get(nameOrCode.toLowerCase(Locale.ROOT));
+        if (code == null) throw new Failed("The TV has no button called " + nameOrCode + ".");
+        String soap = "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\""
+                + " s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\"><s:Body>"
+                + "<u:X_SendIRCC xmlns:u=\"urn:schemas-sony-com:service:IRCC:1\"><IRCCCode>" + xml(code) + "</IRCCCode>"
+                + "</u:X_SendIRCC></s:Body></s:Envelope>";
+        post(psk, "/sony/IRCC", soap, "text/xml; charset=UTF-8", "\"urn:schemas-sony-com:service:IRCC:1#X_SendIRCC\"");
+    }
+
+    /** The TV's button names and codes. */
+    static Map<String, String> buttonCodes(String psk) throws Failed {
+        Map<String, String> b = buttons;
+        if (b != null) return b;
+        JSONArray r = call(psk, "system", "getRemoteControllerInfo", new JSONArray(), "1.0");
+        JSONArray list = r.optJSONArray(1);
+        Map<String, String> m = new HashMap<>();
+        if (list != null) {
+            for (int i = 0; i < list.length(); i++) {
+                JSONObject o = list.optJSONObject(i);
+                if (o != null) m.put(o.optString("name").toLowerCase(Locale.ROOT), o.optString("value"));
+            }
+        }
+        if (!m.isEmpty()) buttons = m;
+        return m;
+    }
+
+    private static JSONArray params(String key, Object value) throws Failed {
+        try {
+            return new JSONArray().put(new JSONObject().put(key, value));
+        } catch (Exception e) {
+            throw new Failed("Bad request.");
+        }
+    }
+
+    private static String post(String psk, String path, String body, String type, String soapAction) throws Failed {
+        if (psk == null || psk.isEmpty()) throw new Failed("Set the Sony IP control key in Settings on the phone page first.");
         for (String host : hosts()) {
             try {
-                return post(host, psk, body);
+                return post(host, psk, path, body, type, soapAction);
             } catch (Failed f) {
                 throw f;   // the TV answered: no point asking it again on another address
             } catch (Exception e) {
                 // Not listening on this address; try the next.
             }
         }
-        throw last;
+        throw new Failed("The TV's IP control did not answer. Is IP control switched on?");
     }
 
-    private static JSONArray post(String host, String psk, String body) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL("http://" + host + "/sony/system").openConnection();
+    private static String post(String host, String psk, String path, String body, String type, String soapAction) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL("http://" + host + path).openConnection();
         try {
             c.setConnectTimeout(TIMEOUT_MS);
             c.setReadTimeout(TIMEOUT_MS);
             c.setRequestMethod("POST");
             c.setDoOutput(true);
-            c.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            c.setRequestProperty("Content-Type", type);
             c.setRequestProperty("X-Auth-PSK", psk);
+            if (soapAction != null) c.setRequestProperty("SOAPACTION", soapAction);
             byte[] b = body.getBytes(StandardCharsets.UTF_8);
             c.setFixedLengthStreamingMode(b.length);
             try (OutputStream o = c.getOutputStream()) {
@@ -94,16 +162,9 @@ final class SonyIp {
             int code = c.getResponseCode();
             if (code == 403 || code == 401) throw new Failed("The TV refused the IP control key. Check it in Settings.");
             InputStream in = code < 400 ? c.getInputStream() : c.getErrorStream();
-            if (in == null) throw new Failed("The TV's IP control answered " + code + ".");
-            JSONObject res = new JSONObject(read(in));
-            JSONArray err = res.optJSONArray("error");
-            if (err != null) {
-                int ec = err.optInt(0);
-                if (ec == 403 || ec == 401) throw new Failed("The TV refused the IP control key. Check it in Settings.");
-                throw new Failed("The TV said: " + err.optString(1, "error " + ec));
-            }
-            JSONArray result = res.optJSONArray("result");
-            return result != null ? result : new JSONArray();
+            String text = in != null ? read(in) : "";
+            if (code >= 400 && !text.startsWith("{")) throw new Failed("The TV's IP control answered " + code + ".");
+            return text;
         } finally {
             c.disconnect();
         }
@@ -126,6 +187,20 @@ final class SonyIp {
         return out;
     }
 
+    /** Letters, digits and dots only: a service name can't walk to another path. */
+    private static boolean name(String s) {
+        if (s == null || s.isEmpty() || s.length() > 40 || !Character.isLetter(s.charAt(0)) || s.contains("..")) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            if (!(Character.isLetterOrDigit(ch) || ch == '.')) return false;
+        }
+        return true;
+    }
+
+    private static String xml(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
     private static String read(InputStream in) throws Exception {
         try (InputStream i = in) {
             ByteArrayOutputStream b = new ByteArrayOutputStream();
@@ -133,7 +208,7 @@ final class SonyIp {
             int n, total = 0;
             while ((n = i.read(buf)) > 0) {
                 total += n;
-                if (total > 64 * 1024) break;
+                if (total > MAX_RESPONSE) break;
                 b.write(buf, 0, n);
             }
             return b.toString("UTF-8");

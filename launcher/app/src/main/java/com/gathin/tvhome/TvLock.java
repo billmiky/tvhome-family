@@ -74,6 +74,7 @@ final class TvLock {
         SharedPreferences p = prefs(ctx);
         if (!AppLock.hasPin(p)) return false;
         p.edit().putBoolean(PREF_LOCKED, true).putLong(PREF_LOCK_AT, 0).apply();
+        RemoteRelay.event(null);
         main.post(() -> {
             removePill();
             bringHome(ctx);
@@ -85,6 +86,7 @@ final class TvLock {
 
     static void unlock(Context ctx) {
         prefs(ctx).edit().putBoolean(PREF_LOCKED, false).apply();
+        RemoteRelay.event(null);
         main.post(() -> {
             Screen s = screen;
             if (s != null) s.unlocked();
@@ -96,6 +98,7 @@ final class TvLock {
         SharedPreferences p = prefs(ctx);
         if (!AppLock.hasPin(p)) return false;
         p.edit().putLong(PREF_LOCK_AT, System.currentTimeMillis() + minutes * 60_000L).apply();
+        RemoteRelay.event(null);
         lastToastMin = -1;
         main.post(() -> {
             main.removeCallbacks(TICK);
@@ -106,6 +109,7 @@ final class TvLock {
 
     static void cancelTimer(Context ctx) {
         prefs(ctx).edit().putLong(PREF_LOCK_AT, 0).apply();
+        RemoteRelay.event(null);
         main.post(() -> {
             main.removeCallbacks(TICK);
             removePill();
