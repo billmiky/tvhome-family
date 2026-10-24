@@ -116,6 +116,24 @@
          install script grants). A helper turned off in Settings stays off. -->
     <bool name="restore_key_services">true</bool>
 
+    <!-- Remote buttons that open an app or switch input (RemoteKeys, read by InputKeyService, the launcher's Input
+         button helper; a theme's config.json can set "app_keys" as a JSON array of the same strings):
+         - "keycode:package" or "KEYCODE_NAME:package", e.g. 190:com.google.android.youtube.tv or
+           KEYCODE_BUTTON_3:com.google.android.youtube.tv;
+         - "scan:scancode:package" for remotes that send several app buttons as one keycode and tell them apart by
+           scancode (Sony BRAVIA: YouTube, Prime Video and Disney+ are all keycode 196, scancodes 485, 490 and 491),
+           found with `getevent -lt` while pressing the button (the EV_KEY code, in hex; write it in decimal here).
+           A scancode entry wins over a keycode;
+         - in place of a package, "input:<input id>" switches to that TV input (an HDMI port), e.g.
+           scan:490:input:com.sony.dtv.tvinput.external/.ExternalTvInputService/HW2 (ids: `dumpsys tv_input`);
+         - prefix an entry with "hold:" for the same button's long press (held half a second, acted on release):
+           "hold:KEYCODE_BUTTON_8:org.xbmc.kodi"; the unprefixed entry still opens on a tap, and a key with only a
+           hold entry does nothing on a tap.
+         The mapped key is consumed in every app. A listed app that is not installed leaves the button doing
+         nothing. Empty: no button changes. Keys injected over ADB never reach the helper; test with the remote. -->
+    <string-array name="app_keys" translatable="false">
+    </string-array>
+
     <!-- Occasions: days the greeting line (above the clock) says something else, as a JSON array of
          {"date": "MM-DD" every year or "YYYY-MM-DD" once, "text": "…", "video": optional YouTube link}, e.g.
          [{\"date\": \"03-14\", \"text\": \"Happy birthday, bé An\"}] (Android string resources drop

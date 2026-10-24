@@ -9,10 +9,14 @@ import android.content.IntentFilter;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 
+import java.util.Collections;
+import java.util.Map;
+
 /**
  * Maps the remote's Input button to the system input switcher, from any app. Remotes such as the Chromecast voice
  * remote send KEYCODE_TV for it; on Google TV the stock launcher handles that key, so with the stock launcher
- * disabled the button does nothing. Only KEYCODE_TV is consumed; every other key passes through untouched.
+ * disabled the button does nothing. Also the buttons listed in app_keys (RemoteKeys; empty by default), which
+ * open an app or switch input. Only those keys and KEYCODE_TV are consumed; every other key passes through untouched.
  * Opt-in: INPUT_KEY_SERVICE=1 build-and-install.sh (or -InputKeyService on Windows) enables it.
  */
 public class InputKeyService extends AccessibilityService {
@@ -31,6 +35,9 @@ public class InputKeyService extends AccessibilityService {
     static volatile InputKeyService running;
     /** restore_key_services was on: this helper is noted for ServiceRepair. */
     private boolean repairRecord;
+    /** app_keys (RemoteKeys): keycode or scancode -> app or "input:<id>", for a tap and for a hold. Empty: none. */
+    private Map<Integer, String> appKeys = Collections.emptyMap(), appScancodes = Collections.emptyMap();
+    private Map<Integer, String> holdAppKeys = Collections.emptyMap(), holdAppScancodes = Collections.emptyMap();
 
     /** Unbound by Android: the user turned the helper off, so Home doesn't put it back (ServiceRepair). */
     @Override
@@ -49,6 +56,10 @@ public class InputKeyService extends AccessibilityService {
             // Noted so Home can put this helper back after a force stop (ServiceRepair).
             repairRecord = cfg.restoreKeyServices;
             if (repairRecord) ServiceRepair.connected(this, getClass());
+            appKeys = RemoteKeys.parseAppKeys(cfg.appKeys);
+            appScancodes = RemoteKeys.parseAppScancodes(cfg.appKeys);
+            holdAppKeys = RemoteKeys.parseHoldAppKeys(cfg.appKeys);
+            holdAppScancodes = RemoteKeys.parseHoldAppScancodes(cfg.appKeys);
             RemoteRelay.start(this, cfg.remoteRelay);
             TvLock.start(this);
             // Likewise the home-network phone page (the remote's Screen time goes through it), which
@@ -73,7 +84,12 @@ public class InputKeyService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
-        if (event.getKeyCode() != KeyEvent.KEYCODE_TV) return false;
+        // app_keys: a scancode entry is more specific than any keycode, so it goes first.
+        int scan = event.getScanCode();
+        if (RemoteKeys.handle(this, event, appScancodes.get(scan), holdAppScancodes.get(scan))) return true;
+        int code = event.getKeyCode();
+        if (RemoteKeys.handle(this, event, appKeys.get(code), holdAppKeys.get(code))) return true;
+        if (code != KeyEvent.KEYCODE_TV) return false;
         if (event.getAction() == KeyEvent.ACTION_UP) {
             try {
                 startActivity(new Intent(ACTION_VIEW_INPUTS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
