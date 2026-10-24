@@ -17,6 +17,10 @@ import android.content.pm.ChangedPackages;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.Outline;
@@ -113,7 +117,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private GlassView glass;
     private View ambient;
     private TextView heroName;
-    private GradientDrawable ambientGlow;
     private int ambientColor;
     private boolean heroShown;
     private TextView greeting;
@@ -421,12 +424,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambient = findViewById(R.id.ambient);
         heroName = findViewById(R.id.heroName);
         UiFont.watch(heroName);
-        ambientGlow = new GradientDrawable();
-        ambientGlow.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        ambientGlow.setGradientCenter(0.32f, 0.42f);
-        ambient.setBackground(ambientGlow);
-        ambient.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
-                ambientGlow.setGradientRadius((r - l) * 0.62f));
+        // The glow is a small bitmap stretched over the screen (setAmbient).
         greeting = findViewById(R.id.greeting);
         UiFont.watch(greeting);
         intro = new GreetingIntro(root, greeting, handler);
@@ -1132,10 +1130,23 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return galleryOn ? 0f : 1f;
     }
 
+    /**
+     * The glow used to be a full-screen radial GradientDrawable, drawn on the CPU: fading it redrew 1920x1080 every
+     * frame. A small bitmap stretched over the screen is one texture, uploaded once per app (upstream da15a448).
+     */
     private void setAmbient(int color) {
+        if (color == ambientColor && ambient.getBackground() != null) return;
         ambientColor = color;
         int c = color & 0x00FFFFFF;
-        ambientGlow.setColors(new int[]{0x5C000000 | c, 0x26000000 | c, 0x00000000 | c});
+        int w = 480, h = 270;
+        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setShader(new RadialGradient(w * 0.32f, h * 0.42f, w * 0.62f,
+                new int[]{0x5C000000 | c, 0x26000000 | c, 0x00000000 | c}, new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP));
+        new Canvas(bmp).drawRect(0, 0, w, h, paint);
+        android.graphics.drawable.BitmapDrawable drawable = new android.graphics.drawable.BitmapDrawable(getResources(), bmp);
+        drawable.setGravity(Gravity.FILL);
+        ambient.setBackground(drawable);
     }
 
     private void hideHero() {

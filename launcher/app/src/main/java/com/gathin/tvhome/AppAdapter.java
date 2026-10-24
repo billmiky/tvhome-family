@@ -423,6 +423,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             card.setOnFocusChangeListener((view, focused) -> {
                 // The scale is MainActivity's magnification; the name drops clear of the grown tile.
                 float grown = view.getHeight() * (FOCUS_SCALE - 1f) / 2f;
+                name.animate().cancel();
                 name.animate().alpha(focused ? 1f : 0f)
                         .translationY(focused ? grown + density * 2f : -density * 6f)
                         .setDuration(220).start();

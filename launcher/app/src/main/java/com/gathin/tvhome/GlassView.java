@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.util.AttributeSet;
@@ -21,7 +20,6 @@ public class GlassView extends View {
     private final Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
-    private final Path clip = new Path();
     private final float density;
     private float radius;
 
@@ -33,6 +31,12 @@ public class GlassView extends View {
         rim.setStrokeWidth(1.5f * density);
         rim.setColor(0xCCFFFFFF);
         glow.setStyle(Paint.Style.STROKE);
+        glow.setStrokeWidth(2f * density);
+        glow.setColor(0x22FFFFFF);
+        // Cache the slab as a texture. The spring only changes translation, so the GPU can
+        // move it without replaying clipPath and the glow on every frame. That path is
+        // software-rendered on the MT5895 and is what makes the highlight crawl.
+        setLayerType(LAYER_TYPE_HARDWARE, null);
     }
 
     void setRadius(float px) {
@@ -52,22 +56,18 @@ public class GlassView extends View {
         float inset = 6f * density;   // room for the glow
         rect.set(inset, inset, getWidth() - inset, getHeight() - inset);
 
-        // Outer glow: three widening, fading strokes.
-        for (int i = 1; i <= 3; i++) {
-            glow.setStrokeWidth(i * 2f * density);
-            glow.setColor((0x30 / i) << 24 | 0xFFFFFF);
-            float o = i * density;
-            canvas.drawRoundRect(rect.left - o, rect.top - o, rect.right + o, rect.bottom + o, radius + o, radius + o, glow);
-        }
+        // One faint stroke: the layer caches it, so it is drawn once rather than on every
+        // frame of the spring.
+        float o = density;
+        canvas.drawRoundRect(rect.left - o, rect.top - o, rect.right + o, rect.bottom + o,
+                radius + o, radius + o, glow);
 
         canvas.drawRoundRect(rect, radius, radius, fill);
 
-        clip.reset();
-        clip.addRoundRect(rect, radius, radius, Path.Direction.CW);
-        canvas.save();
-        canvas.clipPath(clip);
-        canvas.drawRect(rect.left, rect.top, rect.right, rect.top + rect.height() * 0.45f, specular);
-        canvas.restore();
+        // A sheen across the top, drawn as its own round rect so the highlight stays on the GPU.
+        // clipPath falls back to software on this SoC and redraws for the whole spring.
+        float sheenBottom = rect.top + rect.height() * 0.42f;
+        canvas.drawRoundRect(rect.left, rect.top, rect.right, sheenBottom, radius, radius, specular);
 
         canvas.drawRoundRect(rect, radius, radius, rim);
     }
