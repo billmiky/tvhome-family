@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -14,6 +15,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.Settings;
+import android.util.DisplayMetrics;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -146,6 +148,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         Map<String, Cards.Card> cardByPkg = new HashMap<>();
         for (Cards.Card c : cards) cardByPkg.put(c.pkg, c);
         List<Entry> fresh = new ArrayList<>();
+        // Some system apps declare two leanback entry points under one name (Sony's Timers & Clock on the BRAVIA),
+        // which would show as two identical tiles: keep the first per package and label (upstream 94a24df0).
+        Set<String> seen = new HashSet<>();
         for (ResolveInfo ri : found) {
             if (ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName;
@@ -153,14 +158,17 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             ComponentName component = new ComponentName(pkg, ri.activityInfo.name);
             Cards.Card card = cardByPkg.get(pkg);
             if (card != null && !card.component.equals(component)) continue;   // the card stands in for this tile
-            Drawable banner = ri.activityInfo.loadBanner(pm);
-            if (banner == null) banner = ri.activityInfo.applicationInfo.loadBanner(pm);
+            // Same cleaner as the card prompt: a label with a bidi override or line separator must not redraw the
+            // tile name as something else.
+            String label = card != null ? card.label : Cards.cleanLabel(String.valueOf(ri.loadLabel(pm)), pkg);
+            if (!seen.add(pkg + '\n' + label)) continue;
+            Drawable banner = loadBanner(pm, ri);
             // The icon is only drawn (and sampled for the glow) when there is no banner.
             Drawable icon = banner == null ? ri.loadIcon(pm) : null;
             if (card != null) {
-                fresh.add(new Entry(Entry.CARD, card.label, component, banner, icon, card.caption, card.accent));
+                fresh.add(new Entry(Entry.CARD, label, component, banner, icon, card.caption, card.accent));
             } else {
-                fresh.add(new Entry(String.valueOf(ri.loadLabel(pm)), component, banner, icon));
+                fresh.add(new Entry(label, component, banner, icon));
             }
         }
         Collections.sort(fresh, (a, b) -> {
@@ -191,6 +199,32 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     void clear() {
         items.clear();
         notifyDataSetChanged();
+    }
+
+    /**
+     * The tile's banner, decoded at least at xhdpi so it stays sharp under the focus zoom (upstream ab75d36f). A
+     * square "banner" counts as none, so the tile shows the icon instead of a blur (upstream 9ae586da).
+     */
+    private Drawable loadBanner(PackageManager pm, ResolveInfo ri) {
+        int id = ri.activityInfo.banner;
+        if (id == 0) id = ri.activityInfo.applicationInfo.banner;
+        Drawable banner = null;
+        if (id != 0) {
+            try {
+                Resources resources = pm.getResourcesForApplication(ri.activityInfo.applicationInfo);
+                int density = Math.max(DisplayMetrics.DENSITY_XHIGH, ctx.getResources().getDisplayMetrics().densityDpi);
+                banner = resources.getDrawableForDensity(id, density, null);
+            } catch (PackageManager.NameNotFoundException | Resources.NotFoundException ignored) {
+                // The default lookup below.
+            }
+        }
+        if (banner == null) banner = ri.activityInfo.loadBanner(pm);
+        return banner != null && isBannerShaped(banner.getIntrinsicWidth(), banner.getIntrinsicHeight()) ? banner : null;
+    }
+
+    /** Wider than tall by 1.4 or more; a drawable with no intrinsic size (a colour, a shape) still fills the tile. */
+    static boolean isBannerShaped(int width, int height) {
+        return width <= 0 || height <= 0 || width >= height * 1.4f;
     }
 
     @NonNull

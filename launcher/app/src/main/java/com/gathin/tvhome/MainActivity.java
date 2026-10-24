@@ -380,7 +380,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         @Override
         public void run() {
             updateGreeting();
-            updateWifiLabel();
+            // The network pill follows the network callbacks and each return to Home; refreshing it here cost
+            // about 7 ms of binder calls on the UI thread every minute (upstream c9798026).
             handler.postDelayed(this, MINUTE_MS);
         }
     };
@@ -1779,6 +1780,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      *  which the Live TV app handles; where nothing takes that, the configured `input_action` is sent
      *  with the same URI instead (XGIMI's HDMI player only answers com.xgimi.action.hdmiPlayer). */
     private void openInput(String inputId) {
+        // A CEC device is a child input: tune its parent HDMI port, which is what the TV can open (upstream 7fa2aa84).
+        TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
+        if (tim != null) {
+            try {
+                TvInputInfo info = tim.getTvInputInfo(inputId);
+                if (info != null && info.getParentId() != null) inputId = info.getParentId();
+            } catch (Throwable ignored) {
+                // Keep the id as given.
+            }
+        }
         Uri uri = TvContract.buildChannelUriForPassthroughInput(inputId);
         Intent view = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.cursor.item/channel")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
