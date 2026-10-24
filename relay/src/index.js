@@ -13,7 +13,7 @@ import { PAGE } from "./page.js";
 import { SW } from "./sw.js";
 import { ICON512, ICON192, APPLE180 } from "./icons.js";
 import { OUTFIT } from "./font.js";
-import { push } from "./webpush.js";
+import { push, makeVapid } from "./webpush.js";
 
 const ID = /^[A-Za-z0-9_-]{12,32}$/;
 const KEY = /^[A-Za-z0-9_-]{22,64}$/;
@@ -97,7 +97,7 @@ export default {
     if (path === "/sw.js") {
       return new Response(SW, { headers: { "content-type": "text/javascript", "cache-control": "no-cache" } });
     }
-    if (path === "/api/vapid") return json(200, { key: env.VAPID_PUBLIC || "" });
+    if (path === "/api/vapid") return json(200, { key: (await vapidKeys(env)).pub });
     if (path === "/tv" || path === "/phone") {
       const id = url.searchParams.get("id") || "";
       if (!ID.test(id)) return text(400, "bad id");
@@ -141,6 +141,7 @@ export class Tv extends DurableObject {
 
   async fetch(req) {
     const url = new URL(req.url);
+    if (url.pathname === "/_vapid") return json(200, await this.vapid());
     if (url.pathname === "/tv") return this.connectTv(req);
     if (url.pathname === "/phone") return this.connectPhone(req);
     const body = await req.json();
@@ -395,11 +396,12 @@ export class Tv extends DurableObject {
 
   async notify(payload) {
     const subs = (await this.ctx.storage.get("subs")) || [];
-    if (!subs.length || !this.env.VAPID_PRIVATE) return;
+    if (!subs.length) return;
+    const keys = await vapidKeys(this.env);
     const keep = [];
     for (const sub of subs) {
       try {
-        const status = await push(sub, payload, this.env, SUBJECT);
+        const status = await push(sub, payload, keys, this.env.VAPID_SUBJECT || SUBJECT);
         if (status !== 404 && status !== 410) keep.push(sub);
       } catch {
         keep.push(sub);
@@ -430,6 +432,16 @@ export class Tv extends DurableObject {
     return json(200, { ok: true, msg: "Notifications on." });
   }
 
+  /** Only in the object named VAPID_HOLDER: the relay's own VAPID pair, made the first time it is asked for. */
+  async vapid() {
+    let keys = await this.ctx.storage.get("vapid");
+    if (!keys) {
+      keys = await makeVapid();
+      await this.ctx.storage.put("vapid", keys);
+    }
+    return keys;
+  }
+
   ask(msg, ms) {
     const ws = this.tv();
     if (!ws) return Promise.resolve({ ok: false, offline: true, msg: "The TV is offline." });
@@ -452,6 +464,20 @@ export class Tv extends DurableObject {
       }
     });
   }
+}
+
+// Notifications need a VAPID key pair. The Worker secrets VAPID_PRIVATE (a JWK) and VAPID_PUBLIC win when set;
+// otherwise the relay makes its own pair once and keeps it in one Durable Object, whose name (with a colon) no
+// request from outside can reach: the ids the routes accept are letters, digits, _ and - only.
+const VAPID_HOLDER = "vapid:keys";
+let vapidCache = null;
+async function vapidKeys(env) {
+  if (env.VAPID_PRIVATE && env.VAPID_PUBLIC) return { jwk: JSON.parse(env.VAPID_PRIVATE), pub: env.VAPID_PUBLIC };
+  if (!vapidCache) {
+    const r = await env.TV.get(env.TV.idFromName(VAPID_HOLDER)).fetch("https://tv/_vapid");
+    vapidCache = await r.json();
+  }
+  return vapidCache;
 }
 
 async function sha256(s) {

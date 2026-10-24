@@ -64,8 +64,8 @@ async function vapid(endpoint, privateJwk, publicKey, subject) {
   return `vapid t=${head}.${body}.${b64url(sig)}, k=${publicKey}`;
 }
 
-/** Sends one notification. Resolves to the push service's status (404/410: the subscription is gone). */
-export async function push(sub, payload, env, subject) {
+/** Sends one notification with keys {jwk, pub}. Resolves to the push service's status (404/410: gone). */
+export async function push(sub, payload, keys, subject) {
   const body = await encrypt(sub, JSON.stringify(payload));
   const res = await fetch(sub.endpoint, {
     method: "POST",
@@ -74,9 +74,17 @@ export async function push(sub, payload, env, subject) {
       "content-type": "application/octet-stream",
       ttl: "3600",
       urgency: "normal",
-      authorization: await vapid(sub.endpoint, JSON.parse(env.VAPID_PRIVATE), env.VAPID_PUBLIC, subject),
+      authorization: await vapid(sub.endpoint, keys.jwk, keys.pub, subject),
     },
     body,
   });
   return res.status;
+}
+
+/** A new VAPID key pair: {jwk: private JWK, pub: raw public key in base64url}. */
+export async function makeVapid() {
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const jwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  const pub = b64url(await crypto.subtle.exportKey("raw", pair.publicKey));
+  return { jwk: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y, d: jwk.d }, pub };
 }
