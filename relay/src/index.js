@@ -18,6 +18,7 @@ const ID = /^[A-Za-z0-9_-]{12,32}$/;
 const KEY = /^[A-Za-z0-9_-]{22,64}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const CMD = /^[a-z][a-z0-9_.-]{0,40}$/;
+const PAIRING = /^[A-Za-z0-9_-]{12,32}[.][A-Za-z0-9_-]{22,64}$/;
 const MAX_TEXT = 500;
 const MAX_ARGS = 3000;
 const MAX_DATA = 256 * 1024;
@@ -59,10 +60,13 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/" && (req.method === "GET" || req.method === "HEAD")) {
-      return new Response(PAGE, {
+      // A paired page (/?p=<id>.<key>) links the manifest that starts the home-screen app paired.
+      const p = url.searchParams.get("p") || "";
+      const page = PAIRING.test(p) ? PAGE.replace('href="/manifest.webmanifest"', 'href="/manifest.webmanifest?p=' + p + '"') : PAGE;
+      return new Response(page, {
         headers: {
           "content-type": "text/html; charset=utf-8",
-          "cache-control": "no-cache",
+          "cache-control": "no-store",
           "content-security-policy":
             "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
           "referrer-policy": "no-referrer",
@@ -73,8 +77,8 @@ export default {
       // ?p=<id>.<key> from a paired page: the home-screen app starts paired. iOS opens it at start_url
       // with storage of its own, so without this it would always say "Not paired".
       const p = url.searchParams.get("p") || "";
-      const m = /^([A-Za-z0-9_-]{12,32})[.]([A-Za-z0-9_-]{22,64})$/.exec(p);
-      const manifest = m ? { ...MANIFEST, start_url: "/#" + m[1] + "." + m[2] } : MANIFEST;
+      const m = PAIRING.test(p);
+      const manifest = m ? { ...MANIFEST, start_url: "/?p=" + p } : MANIFEST;
       return new Response(JSON.stringify(manifest), {
         headers: { "content-type": "application/manifest+json", "cache-control": m ? "private, no-store" : "public, max-age=3600" },
       });

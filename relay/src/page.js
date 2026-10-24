@@ -1,6 +1,7 @@
 // The phone remote: one page, no build step, installable (Add to Home Screen). Paired by the TV's QR code
-// (#<id>.<key> in the address), which the page keeps in localStorage, in the address and in the manifest's
-// start_url (/manifest.webmanifest?p=…): iOS starts a home-screen app at start_url, with storage of its own.
+// (#<id>.<key> in the address), which the page keeps in localStorage and moves to /?p=<id>.<key>: there the
+// server links a manifest whose start_url is that address, since iOS starts a home-screen app at start_url
+// with storage of its own (and reads the manifest before any script could change the link).
 // A WebSocket to the relay (/phone) keeps the status live: controls go away while the TV is offline and
 // come back the moment it is on. Commands go through run(cmd, {text, args}); the TV's building blocks
 // (sony, button, intent, launch, apps, global, local, info) let new features live here alone.
@@ -22,6 +23,7 @@ export const PAGE = `<!doctype html>
 <style>
   :root { --bg:#0b0b0f; --card:#17171d; --line:#2a2a33; --text:#f4f4f6; --dim:#9a9aa6; --accent:#ff9f0a; --ok:#30d158; --bad:#ff453a; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  [hidden] { display:none !important; }   /* .row and friends set display, which would beat the attribute */
   body { margin:0; background:var(--bg); color:var(--text); font:16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
          padding:max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
   main { max-width:520px; margin:0 auto; }
@@ -97,6 +99,11 @@ export const PAGE = `<!doctype html>
   <div id="unpaired" class="empty" hidden>
     <b>Not paired yet</b>
     On the TV, hold OK on the Wi-Fi button at the top of the Home screen and scan the QR code with this phone.
+    <p style="margin-top:22px">Or paste the QR code's link here (in the camera, hold the link and copy it):</p>
+    <div class="row">
+      <input id="pairLink" type="url" autocomplete="off" placeholder="https://tv-remote…/#…" style="flex:1">
+      <button class="primary" id="pairBtn" style="flex:0 0 auto">Pair</button>
+    </div>
   </div>
 
   <div id="paired" hidden>
@@ -206,15 +213,21 @@ export const PAGE = `<!doctype html>
   const STORE = "tvremote";
   let tv = null;
   try { tv = JSON.parse(localStorage.getItem(STORE) || "null"); } catch (e) {}
-  const m = /^#([A-Za-z0-9_-]{12,32})[.]([A-Za-z0-9_-]{22,64})$/.exec(location.hash);
-  if (m) {
-    tv = { id: m[1], key: m[2] };
-    try { localStorage.setItem(STORE, JSON.stringify(tv)); } catch (e) {}
-  } else if (tv) {
-    history.replaceState(null, "", location.pathname + "#" + tv.id + "." + tv.key);
+  function parsePairing(s) {
+    const m = /([A-Za-z0-9_-]{12,32})[.]([A-Za-z0-9_-]{22,64})$/.exec(s || "");
+    return m ? { id: m[1], key: m[2] } : null;
   }
-  // The manifest's start_url carries the pairing, so Add to Home Screen makes an app that starts paired.
-  if (tv) document.querySelector("link[rel=manifest]").href = "/manifest.webmanifest?p=" + tv.id + "." + tv.key;
+  const given = parsePairing(location.hash.slice(1)) || parsePairing(new URLSearchParams(location.search).get("p"));
+  if (given) {
+    tv = given;
+    try { localStorage.setItem(STORE, JSON.stringify(tv)); } catch (e) {}
+  }
+  // A paired page lives at /?p=<id>.<key>: the server then links the manifest whose start_url is that
+  // address, so Add to Home Screen makes an app that opens paired (iOS gives it storage of its own).
+  if (tv && location.search !== "?p=" + tv.id + "." + tv.key) {
+    location.replace("/?p=" + tv.id + "." + tv.key);
+    return;
+  }
   let swReg = null;
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").then((r) => (swReg = r)).catch(() => {});
 
@@ -464,6 +477,12 @@ export const PAGE = `<!doctype html>
   };
 
   // ---- start ------------------------------------------------------------------------------------
+  $("pairBtn").onclick = () => {
+    const t = parsePairing($("pairLink").value.trim());
+    if (!t) { toast("That is not the TV's pairing link.", true); return; }
+    try { localStorage.setItem(STORE, JSON.stringify(t)); } catch (e) {}
+    location.replace("/?p=" + t.id + "." + t.key);
+  };
   if (!tv) { $("unpaired").hidden = false; $("status").className = "pill off"; $("statusText").textContent = "Not paired"; return; }
   $("paired").hidden = false;
 
