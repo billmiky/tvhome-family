@@ -456,7 +456,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         vpnApp = cfg.vpnApp;
         moduleCards = cfg.moduleCards;
-        hiddenApps = new HashSet<>(cfg.hiddenApps);
 
         grid = findViewById(R.id.grid);
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
@@ -487,7 +486,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.setLayoutAnimation(new LayoutAnimationController(
                 AnimationUtils.loadAnimation(this, R.anim.tile_enter), 0.06f));
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
+        applyOwnerChoices();
+        adapter.setSavedOrder(Order.ranks(Order.load(getSharedPreferences(PREFS, MODE_PRIVATE)), cfg.dockApps));
         grid.setAdapter(adapter);
+        // Move mode dims every tile but the carried one; a recycled view must not keep an old alpha.
+        grid.addOnChildAttachStateChangeListener(new RecyclerView.OnChildAttachStateChangeListener() {
+            @Override
+            public void onChildViewAttachedToWindow(@NonNull View v) {
+                v.setAlpha(tileAlpha(grid.getChildAdapterPosition(v)));
+            }
+
+            @Override
+            public void onChildViewDetachedFromWindow(@NonNull View v) {
+            }
+        });
 
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
         // rows_below_dock grid rows under it; the rest of the grid stays below until you press Down.
@@ -854,6 +866,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * ones and cards stay off for this process.
      */
     private void reloadTiles() {
+        endTileModes();   // an app installed or removed while moving: keep the order so far
         // Read these before reload(): rebinding can move focus to the first tile and overwrite them.
         final String returnKey = lastFocusedKey;
         final int returnSlot = lastFocused;
@@ -862,7 +875,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         final List<ResolveInfo> leanback = getPackageManager().queryIntentActivities(
                 new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0);
         cards = moduleCards ? CardFeature.run(() -> Cards.discover(this, hiddenApps, () -> Cards.load(Cards.storeFile(this)), leanback), none) : none;
-        adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none), leanback);
+        adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none), leanback,
+                addedEntries(leanback));
         tilesStale = false;
         lastFocusedKey = returnKey;
         lastFocused = returnSlot;
@@ -887,6 +901,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onPause() {
         super.onPause();
         resumed = false;
+        endTileModes();   // Home or another app while moving keeps the order so far
         stopVideo();   // the decoder goes back to the app being opened
         intro.finish();
         handler.removeCallbacks(goIdle);
@@ -909,6 +924,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (cardPrompt != null) cardPrompt.dismiss();
         if (updatePrompt != null) updatePrompt.dismiss();
         if (openPopup != null) openPopup.dismiss();
+        if (library != null) library.close();
         Updater.installListener = null;
         WebControl.remote = null;
         // From another app a message starts Home with it (onNewIntent), so it shows on top.
@@ -1301,6 +1317,489 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.smoothScrollToPosition(pos);
     }
 
+    // ---- tile menu and move mode ------------------------------------------------------------------
+
+    /** Key of the tile being moved (tile menu, Move), or null. */
+    private String movingKey;
+    /** Tile order when the move started, to save only when something changed. */
+    private List<String> orderAtStart;
+    /** Tile menu, Add to dock: the grid app waiting for the dock place it takes, or null. */
+    private String dockPickKey;
+    /** Tile menu, Replace with another app: the dock app waiting for the app that takes its place, or null. */
+    private String dockReplaceKey;
+    /** The tiles the modes above leave aside are dimmed to this. */
+    private static final float DIMMED = 0.4f;
+
+    private boolean tileModeOn() {
+        return movingKey != null || dockPickKey != null || dockReplaceKey != null;
+    }
+
+    /** Adapter position of the focused tile, or -1 when focus is not on a tile. */
+    private int focusedTilePosition() {
+        View f = getCurrentFocus();
+        if (f == null || f.getId() != R.id.card || !(f.getParent() instanceof View)) return -1;
+        int pos = grid.getChildAdapterPosition((View) f.getParent());
+        return pos == RecyclerView.NO_POSITION ? -1 : pos;
+    }
+
+    /**
+     * Hold OK (or the Menu key) on a tile: a small glass menu by it (upstream d4ec1da3, 7dbc6917). Move, Add to dock
+     * or Replace with another app and Remove from dock change the order, which is kept (Order); Hide from Home adds
+     * the app to the owner's hidden set (HiddenApps); Lock with PIN toggles App lock; App info is what holding OK
+     * used to do.
+     */
+    @Override
+    public void onTileLongPress(int position, View card) {
+        if (tileModeOn() || openPopup != null || card == null) return;
+        final String key = adapter.keyAt(position);
+        final String pkg = adapter.packageAt(position);
+        // The "Default home" tile carries the launcher's own package: no menu for it.
+        if (key == null || pkg == null || pkg.equals(getPackageName())) return;
+        final boolean movable = position < adapter.movableCount();
+        final boolean inDock = position < COLUMNS;
+        final String label = adapter.labelAt(position);
+
+        View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
+        ((TextView) panel.findViewById(R.id.heading)).setText(label);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (280 * density));
+        if (movable) addTileMenuRow(rows, popup, getString(R.string.tile_move), null, () -> startMove(key));
+        if (movable && adapter.movableCount() > COLUMNS) {
+            if (inDock) {
+                addTileMenuRow(rows, popup, getString(R.string.tile_replace_in_dock), null, () -> startDockReplace(key));
+                addTileMenuRow(rows, popup, getString(R.string.tile_remove_from_dock), null, () -> removeFromDock(key));
+            } else {
+                addTileMenuRow(rows, popup, getString(R.string.tile_add_to_dock), null, () -> startDockPick(key));
+            }
+        }
+        addTileMenuRow(rows, popup, getString(R.string.tile_hide), null, () -> hideFromHome(pkg, label, key));
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        boolean locked = AppLock.locked(p, pkg);
+        addTileMenuRow(rows, popup, getString(locked ? R.string.tile_unlock : R.string.tile_lock),
+                getString(locked ? R.string.app_lock_locked : R.string.app_lock_open), () -> toggleAppLock(pkg, label));
+        // The app's info page has an Open button, so a locked app asks first.
+        addTileMenuRow(rows, popup, getString(R.string.tile_app_info), null, () -> onTileOpen(pkg, () -> open(
+                new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + pkg)))));
+
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int width = Math.max((int) (280 * density), panel.getMeasuredWidth());
+        int height = panel.getMeasuredHeight();
+        popup.setWidth(width);
+        popup.setHeight(height);
+        // Next to the tile as magnified; dock tiles sit near the bottom, so their menu opens above them.
+        int[] at = new int[2];
+        card.getLocationInWindow(at);
+        float growX = card.getWidth() * (AppAdapter.FOCUS_SCALE - 1f) / 2f;
+        float growY = card.getHeight() * (AppAdapter.FOCUS_SCALE - 1f) / 2f;
+        int gap = (int) (12 * density);
+        int x = Math.round(at[0] - growX);
+        x = Math.max(gap, Math.min(x, root.getWidth() - width - gap));
+        int below = Math.round(at[1] + card.getHeight() + growY) + gap;
+        boolean fitsBelow = below + height <= root.getHeight() - gap;
+        int y = fitsBelow ? below : Math.max(gap, Math.round(at[1] - growY) - gap - height);
+        panel.setAlpha(0f);
+        panel.setPivotY(fitsBelow ? 0f : height);
+        panel.setScaleY(0.92f);
+        panel.setTranslationY((fitsBelow ? -8 : 8) * density);
+        popup.showAtLocation(root, Gravity.NO_GRAVITY, x, y);
+        panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+        rows.getChildAt(0).requestFocus();
+    }
+
+    /** A row of the tile menu: the popup closes, then the action runs. status null: a title alone. */
+    private void addTileMenuRow(LinearLayout rows, PopupWindow popup, String title, String status, Runnable action) {
+        View row = addMenuRow(rows, title, status == null ? "" : status);
+        if (status == null) row.findViewById(R.id.status).setVisibility(View.GONE);
+        row.setOnClickListener(v -> {
+            popup.dismiss();
+            action.run();
+        });
+    }
+
+    /**
+     * Keys while a tile mode is on, before the views see them.
+     * Move: arrows move the tile, OK or Back puts it down. Add to dock: Left and Right pick the dock place, OK takes
+     * it. Replace: arrows pick the app in the grid, OK swaps it in. Back cancels either. Other keys (volume, Home)
+     * pass through.
+     */
+    private boolean dispatchTileModes(KeyEvent event) {
+        if (!tileModeOn()) return false;
+        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        int code = event.getKeyCode();
+        boolean ok = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
+        boolean back = code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE;
+        boolean arrow = code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT
+                || code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN;
+        if (code == KeyEvent.KEYCODE_MENU) return true;
+        if (movingKey != null) {
+            if (arrow) {
+                if (down) moveBy(code);
+                return true;
+            }
+            if (ok || back) {
+                if (!down) finishMove();
+                return true;
+            }
+            return false;
+        }
+        if (back) {
+            if (!down) cancelDockChoice();
+            return true;
+        }
+        int pos = focusedTilePosition();
+        if (pos < 0) {
+            // Focus slipped off the tiles (it should not): put it back on one rather than act elsewhere.
+            if (down && (ok || arrow)) focusTile(dockPickKey != null ? 0 : COLUMNS);
+            return ok || arrow;
+        }
+        int n = adapter.movableCount();
+        if (arrow) {
+            // Stay on the tiles that can be chosen: the dock row for a place, the grid for an app. No top bar,
+            // and no photo stepping at a row's ends.
+            if (code == KeyEvent.KEYCODE_DPAD_LEFT) return pos % COLUMNS == 0;
+            if (code == KeyEvent.KEYCODE_DPAD_RIGHT) return pos % COLUMNS == COLUMNS - 1 || pos >= n - 1;
+            if (dockPickKey != null) return true;
+            if (code == KeyEvent.KEYCODE_DPAD_UP) return pos < 2 * COLUMNS;
+            return false;   // Down in the grid: onTileVerticalKey as usual
+        }
+        if (ok) {
+            if (!down) {
+                if (dockPickKey != null) {
+                    int from = adapter.positionOf(dockPickKey);
+                    if (from >= 0 && pos < Math.min(COLUMNS, n)) swapIntoDock(pos, from);
+                    else if (from < 0) cancelDockChoice();
+                } else {
+                    int slot = adapter.positionOf(dockReplaceKey);
+                    if (slot >= 0 && pos >= COLUMNS && pos < n) swapIntoDock(slot, pos);
+                    else if (slot < 0) cancelDockChoice();
+                }
+            }
+            return true;   // never opens the app while choosing
+        }
+        return false;
+    }
+
+    /** Move: the tile is picked up; arrows move it until OK or Back. */
+    private void startMove(String key) {
+        int pos = adapter.positionOf(key);
+        if (pos < 0 || adapter.movableCount() < 2) return;
+        movingKey = key;
+        orderAtStart = adapter.movableKeys();
+        dimOthers();
+        focusTile(pos);
+        Toast.makeText(this, getString(R.string.tile_move_hint, adapter.labelAt(pos)), Toast.LENGTH_LONG).show();
+    }
+
+    /**
+     * Moves the carried tile one step. Left and Right wrap across rows, like a list; Up and Down move a whole row,
+     * and Down into a short last row lands on its last tile. Nothing moves past either end or up into the top bar.
+     */
+    private void moveBy(int keyCode) {
+        int from = adapter.positionOf(movingKey);
+        int n = adapter.movableCount();
+        if (from < 0 || from >= n) {
+            finishMove();
+            return;
+        }
+        int to;
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) to = from - 1;
+        else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) to = from + 1;
+        else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) to = from - COLUMNS;
+        else if (from + COLUMNS < n) to = from + COLUMNS;
+        else to = from / COLUMNS < (n - 1) / COLUMNS ? n - 1 : from;
+        if (to < 0 || to >= n || to == from) return;
+        final int target = to;
+        keepScroll(() -> adapter.move(from, target));
+        refocusAfterLayout(target);
+    }
+
+    /** Puts the carried tile down where it is and keeps the order if it changed. */
+    private void finishMove() {
+        if (movingKey == null) return;
+        movingKey = null;
+        if (!adapter.movableKeys().equals(orderAtStart)) saveOrder();
+        orderAtStart = null;
+        dimOthers();
+    }
+
+    /** Keeps the tiles' current order as the owner's (Order), which the next reload follows. */
+    private void saveOrder() {
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        Order order = new Order(Order.dockKey(config.dockApps), adapter.movableKeys());
+        Order.save(p, order);
+        adapter.setSavedOrder(Order.ranks(order, config.dockApps));
+    }
+
+    /** Add to dock: focus goes to the dock, where OK chooses the place the app takes. */
+    private void startDockPick(String key) {
+        if (adapter.positionOf(key) < 0) return;
+        dockPickKey = key;
+        dimOthers();
+        focusTile(0);
+        Toast.makeText(this, getString(R.string.dock_pick_place, adapter.labelAt(adapter.positionOf(key))),
+                Toast.LENGTH_LONG).show();
+    }
+
+    /** Replace with another app: focus goes to the grid, where OK chooses the app that takes the dock place. */
+    private void startDockReplace(String key) {
+        int slot = adapter.positionOf(key);
+        if (slot < 0) return;
+        dockReplaceKey = key;
+        dimOthers();
+        focusTile(COLUMNS);
+        Toast.makeText(this, getString(R.string.dock_pick_app, adapter.labelAt(slot)), Toast.LENGTH_LONG).show();
+    }
+
+    /** Back while choosing: nothing changes and focus goes back to the app the menu was for. */
+    private void cancelDockChoice() {
+        String key = dockPickKey != null ? dockPickKey : dockReplaceKey;
+        dockPickKey = null;
+        dockReplaceKey = null;
+        dimOthers();
+        int pos = adapter.positionOf(key);
+        if (pos >= 0) focusTile(pos);
+    }
+
+    /** Puts the app at pos into dock place slot, and the app that was there where the chosen one was; then saves. */
+    private void swapIntoDock(int slot, int pos) {
+        dockPickKey = null;
+        dockReplaceKey = null;
+        String slotKey = adapter.keyAt(slot);
+        if (pos != slot && slotKey != null) {
+            keepScroll(() -> {
+                adapter.move(pos, slot);
+                adapter.move(adapter.positionOf(slotKey), pos);
+            });
+            saveOrder();
+        }
+        dimOthers();
+        refocusAfterLayout(slot);
+    }
+
+    /** Remove from dock: the app goes to the start of the grid and the first grid app takes the dock's last place. */
+    private void removeFromDock(String key) {
+        int pos = adapter.positionOf(key);
+        if (pos < 0 || pos >= COLUMNS || adapter.movableCount() <= COLUMNS) return;
+        keepScroll(() -> adapter.move(pos, COLUMNS));
+        saveOrder();
+        refocusAfterLayout(pos);
+    }
+
+    /** Hide from Home: the app joins the owner's hidden set; Settings menu, Hidden apps, or the App library bring it back. */
+    private void hideFromHome(String pkg, String label, String key) {
+        int pos = Math.max(0, adapter.positionOf(key));
+        setOnHome(pkg, false, true);
+        Toast.makeText(this, getString(R.string.tile_hidden_toast, label), Toast.LENGTH_LONG).show();
+        grid.post(() -> focusTile(Math.min(pos, adapter.getItemCount() - 1)));
+    }
+
+    /**
+     * Puts an app on Home or takes it off (HiddenApps). reload: rebuild the tiles now; otherwise the caller does it
+     * once it is done (a list of toggles reloads when it closes, not on every press). Focus is left to the caller.
+     */
+    private void setOnHome(String pkg, boolean onHome, boolean reload) {
+        HiddenApps.setOnHome(getSharedPreferences(PREFS, MODE_PRIVATE), pkg, onHome, isTvApp(pkg),
+                config.hiddenApps.contains(pkg));
+        applyOwnerChoices();
+        if (reload) reloadTiles();
+    }
+
+    /** The owner's choices (HiddenApps) into the tiles and the card check, from the next reload. */
+    private void applyOwnerChoices() {
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        Set<String> hidden = HiddenApps.get(p), added = HiddenApps.added(p);
+        // config.xml's hidden_apps plus the apps the owner hid, less those added back: no tile, no card.
+        hiddenApps = HiddenApps.effective(config.hiddenApps, hidden, added);
+        adapter.setOwnerChoices(hidden, added);
+    }
+
+    /** Whether the app has a TV (leanback) entry, which puts it on Home by itself. */
+    private boolean isTvApp(String pkg) {
+        return !getPackageManager().queryIntentActivities(new Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER).setPackage(pkg), 0).isEmpty();
+    }
+
+    /**
+     * The phone entry of each app the owner added from the App library that has no TV entry (one query per such
+     * app, usually none), for the tiles.
+     */
+    private List<ResolveInfo> addedEntries(List<ResolveInfo> leanback) {
+        Set<String> added = HiddenApps.added(getSharedPreferences(PREFS, MODE_PRIVATE));
+        if (added.isEmpty()) return Collections.emptyList();
+        for (ResolveInfo ri : leanback) if (ri.activityInfo != null) added.remove(ri.activityInfo.packageName);
+        List<ResolveInfo> out = new ArrayList<>();
+        PackageManager pm = getPackageManager();
+        for (String pkg : added) {
+            List<ResolveInfo> found = pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_LAUNCHER).setPackage(pkg), 0);
+            for (ResolveInfo ri : found) {
+                if (ri.activityInfo != null && ri.activityInfo.exported) {
+                    out.add(ri);
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Lock with PIN / Unlock from the tile menu: the PIN first (a new one when none is set), as in Settings. */
+    private void toggleAppLock(String pkg, String label) {
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        boolean lock = !AppLock.locked(p, pkg);
+        Runnable apply = () -> {
+            AppLock.setLocked(p, pkg, lock);
+            Toast.makeText(this, getString(lock ? R.string.tile_locked_toast : R.string.tile_unlocked_toast, label),
+                    Toast.LENGTH_SHORT).show();
+        };
+        if (AppLock.hasPin(p)) verifyPin(getString(R.string.app_lock_enter), apply);
+        else newPin(apply);
+    }
+
+    /** Ends whichever tile mode is on: a move keeps the order so far, a dock choice is cancelled. */
+    private void endTileModes() {
+        if (!tileModeOn()) return;
+        finishMove();
+        dockPickKey = null;
+        dockReplaceKey = null;
+        dimOthers();
+    }
+
+    /** Sets every tile on screen to its alpha for the current mode (tileAlpha). */
+    private void dimOthers() {
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            View item = grid.getChildAt(i);
+            item.setAlpha(tileAlpha(grid.getChildAdapterPosition(item)));
+        }
+    }
+
+    /**
+     * Dimmed unless it is the carried tile, or a tile that can be chosen: a dock place for Add to dock, a grid app
+     * for Replace (with the dock app being replaced kept bright).
+     */
+    private float tileAlpha(int pos) {
+        if (pos == RecyclerView.NO_POSITION || !tileModeOn()) return 1f;
+        String key = adapter.keyAt(pos);
+        if (movingKey != null) return movingKey.equals(key) ? 1f : DIMMED;
+        if (dockPickKey != null) return pos < COLUMNS || dockPickKey.equals(key) ? 1f : DIMMED;
+        return pos >= COLUMNS || dockReplaceKey.equals(key) ? 1f : DIMMED;
+    }
+
+    /**
+     * Applies an adapter change without the grid jumping (upstream 33ca9770). After a move the layout manager
+     * anchors on the focused tile, shifting every other row; pinning the first visible row at its current offset
+     * keeps the scroll where it was. onTileFocused still scrolls afterwards if the moved tile ends up off screen.
+     */
+    private void keepScroll(Runnable change) {
+        GridLayoutManager lm = (GridLayoutManager) grid.getLayoutManager();
+        int first = lm.findFirstVisibleItemPosition();
+        View firstView = first != RecyclerView.NO_POSITION ? lm.findViewByPosition(first) : null;
+        int offset = firstView != null ? lm.getDecoratedTop(firstView) - grid.getPaddingTop() : 0;
+        change.run();
+        if (firstView != null) lm.scrollToPositionWithOffset(first, offset);
+    }
+
+    /**
+     * Once the grid has applied the change, focus (and the glass and magnification) on the tile at pos. The grid
+     * has a fixed size, so it applies adapter changes on the next animation frame; wait for that, at most 10 frames.
+     * No focus change fires for a moved tile, so focusTile's already-focused path calls onTileFocused itself.
+     */
+    private void refocusAfterLayout(int pos) {
+        grid.postOnAnimation(new Runnable() {
+            int frames;
+
+            @Override
+            public void run() {
+                if ((grid.hasPendingAdapterUpdates() || grid.isLayoutRequested()) && ++frames < 10) {
+                    grid.postOnAnimation(this);
+                    return;
+                }
+                focusTile(pos);
+                dimOthers();   // views that came into view or were rebound during the move
+            }
+        });
+    }
+
+    /** Settings menu, Hidden apps: every app the owner hid, OK shows it on Home again (or hides it back). */
+    private void showHiddenApps() {
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        Set<String> owner = HiddenApps.get(p);
+        if (owner.isEmpty()) {
+            Toast.makeText(this, R.string.hidden_apps_none_toast, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        View anchor = btnSettings;
+        View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
+        ((TextView) panel.findViewById(R.id.heading)).setText(R.string.settings_menu_hidden_apps);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (400 * density));
+        List<String[]> apps = new ArrayList<>();   // {label, package}
+        for (String pkg : owner) apps.add(new String[] {appLabel(pkg), pkg});
+        Collections.sort(apps, (a, b) -> a[0].compareToIgnoreCase(b[0]));
+        for (String[] app : apps) {
+            final String pkg = app[1];
+            View row = addMenuRow(rows, app[0], getString(R.string.hidden_state_hidden));
+            final TextView status = row.findViewById(R.id.status);
+            row.setOnClickListener(v -> {
+                boolean hide = !HiddenApps.get(getSharedPreferences(PREFS, MODE_PRIVATE)).contains(pkg);
+                setOnHome(pkg, !hide, false);
+                status.setText(hide ? R.string.hidden_state_hidden : R.string.hidden_state_shown);
+                tilesOutOfDate = true;
+            });
+        }
+        popup.setOnDismissListener(() -> {
+            if (openPopup == popup) openPopup = null;
+            reloadIfOutOfDate();
+        });
+        fitBelow(popup, panel, anchor);
+        dropIn(popup, panel, anchor, Gravity.END);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    /** A list of Home toggles changed something; the tiles are rebuilt once it closes. */
+    private boolean tilesOutOfDate;
+
+    private void reloadIfOutOfDate() {
+        if (!tilesOutOfDate) return;
+        tilesOutOfDate = false;
+        reloadTiles();
+    }
+
+    /** Settings menu, App library: every installed app, TV or not; OK puts it on Home or takes it off. */
+    private AppLibraryDialog library;
+
+    private void showAppLibrary() {
+        if (library != null) return;
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        library = new AppLibraryDialog(this,
+                (pkg, tv) -> HiddenApps.onHome(tv, config.hiddenApps.contains(pkg),
+                        HiddenApps.get(p).contains(pkg), HiddenApps.added(p).contains(pkg)),
+                (pkg, onHome) -> {
+                    setOnHome(pkg, onHome, false);
+                    tilesOutOfDate = true;
+                },
+                (pkg, open) -> onTileOpen(pkg, open),
+                () -> {
+                    library = null;
+                    reloadIfOutOfDate();
+                });
+        library.show();
+    }
+
+    /** The Reset order row's status: whether the owner's order is in force. */
+    private String orderState() {
+        return getString(Order.applies(getSharedPreferences(PREFS, MODE_PRIVATE), config.dockApps)
+                ? R.string.reset_order_custom : R.string.reset_order_default);
+    }
+
+    /** Settings menu, Reset order: forgets the owner's order, so dock_apps and the alphabet decide again. */
+    private void resetOrder() {
+        Order.clear(getSharedPreferences(PREFS, MODE_PRIVATE));
+        adapter.setSavedOrder(Collections.emptyMap());
+        reloadTiles();
+    }
+
     // ---- top bar ---------------------------------------------------------------------------------
 
     /**
@@ -1570,6 +2069,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (intro != null && intro.running()) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) intro.skip();
             return true;
+        }
+        if (dispatchTileModes(event)) return true;
+        // The remote's Menu key on a tile opens the same menu as holding OK (upstream cce45dc5).
+        if (event.getKeyCode() == KeyEvent.KEYCODE_MENU && openPopup == null) {
+            int pos = focusedTilePosition();
+            if (pos >= 0) {
+                if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) onTileLongPress(pos, getCurrentFocus());
+                return true;
+            }
         }
         return super.dispatchKeyEvent(event);
     }
@@ -3338,7 +3846,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Hold OK on Settings: Module cards, and Check for updates with the installed version. */
     private void showSettingsMenu() {
         View anchor = btnSettings;
-        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        // The scrolling panel: with the Home rows (Hidden apps, Reset order) the menu no longer fits on every screen.
+        View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
+        panel.findViewById(R.id.heading).setVisibility(View.GONE);
         LinearLayout rows = panel.findViewById(R.id.rows);
         final PopupWindow popup = glassPopup(panel, (int) (340 * density));
 
@@ -3408,6 +3918,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             openAppLock();
         });
 
+        int hiddenCount = HiddenApps.get(getSharedPreferences(PREFS, MODE_PRIVATE)).size();
+        View hiddenRow = addMenuRow(rows, getString(R.string.settings_menu_hidden_apps), hiddenCount == 0
+                ? getString(R.string.hidden_apps_none) : getString(R.string.hidden_apps_count, hiddenCount));
+        hiddenRow.setOnClickListener(v -> {
+            popup.dismiss();
+            showHiddenApps();
+        });
+
+        View libraryRow = addMenuRow(rows, getString(R.string.app_library), getString(R.string.app_library_status));
+        libraryRow.setOnClickListener(v -> {
+            popup.dismiss();
+            showAppLibrary();
+        });
+
+        View orderRow = addMenuRow(rows, getString(R.string.settings_menu_reset_order), orderState());
+        final TextView orderStatus = orderRow.findViewById(R.id.status);
+        orderRow.setOnClickListener(v -> {
+            resetOrder();
+            orderStatus.setText(orderState());
+        });
+
         View checkRow = addMenuRow(rows, getString(R.string.update_menu_check, BuildConfig.VERSION_NAME), updateState());
         final TextView status = checkRow.findViewById(R.id.status);
         checkRow.setOnClickListener(v -> {
@@ -3420,6 +3951,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             runCheck(status, popup);
         });
 
+        fitBelow(popup, panel, anchor);
         dropIn(popup, panel, anchor, Gravity.END);
         rows.getChildAt(0).requestFocus();
     }

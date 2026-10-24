@@ -81,6 +81,8 @@ final class Config {
     final File wallpaper;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
+    /** RemoteKeys: remote buttons (keycode or scancode, optionally "hold:") mapped to an app or "input:<id>". */
+    final List<String> appKeys;
 
     private Config(List<String> dockApps, List<String> hiddenApps, String liveTvPackage, String liveTvAction,
                    String sourcePanelService, String sourcePanelAction, String inputAction,
@@ -88,7 +90,7 @@ final class Config {
                    boolean shamsiDate, boolean moduleCards, String vpnApp, boolean showHomeSettingsShortcut, String selfUpdate, boolean btcTicker, String greetingName, boolean nowPlaying, boolean gallery,
                    boolean weather, String weatherLocation, String weatherUnit, int screensaverIntervalS, boolean webControl, int webPort, String remoteRelay, boolean restoreKeyServices, String occasions, boolean holidays,
                    String christmasVideo, String newYearVideo, String tetVideo, int backgroundColor,
-                   File wallpaper, boolean overlayApplied) {
+                   File wallpaper, boolean overlayApplied, List<String> appKeys) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
         this.liveTvPackage = liveTvPackage;
@@ -123,6 +125,7 @@ final class Config {
         this.backgroundColor = backgroundColor;
         this.wallpaper = wallpaper;
         this.overlayApplied = overlayApplied;
+        this.appKeys = Collections.unmodifiableList(appKeys);
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -163,6 +166,8 @@ final class Config {
         String christmasVideo = res.getString(R.string.christmas_video).trim();
         String newYearVideo = res.getString(R.string.new_year_video).trim();
         String tetVideo = res.getString(R.string.tet_video).trim();
+        List<String> appKeys = new ArrayList<>();
+        for (String k : res.getStringArray(R.array.app_keys)) if (!k.trim().isEmpty()) appKeys.add(k.trim());
         int background = 0xFF000000;
         boolean applied = false;
 
@@ -205,6 +210,7 @@ final class Config {
             newYearVideo = string(json, "new_year_video", newYearVideo).trim();
             tetVideo = string(json, "tet_video", tetVideo).trim();
             background = color(json, "background_color", background);
+            appKeys = stringList(json, "app_keys", appKeys);
         }
         File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;
         if (wallpaper != null && !(wallpaper.isFile() && wallpaper.length() > 0)) wallpaper = null;
@@ -217,7 +223,7 @@ final class Config {
                 Math.max(10, Math.min(600, screensaverInterval)), webControl, Math.max(1024, Math.min(65535, webPort)),
                 remoteRelay.startsWith("https://") ? remoteRelay : "", restoreKeyServices, occasions, holidays,
                 christmasVideo, newYearVideo, tetVideo, background,
-                wallpaper, applied);
+                wallpaper, applied, appKeys);
     }
 
     /**

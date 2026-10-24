@@ -25,6 +25,7 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 |---|---|---|
 | `dock_apps` | list of package names | The dock row, in order; missing apps are skipped |
 | `hidden_apps` | list of package names | Never shown as tiles |
+| `app_keys` | list of strings | Remote buttons that open an app or switch input (InputKeyService): `"190:com.google.android.youtube.tv"`, `"scan:490:com.netflix.ninja"`, `"hold:KEYCODE_BUTTON_8:org.xbmc.kodi"`, `"scan:485:input:<input id>"`. See `app_keys` in config.xml |
 | `live_tv_package`, `live_tv_action` | string | The Live TV app and, if it has no leanback entry, the action to start it with |
 | `source_panel_service`, `source_panel_action` | string | The TV's own source panel, for sets with no TvInputManager |
 | `input_action` | string | Action sent with an HDMI/AV row's channel URI when nothing handles the standard `VIEW` (XGIMI: `com.xgimi.action.hdmiPlayer`) |
