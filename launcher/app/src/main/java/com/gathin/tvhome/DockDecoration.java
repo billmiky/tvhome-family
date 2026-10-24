@@ -45,6 +45,7 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     @Override
     public void onDraw(@NonNull Canvas c, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
         boolean any = false;
+        float cardW = 0, cardH = 0;
         for (int i = 0; i < parent.getChildCount(); i++) {
             View child = parent.getChildAt(i);
             int pos = parent.getChildAdapterPosition(child);
@@ -55,6 +56,8 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
             float t = child.getTop() + card.getTop() + child.getTranslationY();
             float r = l + card.getWidth();
             float b = t + card.getHeight();
+            cardW = Math.max(cardW, card.getWidth());
+            cardH = Math.max(cardH, card.getHeight());
             if (!any) {
                 rect.set(l, t, r, b);
                 any = true;
@@ -63,9 +66,13 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
             }
         }
         if (!any) return;
-        float pad = 14 * density;
-        rect.inset(-pad, -pad);
-        float radius = 26 * density;
+        // Room for the focused tile as magnified (AppAdapter.FOCUS_SCALE) plus the glass around it (6dp, as in
+        // MainActivity.glassTo) and a margin, so the highlight on an end tile stays inside the band. Fixed, not
+        // following the focus, so the band doesn't breathe as focus moves.
+        float margin = 6 * density + 8 * density;
+        float grow = (AppAdapter.FOCUS_SCALE - 1f) / 2f;
+        rect.inset(-(cardW * grow + margin), -(cardH * grow + margin));
+        float radius = 30 * density;
         c.drawRoundRect(rect, radius, radius, band);
         c.drawRoundRect(rect, radius, radius, edge);
     }
