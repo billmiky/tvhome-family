@@ -50,7 +50,7 @@ export const PAGE = `<!doctype html>
   .eyebrow { font-size:12px; font-weight:500; letter-spacing:.22em; text-transform:uppercase; color:var(--dim); }
   header { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin:8px 2px 20px; }
   #greeting { line-height:1.5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  header h1 { margin:4px 0 0; font-size:34px; font-weight:300; letter-spacing:-.01em; line-height:1.05; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  header h1 { margin:2px 0 0; padding-bottom:4px; font-size:34px; font-weight:300; letter-spacing:-.01em; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .status { flex:0 0 auto; display:flex; align-items:center; gap:8px; height:34px; padding:0 14px; border-radius:17px; font-size:14px; font-weight:500;
             background:var(--glass); border:1px solid var(--hair); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
   .dot { width:8px; height:8px; border-radius:50%; background:var(--faint); }
@@ -171,7 +171,7 @@ export const PAGE = `<!doctype html>
   .setting .ic { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:var(--key); flex:0 0 auto; }
   .setting .txt { flex:1; min-width:0; }
   .setting .txt b { display:block; font-weight:500; }
-  .setting .txt span { display:block; font-size:13px; color:var(--dim); }
+  .setting .txt span { display:block; font-size:13px; color:var(--dim); overflow-wrap:anywhere; -webkit-user-select:text; user-select:text; }
   .sub { padding:0 18px 16px 66px; }
   .steps { font-size:13px; color:var(--dim); margin:4px 0 12px; padding-left:18px; }
   .steps li { margin:5px 0; } .steps b { color:var(--text); font-weight:500; }
@@ -391,6 +391,14 @@ export const PAGE = `<!doctype html>
         </div>
       </section>
 
+      <section class="card group needs-tv" id="adbCard" hidden>
+        <div class="setting">
+          <span class="ic"><i data-i="terminal"></i></span>
+          <div class="txt"><b>ADB</b><span id="adbHint">Wireless debugging</span></div>
+          <input type="checkbox" class="switch" id="adbSwitch" aria-label="ADB over the network">
+        </div>
+      </section>
+
       <section class="card group">
         <div class="setting">
           <span class="ic" style="color:#ff6961"><i data-i="unlink"></i></span>
@@ -448,6 +456,7 @@ export const PAGE = `<!doctype html>
     add: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/>',
     unlink: '<path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 4 8M8 12h3M3 3l18 18"/>',
     tv: '<rect x="2" y="5" width="20" height="13" rx="2.5"/><path d="M8 21h8M8 2l4 3 4-3"/>',
+    terminal: '<rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m7 9 3 3-3 3M13 15h4"/>',
     tvoff: '<rect x="2" y="5" width="20" height="13" rx="2.5"/><path d="M8 21h8M9 9l6 5M15 9l-6 5"/>',
   };
   function icon(e) {
@@ -668,6 +677,7 @@ export const PAGE = `<!doctype html>
     $("offlineCard").hidden = online === true || t === "settings";
     setLive(t === "remote");
     if (t === "activity") loadReport();
+    if (t === "settings") loadAdb();
     window.scrollTo(0, 0);
     try { sessionStorage.setItem("tvremote-tab", t); } catch (e) {}
   }
@@ -835,6 +845,29 @@ export const PAGE = `<!doctype html>
     document.querySelectorAll("#range button").forEach((x) => x.classList.toggle("sel", x === b));
     loadReport();
   }));
+
+  // ---- ADB (Wireless debugging) ----------------------------------------------------------------------
+  function drawAdb(d) {
+    $("adbSwitch").checked = !!d.wifi;
+    $("adbHint").textContent = d.wifi
+      ? (d.ip && d.port ? "adb connect " + d.ip + ":" + d.port : "Wireless debugging on" + (d.ip ? " · " + d.ip : ""))
+      : d.tcp5555 && d.ip ? "Off · classic ADB on " + d.ip + ":5555" : "Wireless debugging off";
+  }
+  async function loadAdb() {
+    if (!online) return;
+    if (caps && caps.indexOf("adb") < 0) { $("adbCard").hidden = true; return; }
+    const j = await run("adb", { args: { action: "status" } }, null);
+    $("adbCard").hidden = !j.ok;
+    if (j.ok && j.data) drawAdb(j.data);
+  }
+  $("adbSwitch").onchange = async (e) => {
+    const box = e.currentTarget;
+    box.disabled = true;
+    $("adbHint").textContent = box.checked ? "Switching on…" : "Switching off…";
+    const j = await run("adb", { args: { action: box.checked ? "on" : "off" } }, box.checked ? "ADB on." : "ADB off.");
+    box.disabled = false;
+    if (j.ok && j.data) drawAdb(j.data); else loadAdb();
+  };
 
   // ---- notifications ---------------------------------------------------------------------------
   const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;

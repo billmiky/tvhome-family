@@ -436,7 +436,7 @@ final class RemoteRelay {
     static final String[] COMMANDS = {
             "ping", "caps", "info", "banner", "banner_clear", "lock", "unlock", "lock_timer", "lock_timer_cancel",
             "set_pin", "screen_off", "screen_on", "standby", "wake", "set_psk",
-            "sony", "button", "buttons", "intent", "launch", "apps", "global", "local", "type",
+            "sony", "button", "buttons", "intent", "launch", "apps", "global", "local", "type", "adb",
     };
 
     /**
@@ -573,6 +573,9 @@ final class RemoteRelay {
                 }
                 return "";
             }
+            case "adb":
+                out.put("data", adb(args.optString("action", arg.isEmpty() ? "status" : arg)));
+                return "";
             case "type":
                 return type(psk, args.optString("text", arg), args.optBoolean("enter"));
             case "buttons":
@@ -758,6 +761,110 @@ final class RemoteRelay {
             if (r != null) return r;
         }
         return null;
+    }
+
+    /**
+     * ADB over the network: status, on or off (Wireless debugging, which the launcher may switch with
+     * WRITE_SECURE_SETTINGS). Answers {wifi, adb, ip, port, tcp5555}; the Wireless debugging port is found
+     * the way `adb mdns services` finds it.
+     */
+    private static JSONObject adb(String action) throws Exception {
+        android.content.ContentResolver cr = app.getContentResolver();
+        if ("on".equals(action) || "off".equals(action)) {
+            boolean on = "on".equals(action);
+            try {
+                if (on && Settings.Global.getInt(cr, Settings.Global.ADB_ENABLED, 0) == 0) Settings.Global.putInt(cr, Settings.Global.ADB_ENABLED, 1);
+                Settings.Global.putInt(cr, "adb_wifi_enabled", on ? 1 : 0);
+            } catch (SecurityException e) {
+                throw new SonyIp.Failed("The launcher may not change this (WRITE_SECURE_SETTINGS, granted by the install script).");
+            }
+            if (on) Thread.sleep(1500);   // adbd needs a moment before it advertises the new port
+        } else if (!"status".equals(action)) {
+            throw new SonyIp.Failed("action is status, on or off");
+        }
+        boolean wifi = Settings.Global.getInt(cr, "adb_wifi_enabled", 0) == 1;
+        String ip = null;
+        for (java.net.NetworkInterface ni : java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())) {
+            if (!ni.isUp() || ni.isLoopback()) continue;
+            for (java.net.InetAddress a : java.util.Collections.list(ni.getInetAddresses())) {
+                if (a instanceof java.net.Inet4Address && a.isSiteLocalAddress()) ip = a.getHostAddress();
+            }
+        }
+        boolean tcp = false;
+        try (Socket sock = new Socket()) {
+            sock.connect(new InetSocketAddress("127.0.0.1", 5555), 400);
+            tcp = true;
+        } catch (IOException ignored) {
+            // Classic ADB over TCP is off.
+        }
+        int port = wifi && ip != null ? adbPort(ip) : 0;
+        JSONObject o = new JSONObject()
+                .put("wifi", wifi)
+                .put("adb", Settings.Global.getInt(cr, Settings.Global.ADB_ENABLED, 0) == 1)
+                .put("tcp5555", tcp);
+        if (ip != null) o.put("ip", ip);
+        if (port > 0) o.put("port", port);
+        return o;
+    }
+
+    /** The Wireless debugging port this TV advertises (_adb-tls-connect._tcp), 0 if none within 4 s. */
+    private static int adbPort(String ip) {
+        final android.net.nsd.NsdManager nsd = app.getSystemService(android.net.nsd.NsdManager.class);
+        if (nsd == null) return 0;
+        final int[] port = {0};
+        final java.util.concurrent.CountDownLatch found = new java.util.concurrent.CountDownLatch(1);
+        android.net.nsd.NsdManager.DiscoveryListener l = new android.net.nsd.NsdManager.DiscoveryListener() {
+            @Override
+            public void onServiceFound(android.net.nsd.NsdServiceInfo info) {
+                nsd.resolveService(info, new android.net.nsd.NsdManager.ResolveListener() {
+                    @Override
+                    public void onServiceResolved(android.net.nsd.NsdServiceInfo r) {
+                        if (r.getHost() != null && ip.equals(r.getHost().getHostAddress())) {
+                            port[0] = r.getPort();
+                            found.countDown();
+                        }
+                    }
+
+                    @Override
+                    public void onResolveFailed(android.net.nsd.NsdServiceInfo r, int error) {
+                    }
+                });
+            }
+
+            @Override
+            public void onServiceLost(android.net.nsd.NsdServiceInfo info) {
+            }
+
+            @Override
+            public void onDiscoveryStarted(String type) {
+            }
+
+            @Override
+            public void onDiscoveryStopped(String type) {
+            }
+
+            @Override
+            public void onStartDiscoveryFailed(String type, int error) {
+                found.countDown();
+            }
+
+            @Override
+            public void onStopDiscoveryFailed(String type, int error) {
+            }
+        };
+        try {
+            nsd.discoverServices("_adb-tls-connect._tcp", android.net.nsd.NsdManager.PROTOCOL_DNS_SD, l);
+            found.await(4, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception ignored) {
+            // No port.
+        } finally {
+            try {
+                nsd.stopServiceDiscovery(l);
+            } catch (Exception ignored) {
+                // Never started.
+            }
+        }
+        return port[0];
     }
 
     /** back, home, recents, notifications, quick_settings, lock_screen through the accessibility service. */
