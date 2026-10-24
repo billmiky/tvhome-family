@@ -87,8 +87,19 @@ public class OrderTest {
     }
 
     @Test
-    public void hiddenUnionKeepsConfigAndOwner() {
+    public void effectiveHiddenLetsTheOwnerWin() {
         assertEquals(new HashSet<>(Arrays.asList("cfg", "own")),
-                HiddenApps.union(Collections.singletonList("cfg"), Collections.singleton("own")));
+                HiddenApps.effective(Arrays.asList("cfg", "back"), Collections.singleton("own"), Collections.singleton("back")));
+    }
+
+    @Test
+    public void onHomeFollowsConfigUntilTheOwnerChooses() {
+        assertTrue(HiddenApps.onHome(true, false, false, false));     // a TV app
+        assertTrue(!HiddenApps.onHome(false, false, false, false));   // a phone app, not added
+        assertTrue(!HiddenApps.onHome(true, true, false, false));     // hidden_apps
+        assertTrue(HiddenApps.onHome(true, true, false, true));       // hidden_apps, added back by the owner
+        assertTrue(HiddenApps.onHome(false, false, false, true));     // a phone app the owner added
+        assertTrue(!HiddenApps.onHome(true, false, true, false));     // hidden by the owner
+        assertTrue(!HiddenApps.onHome(false, false, true, true));     // hidden wins over added
     }
 }

@@ -456,8 +456,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         vpnApp = cfg.vpnApp;
         moduleCards = cfg.moduleCards;
-        // config.xml's hidden_apps plus the apps the owner hid on the TV (tile menu, App library): no tile, no card.
-        hiddenApps = HiddenApps.union(cfg.hiddenApps, HiddenApps.get(getSharedPreferences(PREFS, MODE_PRIVATE)));
 
         grid = findViewById(R.id.grid);
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
@@ -488,7 +486,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.setLayoutAnimation(new LayoutAnimationController(
                 AnimationUtils.loadAnimation(this, R.anim.tile_enter), 0.06f));
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
-        adapter.setOwnerHidden(HiddenApps.get(getSharedPreferences(PREFS, MODE_PRIVATE)));
+        applyOwnerChoices();
         adapter.setSavedOrder(Order.ranks(Order.load(getSharedPreferences(PREFS, MODE_PRIVATE)), cfg.dockApps));
         grid.setAdapter(adapter);
         // Move mode dims every tile but the carried one; a recycled view must not keep an old alpha.
@@ -877,7 +875,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         final List<ResolveInfo> leanback = getPackageManager().queryIntentActivities(
                 new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0);
         cards = moduleCards ? CardFeature.run(() -> Cards.discover(this, hiddenApps, () -> Cards.load(Cards.storeFile(this)), leanback), none) : none;
-        adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none), leanback);
+        adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none), leanback,
+                addedEntries(leanback));
         tilesStale = false;
         lastFocusedKey = returnKey;
         lastFocused = returnSlot;
@@ -925,6 +924,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (cardPrompt != null) cardPrompt.dismiss();
         if (updatePrompt != null) updatePrompt.dismiss();
         if (openPopup != null) openPopup.dismiss();
+        if (library != null) library.close();
         Updater.installListener = null;
         WebControl.remote = null;
         // From another app a message starts Home with it (onNewIntent), so it shows on top.
@@ -1590,19 +1590,58 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Hide from Home: the app joins the owner's hidden set; Settings menu, Hidden apps, or the App library bring it back. */
     private void hideFromHome(String pkg, String label, String key) {
         int pos = Math.max(0, adapter.positionOf(key));
-        setHiddenByOwner(pkg, true);
+        setOnHome(pkg, false, true);
         Toast.makeText(this, getString(R.string.tile_hidden_toast, label), Toast.LENGTH_LONG).show();
         grid.post(() -> focusTile(Math.min(pos, adapter.getItemCount() - 1)));
     }
 
-    /** Hides or shows an app on Home (HiddenApps) and rebuilds the tiles; focus is left to the caller. */
-    private void setHiddenByOwner(String pkg, boolean hidden) {
+    /**
+     * Puts an app on Home or takes it off (HiddenApps). reload: rebuild the tiles now; otherwise the caller does it
+     * once it is done (a list of toggles reloads when it closes, not on every press). Focus is left to the caller.
+     */
+    private void setOnHome(String pkg, boolean onHome, boolean reload) {
+        HiddenApps.setOnHome(getSharedPreferences(PREFS, MODE_PRIVATE), pkg, onHome, isTvApp(pkg),
+                config.hiddenApps.contains(pkg));
+        applyOwnerChoices();
+        if (reload) reloadTiles();
+    }
+
+    /** The owner's choices (HiddenApps) into the tiles and the card check, from the next reload. */
+    private void applyOwnerChoices() {
         SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
-        HiddenApps.set(p, pkg, hidden);
-        Set<String> owner = HiddenApps.get(p);
-        hiddenApps = HiddenApps.union(config.hiddenApps, owner);
-        adapter.setOwnerHidden(owner);
-        reloadTiles();
+        Set<String> hidden = HiddenApps.get(p), added = HiddenApps.added(p);
+        // config.xml's hidden_apps plus the apps the owner hid, less those added back: no tile, no card.
+        hiddenApps = HiddenApps.effective(config.hiddenApps, hidden, added);
+        adapter.setOwnerChoices(hidden, added);
+    }
+
+    /** Whether the app has a TV (leanback) entry, which puts it on Home by itself. */
+    private boolean isTvApp(String pkg) {
+        return !getPackageManager().queryIntentActivities(new Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER).setPackage(pkg), 0).isEmpty();
+    }
+
+    /**
+     * The phone entry of each app the owner added from the App library that has no TV entry (one query per such
+     * app, usually none), for the tiles.
+     */
+    private List<ResolveInfo> addedEntries(List<ResolveInfo> leanback) {
+        Set<String> added = HiddenApps.added(getSharedPreferences(PREFS, MODE_PRIVATE));
+        if (added.isEmpty()) return Collections.emptyList();
+        for (ResolveInfo ri : leanback) if (ri.activityInfo != null) added.remove(ri.activityInfo.packageName);
+        List<ResolveInfo> out = new ArrayList<>();
+        PackageManager pm = getPackageManager();
+        for (String pkg : added) {
+            List<ResolveInfo> found = pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_LAUNCHER).setPackage(pkg), 0);
+            for (ResolveInfo ri : found) {
+                if (ri.activityInfo != null && ri.activityInfo.exported) {
+                    out.add(ri);
+                    break;
+                }
+            }
+        }
+        return out;
     }
 
     /** Lock with PIN / Unlock from the tile menu: the PIN first (a new one when none is set), as in Settings. */
@@ -1704,13 +1743,48 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             final TextView status = row.findViewById(R.id.status);
             row.setOnClickListener(v -> {
                 boolean hide = !HiddenApps.get(getSharedPreferences(PREFS, MODE_PRIVATE)).contains(pkg);
-                setHiddenByOwner(pkg, hide);
+                setOnHome(pkg, !hide, false);
                 status.setText(hide ? R.string.hidden_state_hidden : R.string.hidden_state_shown);
+                tilesOutOfDate = true;
             });
         }
+        popup.setOnDismissListener(() -> {
+            if (openPopup == popup) openPopup = null;
+            reloadIfOutOfDate();
+        });
         fitBelow(popup, panel, anchor);
         dropIn(popup, panel, anchor, Gravity.END);
         rows.getChildAt(0).requestFocus();
+    }
+
+    /** A list of Home toggles changed something; the tiles are rebuilt once it closes. */
+    private boolean tilesOutOfDate;
+
+    private void reloadIfOutOfDate() {
+        if (!tilesOutOfDate) return;
+        tilesOutOfDate = false;
+        reloadTiles();
+    }
+
+    /** Settings menu, App library: every installed app, TV or not; OK puts it on Home or takes it off. */
+    private AppLibraryDialog library;
+
+    private void showAppLibrary() {
+        if (library != null) return;
+        SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+        library = new AppLibraryDialog(this,
+                (pkg, tv) -> HiddenApps.onHome(tv, config.hiddenApps.contains(pkg),
+                        HiddenApps.get(p).contains(pkg), HiddenApps.added(p).contains(pkg)),
+                (pkg, onHome) -> {
+                    setOnHome(pkg, onHome, false);
+                    tilesOutOfDate = true;
+                },
+                (pkg, open) -> onTileOpen(pkg, open),
+                () -> {
+                    library = null;
+                    reloadIfOutOfDate();
+                });
+        library.show();
     }
 
     /** The Reset order row's status: whether the owner's order is in force. */
@@ -3850,6 +3924,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         hiddenRow.setOnClickListener(v -> {
             popup.dismiss();
             showHiddenApps();
+        });
+
+        View libraryRow = addMenuRow(rows, getString(R.string.app_library), getString(R.string.app_library_status));
+        libraryRow.setOnClickListener(v -> {
+            popup.dismiss();
+            showAppLibrary();
         });
 
         View orderRow = addMenuRow(rows, getString(R.string.settings_menu_reset_order), orderState());

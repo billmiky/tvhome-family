@@ -125,8 +125,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     private final List<String> favourites;
     /** Never shown as tiles (res/values/config.xml, hidden_apps). */
     private final Set<String> configHidden;
-    /** configHidden plus the apps the owner hid on the TV (HiddenApps). */
-    private Set<String> hidden;
+    /** The owner's choices on the TV (HiddenApps): hidden apps, and apps added back or from the App library. */
+    private Set<String> ownerHidden = Collections.emptySet(), ownerAdded = Collections.emptySet();
     /** The owner's saved order (tile menu, Order): key -> rank. Empty when there is none or it no longer applies. */
     private Map<String, Integer> savedRanks = Collections.emptyMap();
     private final boolean showHomeSettings;
@@ -138,16 +138,16 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         this.dockSize = dockSize;
         this.favourites = cfg.dockApps;
         this.configHidden = new HashSet<>(cfg.hiddenApps);
-        this.hidden = configHidden;
         this.showHomeSettings = cfg.showHomeSettingsShortcut;
         // Tiles keep their identity across reload(), so a focused tile stays on its app instead of
         // its view being rebound to whatever app now sits in that slot.
         setHasStableIds(true);
     }
 
-    /** Uses the owner's hidden apps (HiddenApps) from the next reload(), on top of config.xml's hidden_apps. */
-    void setOwnerHidden(Set<String> owner) {
-        hidden = HiddenApps.union(configHidden, owner);
+    /** Uses the owner's choices (HiddenApps) from the next reload(), over config.xml's hidden_apps. */
+    void setOwnerChoices(Set<String> hidden, Set<String> added) {
+        ownerHidden = hidden;
+        ownerAdded = added;
     }
 
     /** Uses this saved order from the next reload() (Order.ranks). */
@@ -159,7 +159,10 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
      * Rebuilds the tiles. A shown module card stands in for every tile of its package (same component,
      * so focus follows it); hidden_apps wins over a card, and a card's package in dock_apps takes that slot.
      */
-    void reload(List<Cards.Card> cards, List<ResolveInfo> found) {
+    void reload(List<Cards.Card> cards, List<ResolveInfo> leanback, List<ResolveInfo> added) {
+        List<ResolveInfo> found = new ArrayList<>(leanback);
+        // Apps the owner put on Home from the App library that have no TV entry: their phone entry, icon and label.
+        found.addAll(added);
         PackageManager pm = ctx.getPackageManager();
         Map<String, Cards.Card> cardByPkg = new HashMap<>();
         for (Cards.Card c : cards) cardByPkg.put(c.pkg, c);
@@ -170,7 +173,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         for (ResolveInfo ri : found) {
             if (ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName;
-            if (pkg.equals(ctx.getPackageName()) || hidden.contains(pkg)) continue;
+            if (pkg.equals(ctx.getPackageName()) || ownerHidden.contains(pkg)
+                    || (configHidden.contains(pkg) && !ownerAdded.contains(pkg))) continue;
             ComponentName component = new ComponentName(pkg, ri.activityInfo.name);
             Cards.Card card = cardByPkg.get(pkg);
             if (card != null && !card.component.equals(component)) continue;   // the card stands in for this tile
