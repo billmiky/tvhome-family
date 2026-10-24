@@ -144,4 +144,27 @@
     <string name="input_rename_title">Đổi tên %1$s</string>
     <string name="input_rename_save">Lưu</string>
     <string name="input_rename_reset">Dùng %1$s</string>
+    <string name="tile_move">Di chuyển</string>
+    <string name="tile_move_hint">Dùng phím mũi tên để di chuyển %1$s. Nhấn OK hoặc Quay lại để đặt xuống.</string>
+    <string name="tile_add_to_dock">Thêm vào dock</string>
+    <string name="tile_replace_in_dock">Thay bằng ứng dụng khác</string>
+    <string name="tile_remove_from_dock">Bỏ khỏi dock</string>
+    <string name="tile_hide">Ẩn khỏi màn hình chính</string>
+    <string name="tile_hidden_toast">Đã ẩn %1$s. Giữ OK trên Cài đặt, chọn Ứng dụng đã ẩn để hiện lại.</string>
+    <string name="tile_app_info">Thông tin ứng dụng</string>
+    <string name="tile_lock">Khoá bằng PIN</string>
+    <string name="tile_unlock">Mở khoá</string>
+    <string name="tile_locked_toast">Giờ cần PIN để mở %1$s</string>
+    <string name="tile_unlocked_toast">%1$s mở tự do</string>
+    <string name="dock_pick_place">Chọn vị trí trên dock cho %1$s rồi nhấn OK. Nhấn Quay lại để huỷ.</string>
+    <string name="dock_pick_app">Chọn ứng dụng thay cho %1$s rồi nhấn OK. Nhấn Quay lại để huỷ.</string>
+    <string name="settings_menu_hidden_apps">Ứng dụng đã ẩn</string>
+    <string name="hidden_apps_none">Không có</string>
+    <string name="hidden_apps_count">Đã ẩn %1$d</string>
+    <string name="hidden_apps_none_toast">Chưa ẩn ứng dụng nào. Giữ OK trên một ứng dụng, chọn Ẩn khỏi màn hình chính để ẩn.</string>
+    <string name="hidden_state_hidden">Đang ẩn. Nhấn OK để hiện lại</string>
+    <string name="hidden_state_shown">Trên màn hình chính</string>
+    <string name="settings_menu_reset_order">Đặt lại thứ tự</string>
+    <string name="reset_order_custom">Thứ tự của bạn. Nhấn OK để về thứ tự theo cấu hình</string>
+    <string name="reset_order_default">Theo cấu hình</string>
 </resources>

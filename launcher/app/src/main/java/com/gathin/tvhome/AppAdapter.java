@@ -1,6 +1,5 @@
 package com.gathin.tvhome;
 
-import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -13,7 +12,6 @@ import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.net.Uri;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.view.KeyEvent;
@@ -51,6 +49,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
         /** Before a tile opens its app (or, held, the app's info page): run open to go ahead (App lock may ask first). */
         void onTileOpen(String pkg, Runnable open);
+
+        /** Hold OK on a tile: the activity shows the tile menu (Move, dock, Hide from Home, App info, App lock). */
+        void onTileLongPress(int position, View card);
     }
 
     static final class Entry {
@@ -123,7 +124,11 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     /** Dock order (config.xml dock_apps, or a theme's config.json). */
     private final List<String> favourites;
     /** Never shown as tiles (res/values/config.xml, hidden_apps). */
-    private final Set<String> hidden;
+    private final Set<String> configHidden;
+    /** configHidden plus the apps the owner hid on the TV (HiddenApps). */
+    private Set<String> hidden;
+    /** The owner's saved order (tile menu, Order): key -> rank. Empty when there is none or it no longer applies. */
+    private Map<String, Integer> savedRanks = Collections.emptyMap();
     private final boolean showHomeSettings;
     private final List<Entry> items = new ArrayList<>();
 
@@ -132,11 +137,22 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         this.listener = listener;
         this.dockSize = dockSize;
         this.favourites = cfg.dockApps;
-        this.hidden = new HashSet<>(cfg.hiddenApps);
+        this.configHidden = new HashSet<>(cfg.hiddenApps);
+        this.hidden = configHidden;
         this.showHomeSettings = cfg.showHomeSettingsShortcut;
         // Tiles keep their identity across reload(), so a focused tile stays on its app instead of
         // its view being rebound to whatever app now sits in that slot.
         setHasStableIds(true);
+    }
+
+    /** Uses the owner's hidden apps (HiddenApps) from the next reload(), on top of config.xml's hidden_apps. */
+    void setOwnerHidden(Set<String> owner) {
+        hidden = HiddenApps.union(configHidden, owner);
+    }
+
+    /** Uses this saved order from the next reload() (Order.ranks). */
+    void setSavedOrder(Map<String, Integer> ranks) {
+        savedRanks = ranks;
     }
 
     /**
@@ -172,6 +188,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             }
         }
         Collections.sort(fresh, (a, b) -> {
+            // The owner's own order first; tiles it does not know (new installs) follow by the rule below.
+            int saved = Order.compare(savedRanks, a.component.flattenToShortString(), b.component.flattenToShortString());
+            if (saved != 0) return saved;
             int fa = favourites.indexOf(a.pkg), fb = favourites.indexOf(b.pkg);
             if (fa >= 0 || fb >= 0) {
                 if (fa < 0) return 1;
@@ -271,16 +290,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             h.label.setVisibility(View.VISIBLE);
         }
         h.card.setOnClickListener(v -> listener.onTileOpen(e.pkg, () -> launch(e)));
-        // The app's info page has an Open button, so a locked app asks here too.
         h.card.setOnLongClickListener(v -> {
-            listener.onTileOpen(e.pkg, () -> {
-                Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                try {
-                    ctx.startActivity(i);
-                } catch (ActivityNotFoundException ignored) {
-                }
-            });
+            int pos = h.getBindingAdapterPosition();
+            if (pos != RecyclerView.NO_POSITION) listener.onTileLongPress(pos, v);
             return true;
         });
     }
@@ -311,6 +323,36 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     @Override
     public long getItemId(int position) {
         return items.get(position).component.flattenToShortString().hashCode();
+    }
+
+    /** Tiles that can be moved: everything but the "Default home" tile, which always stays last. */
+    int movableCount() {
+        int n = items.size();
+        return n > 0 && items.get(n - 1).kind == Entry.HOME_SETTINGS ? n - 1 : n;
+    }
+
+    /** Keys of the movable tiles in their current order, for Order. */
+    List<String> movableKeys() {
+        List<String> keys = new ArrayList<>();
+        for (int i = 0; i < movableCount(); i++) keys.add(items.get(i).component.flattenToShortString());
+        return keys;
+    }
+
+    /** Moves one tile; the others shift by one. Stable ids keep the moved tile's view (and its focus). */
+    void move(int from, int to) {
+        if (from == to || from < 0 || to < 0 || from >= movableCount() || to >= movableCount()) return;
+        items.add(to, items.remove(from));
+        notifyItemMoved(from, to);
+        // The dock row hides names by position: rebind the tiles whose side of the dock edge changed.
+        if (from < dockSize || to < dockSize) {
+            int lo = Math.min(from, to), hi = Math.max(from, to);
+            notifyItemRangeChanged(lo, hi - lo + 1);
+        }
+    }
+
+    /** Package of the app at a position, or null; the "Default home" tile has the launcher's own. */
+    String packageAt(int position) {
+        return position >= 0 && position < items.size() ? items.get(position).pkg : null;
     }
 
     /** Stable key for the app at a position (its component), or null. */
