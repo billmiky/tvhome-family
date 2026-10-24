@@ -122,7 +122,7 @@ export const PAGE = `<!doctype html>
   .rocker button:active { background:var(--key-on); }
   .rocker button + button, .rocker .tag + button { border-left:1px solid rgba(255,255,255,.08); }
   .rocker .tag { align-self:center; font-size:11px; font-weight:600; letter-spacing:.2em; color:var(--faint); padding:0 6px 0 8px; }
-  .power { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+  .power { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; }
   .power button { display:flex; flex-direction:column; align-items:center; gap:7px; padding:12px 2px 10px; border-radius:18px; background:var(--key);
                   border:1px solid var(--hair); font-size:11.5px; color:var(--dim); line-height:1.15; text-align:center; }
   .power button svg { color:var(--text); }
@@ -272,12 +272,11 @@ export const PAGE = `<!doctype html>
           </div>
         </div>
         <div class="power">
-          <button data-cmd="screen_off"><i data-i="screenoff"></i>Screen off</button>
-          <button data-cmd="screen_on"><i data-i="screen"></i>Screen on</button>
+          <button id="btnPicture"><i id="pictureIcon" data-i="screenoff"></i><span id="pictureLabel">Picture off</span></button>
           <button data-cmd="standby" class="red" id="btnStandby"><i data-i="power"></i>Standby</button>
           <button data-cmd="wake" class="green" id="btnWake" hidden><i data-i="power"></i>Turn on</button>
         </div>
-        <p class="hint">Screen off keeps the TV running, so Screen on always works. From standby the TV may not hear Turn on.</p>
+        <p class="hint">Picture off blanks the screen but keeps the TV running, so it always comes back. From standby the TV may not hear Turn on.</p>
       </section>
     </div>
 
@@ -613,6 +612,7 @@ export const PAGE = `<!doctype html>
     if (!j.ok || !j.data) return;
     caps = j.data.caps || null;
     $("ipSetup").hidden = !!j.data.ipControl;
+    if (j.data.ipControl) loadPicture();
     $("ipSetupText").textContent = j.data.ipKeySaved
       ? "The TV refuses the saved IP control key. Check it on the TV and enter it again:"
       : "These use the TV's IP control, which isn't set up yet. On the TV:";
@@ -623,6 +623,22 @@ export const PAGE = `<!doctype html>
       drawGreeting();
     }
   }
+  // Picture: one button that turns the picture off or back on; the TV says which it is now.
+  let pictureOff = false;
+  function drawPicture() {
+    setIcon($("pictureIcon"), pictureOff ? "screen" : "screenoff");
+    $("pictureLabel").textContent = pictureOff ? "Picture on" : "Picture off";
+    $("btnPicture").classList.toggle("green", pictureOff);
+  }
+  async function loadPicture() {
+    const j = await run("sony", { args: { service: "system", method: "getPowerSavingMode", params: [], version: "1.0" } }, null);
+    if (j.ok && Array.isArray(j.data) && j.data[0]) { pictureOff = j.data[0].mode === "pictureOff"; drawPicture(); }
+  }
+  $("btnPicture").onclick = async (e) => {
+    const j = await run(pictureOff ? "screen_on" : "screen_off", {}, pictureOff ? "Picture on." : "Picture off.", e.currentTarget);
+    if (j.ok) { pictureOff = !pictureOff; drawPicture(); }
+  };
+
   async function savePsk(input, btn) {
     if (!input.value.trim()) { toast("Enter the key first.", true); return; }
     btn.disabled = true;
