@@ -12,6 +12,7 @@ import { DurableObject } from "cloudflare:workers";
 import { PAGE } from "./page.js";
 import { SW } from "./sw.js";
 import { ICON512, ICON192, APPLE180 } from "./icons.js";
+import { OUTFIT } from "./font.js";
 import { push } from "./webpush.js";
 
 const ID = /^[A-Za-z0-9_-]{12,32}$/;
@@ -68,7 +69,7 @@ export default {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store",
           "content-security-policy":
-            "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
           "referrer-policy": "no-referrer",
         },
       });
@@ -86,6 +87,10 @@ export default {
     if (path in ICONS || path === "/favicon.ico") {
       const bytes = Uint8Array.from(atob(ICONS[path] || ICON192), (c) => c.charCodeAt(0));
       return new Response(bytes, { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+    }
+    if (path === "/outfit.ttf") {
+      const bytes = Uint8Array.from(atob(OUTFIT), (c) => c.charCodeAt(0));
+      return new Response(bytes, { headers: { "content-type": "font/ttf", "cache-control": "public, max-age=2592000, immutable" } });
     }
     if (path === "/sw.js") {
       return new Response(SW, { headers: { "content-type": "text/javascript", "cache-control": "no-cache" } });

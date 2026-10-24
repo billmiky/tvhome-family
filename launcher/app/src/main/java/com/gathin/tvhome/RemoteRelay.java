@@ -465,17 +465,24 @@ final class RemoteRelay {
             case "screen_on":
                 SonyIp.pictureOff(psk, false);
                 return "Screen on.";
-            case "standby":
-                if (psk.isEmpty()) {
-                    // No IP control: the accessibility services can put the TV to sleep (Android 9+).
-                    AccessibilityService a = InputKeyService.running != null ? InputKeyService.running : HomeKeyService.running;
-                    if (a != null && Build.VERSION.SDK_INT >= 28) {
-                        main.post(() -> a.performGlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN));
+            case "standby": {
+                SonyIp.Failed sonyFailed = null;
+                if (!psk.isEmpty()) {
+                    try {
+                        SonyIp.power(psk, false);
                         return "Turning off.";
+                    } catch (SonyIp.Failed f) {
+                        sonyFailed = f;
                     }
                 }
-                SonyIp.power(psk, false);
-                return "Turning off.";
+                // No (working) IP control: the accessibility services can put the TV to sleep (Android 9+).
+                AccessibilityService a = InputKeyService.running != null ? InputKeyService.running : HomeKeyService.running;
+                if (a != null && Build.VERSION.SDK_INT >= 28) {
+                    main.post(() -> a.performGlobalAction(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN));
+                    return "Turning off.";
+                }
+                throw sonyFailed != null ? sonyFailed : new SonyIp.Failed("Set the Sony IP control key in Settings on the phone page first.");
+            }
             case "wake":
                 SonyIp.power(psk, true);
                 try {
@@ -513,10 +520,19 @@ final class RemoteRelay {
                     prefs(app).edit().remove(PREF_PSK).apply();
                     return "Key removed.";
                 }
-                // Kept only once the TV accepts it, so "IP control set up" means it works.
-                String state = SonyIp.powerStatus(arg);
+                // Kept only once the TV accepts it, so "IP control set up" means it works. getPowerStatus
+                // answers without a key, so the check is a method that needs one.
+                SonyIp.call(arg, "system", "getSystemInformation", new JSONArray(), "1.0");
                 prefs(app).edit().putString(PREF_PSK, arg).apply();
-                return "Saved. IP control works (" + (state.isEmpty() ? "ok" : state) + ").";
+                // Remote start (Wake-on-LAN): keeps the network up in standby, so the TV can be woken.
+                String wol;
+                try {
+                    SonyIp.call(arg, "system", "setWolMode", new JSONArray().put(new JSONObject().put("enabled", true)), "1.0");
+                    wol = " Remote start is on.";
+                } catch (SonyIp.Failed f) {
+                    wol = " (Remote start: " + f.getMessage() + ")";
+                }
+                return "Saved. IP control works." + wol;
             }
             case "caps":
                 out.put("data", new JSONArray(java.util.Arrays.asList(COMMANDS)));

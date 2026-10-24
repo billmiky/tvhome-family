@@ -5,13 +5,15 @@
 // A WebSocket to the relay (/phone) keeps the status live: controls go away while the TV is offline and
 // come back the moment it is on. Commands go through run(cmd, {text, args}); the TV's building blocks
 // (sony, button, intent, launch, apps, global, local, info) let new features live here alone.
+// The look follows the launcher (Apple TV style): Outfit, black with a warm ambient glow, glass panels with
+// a hairline border, spaced capitals for labels, white for the chosen or main action.
 // (No backticks or dollar-brace in the script below: this file is one template literal.)
 export const PAGE = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0b0f">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,284 +21,435 @@ export const PAGE = `<!doctype html>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preload" href="/outfit.ttf" as="font" type="font/ttf" crossorigin>
 <title>TV Remote</title>
 <style>
-  :root { --bg:#0b0b0f; --card:#17171d; --line:#2a2a33; --text:#f4f4f6; --dim:#9a9aa6; --accent:#ff9f0a; --ok:#30d158; --bad:#ff453a; }
+  @font-face { font-family:"Outfit"; src:url("/outfit.ttf") format("truetype"); font-weight:100 900; font-display:swap; }
+  :root {
+    --text:#fff; --dim:rgba(235,235,245,.62); --faint:rgba(235,235,245,.32);
+    --glass:linear-gradient(180deg, rgba(44,44,48,.62), rgba(22,22,24,.72));
+    --key:rgba(255,255,255,.08); --key-on:rgba(255,255,255,.16); --hair:rgba(255,255,255,.14);
+    --ok:#34c759; --bad:#ff453a; --warn:#ff9f0a;
+    --tabbar:calc(64px + env(safe-area-inset-bottom));
+  }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   [hidden] { display:none !important; }
-  /* Nothing may be wider than the phone: a wider page makes iOS open the app zoomed and shifted. */
   html, body { overflow-x:hidden; max-width:100%; -webkit-text-size-adjust:100%; text-size-adjust:100%; }
-  .row > *, .grid > *, .head > * { min-width:0; }
-  input[type=number] { -moz-appearance:textfield; }   /* .row and friends set display, which would beat the attribute */
-  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         padding:max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+  body { margin:0; min-height:100vh; color:var(--text); background:#000;
+         font:16px/1.4 "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         padding:max(14px, env(safe-area-inset-top)) 16px calc(var(--tabbar) + 18px); }
+  /* The ambient glow behind Home, here warm and soft. */
+  body::before { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+         background:radial-gradient(90% 55% at 18% -8%, rgba(255,92,38,.34), transparent 62%),
+                    radial-gradient(70% 45% at 105% 8%, rgba(120,70,255,.16), transparent 60%), #000; }
   main { max-width:520px; margin:0 auto; }
-  header { display:flex; align-items:center; justify-content:space-between; margin:4px 0 18px; gap:12px; }
-  h1 { font-size:26px; margin:0; letter-spacing:-.02em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pill { flex:0 0 auto; font-size:13px; color:var(--dim); background:var(--card); border:1px solid var(--line); border-radius:99px; padding:5px 11px; display:flex; gap:7px; align-items:center; }
-  .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); }
-  .on .dot { background:var(--ok); } .off .dot { background:var(--bad); }
-  section { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; margin-bottom:14px; }
-  h2 { font-size:13px; font-weight:600; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; margin:0 0 12px; }
-  textarea, input { width:100%; background:#0f0f14; color:var(--text); border:1px solid var(--line); border-radius:12px; padding:12px; font:inherit; font-size:17px; }
-  textarea { min-height:96px; resize:vertical; }
-  textarea:focus, input:focus { outline:none; border-color:var(--accent); }
-  .row { display:flex; gap:10px; margin-top:10px; }
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  button { flex:1; border:0; border-radius:14px; padding:15px 12px; font:inherit; font-weight:600; color:var(--text); background:#24242c; cursor:pointer; }
-  button:active { transform:scale(.98); }
-  button:disabled { opacity:.45; }
-  button.primary { background:var(--accent); color:#1a1000; }
-  button.danger { background:#3a1715; color:#ff8a80; }
-  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-  .chips button { flex:0 0 auto; padding:10px 14px; border-radius:99px; font-weight:500; }
-  .seg { display:flex; background:#0f0f14; border:1px solid var(--line); border-radius:12px; padding:3px; gap:3px; }
-  .seg button { padding:8px 12px; border-radius:9px; background:transparent; font-weight:500; color:var(--dim); white-space:nowrap; }
-  .seg button.sel { background:#2c2c34; color:var(--text); }
-  .countdown { font-size:34px; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
-  .head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px; }
-  .head h2 { margin:0; }
-  .badge { font-size:13px; padding:4px 10px; border-radius:99px; background:#24242c; color:var(--dim); }
-  .badge.locked { background:#3a1715; color:#ff8a80; }
-  .count { font-size:12px; color:var(--dim); text-align:right; margin-top:6px; }
-  .hint { font-size:13px; color:var(--dim); margin:10px 0 0; }
-  .tabs { display:flex; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:4px; gap:4px; margin-bottom:14px; }
-  .tabs button { padding:10px; border-radius:10px; background:transparent; color:var(--dim); font-weight:600; }
-  .tabs button.sel { background:#2c2c34; color:var(--text); }
-  .screen { position:relative; aspect-ratio:16/9; background:#000; border-radius:12px; overflow:hidden; }
+  button { font:inherit; color:inherit; border:0; cursor:pointer; background:none; padding:0; }
+  button:disabled { opacity:.4; }
+  svg { display:block; }
+
+  .eyebrow { font-size:12px; font-weight:500; letter-spacing:.22em; text-transform:uppercase; color:var(--dim); }
+  header { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin:6px 2px 18px; }
+  header h1 { margin:4px 0 0; font-size:34px; font-weight:300; letter-spacing:-.01em; line-height:1.05; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .status { flex:0 0 auto; display:flex; align-items:center; gap:8px; height:34px; padding:0 14px; border-radius:17px; font-size:14px; font-weight:500;
+            background:var(--glass); border:1px solid var(--hair); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--faint); }
+  .status.on .dot { background:var(--ok); box-shadow:0 0 8px rgba(52,199,89,.7); } .status.off .dot { background:var(--bad); }
+  .status.standby .dot { background:var(--warn); }
+
+  .card { position:relative; background:var(--glass); border:1px solid var(--hair); border-radius:22px; padding:18px;
+          margin-bottom:14px; -webkit-backdrop-filter:blur(24px) saturate(140%); backdrop-filter:blur(24px) saturate(140%); }
+  .card-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+  .hint { font-size:13px; color:var(--dim); margin:12px 0 0; line-height:1.45; }
+  .hint b { color:var(--text); font-weight:500; }
+
+  /* Glass pills; white is the main action, like the focused pill on the TV. */
+  .pill { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:48px; padding:0 20px; border-radius:24px;
+          background:var(--key); border:1px solid var(--hair); font-weight:500; font-size:16px; transition:background .15s, transform .1s; }
+  .pill:active, .key:active { transform:scale(.97); background:var(--key-on); }
+  .pill.white { background:#f5f5f7; color:#0b0b0d; border-color:transparent; }
+  .pill.white:active { background:#fff; }
+  .pill.red { color:#ff6961; }
+  .pill.sm { height:40px; padding:0 16px; font-size:15px; }
+  .pill.icon { width:48px; padding:0; }
+  .row { display:flex; gap:10px; margin-top:12px; }
+  .row > .pill { flex:1; }
+  .row > *, .card-head > * { min-width:0; }
+
+  textarea, input[type=text], input[type=password], input[type=number], input[type=url] {
+    width:100%; background:rgba(0,0,0,.35); color:var(--text); border:1px solid var(--hair); border-radius:16px; padding:13px 15px;
+    font:inherit; font-size:17px; -webkit-appearance:none; appearance:none; }
+  textarea { min-height:110px; resize:none; }
+  textarea:focus, input:focus { outline:none; border-color:rgba(255,255,255,.5); }
+  input::placeholder, textarea::placeholder { color:var(--faint); }
+  .count { font-size:12px; color:var(--faint); text-align:right; margin-top:6px; font-variant-numeric:tabular-nums; }
+
+  /* Bottom tab bar, iOS style. */
+  nav.tabs { position:fixed; left:0; right:0; bottom:0; z-index:5; display:flex; justify-content:space-around;
+             padding:8px 6px calc(6px + env(safe-area-inset-bottom)); background:rgba(18,18,20,.72);
+             -webkit-backdrop-filter:blur(24px) saturate(160%); backdrop-filter:blur(24px) saturate(160%); border-top:1px solid rgba(255,255,255,.08); }
+  nav.tabs button { flex:1; max-width:96px; display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--faint);
+                    font-size:10.5px; font-weight:500; letter-spacing:.02em; padding:2px 0; }
+  nav.tabs button.sel { color:var(--text); }
+  body.tv-off nav.tabs button[data-tab="remote"], body.tv-off nav.tabs button[data-tab="message"],
+  body.tv-off nav.tabs button[data-tab="lock"], body.tv-off nav.tabs button[data-tab="activity"] { opacity:.35; }
+
+  .offline { text-align:center; padding:28px 18px; }
+  .offline .big { width:52px; height:52px; margin:0 auto 12px; color:var(--dim); }
+  .offline b { display:block; font-size:20px; font-weight:500; margin-bottom:6px; }
+  .offline span { color:var(--dim); font-size:14px; }
+  body.tv-off .needs-tv { display:none; }
+
+  /* Remote */
+  .screen { position:relative; aspect-ratio:16/9; background:#000; border-radius:14px; overflow:hidden; border:1px solid rgba(255,255,255,.08); }
   .screen img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
   .screen .msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; color:var(--dim); font-size:14px; }
-  /* Live control remote, after the Google TV phone remote: a ring with the arrows, round keys, pill rockers. */
-  .remote { padding:22px 16px 16px; }
-  .remote button { touch-action:manipulation; user-select:none; -webkit-user-select:none; color:var(--text); display:flex; align-items:center; justify-content:center; padding:0; }
-  .remote button:active { filter:brightness(1.35); transform:none; }
-  .ring { position:relative; width:min(280px, 78vw); aspect-ratio:1; margin:0 auto; border-radius:50%; background:#2a2a31; }
-  .ring .arrow { position:absolute; width:34%; height:34%; background:transparent; border-radius:50%; color:var(--dim); }
+  .remote button { touch-action:manipulation; user-select:none; -webkit-user-select:none; display:flex; align-items:center; justify-content:center; }
+  .ring { position:relative; width:min(270px, 74vw); aspect-ratio:1; margin:6px auto 0; border-radius:50%;
+          background:radial-gradient(circle at 50% 35%, rgba(255,255,255,.12), rgba(255,255,255,.05)); border:1px solid var(--hair); }
+  .ring .arrow { position:absolute; width:34%; height:34%; border-radius:50%; color:var(--dim); }
+  .ring .arrow:active { color:#fff; background:rgba(255,255,255,.06); }
   .ring .up { top:0; left:33%; } .ring .down { bottom:0; left:33%; } .ring .left { left:0; top:33%; } .ring .right { right:0; top:33%; }
-  .ring .ok { position:absolute; inset:30%; border-radius:50%; background:#44444d; font-size:18px; font-weight:600; letter-spacing:.04em; }
-  .line { display:flex; align-items:center; justify-content:center; gap:14px; margin-top:22px; }
-  .round { flex:0 0 auto; width:60px; height:60px; border-radius:50%; background:#2a2a31; }
-  .round.big { width:76px; height:76px; }
-  .round.light { background:#f4f4f6; color:#111 !important; }
-  .pill2 { flex:0 1 220px; display:flex; align-items:stretch; height:60px; border-radius:30px; background:#2a2a31; overflow:hidden; }
-  .pill2 button { flex:1; border-radius:0; background:transparent; }
-  .pill2 button + button { border-left:1px solid #17171d; }
-  .pill2 .tag { align-self:center; font-size:12px; font-weight:700; color:var(--dim); letter-spacing:.08em; padding:0 2px; }
-  .steps { font-size:13px; color:var(--dim); margin:8px 0 12px; padding-left:20px; }
-  .steps li { margin:4px 0; }
-  .steps b { color:var(--text); font-weight:600; }
-  #toast { position:fixed; left:50%; bottom:max(24px, env(safe-area-inset-bottom)); transform:translateX(-50%) translateY(20px); opacity:0;
-           background:#2c2c34; border:1px solid var(--line); padding:11px 16px; border-radius:12px; font-size:15px; transition:.2s; max-width:calc(100% - 32px); pointer-events:none; z-index:9; }
-  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
-  #toast.bad { border-color:var(--bad); }
-  .empty { text-align:center; padding:40px 8px; color:var(--dim); }
-  .empty b { color:var(--text); display:block; font-size:20px; margin-bottom:8px; }
-  .offline { text-align:center; padding:22px 16px; }
-  .offline b { display:block; font-size:18px; margin-bottom:4px; }
-  .offline span { color:var(--dim); font-size:14px; }
-  .needs-tv { transition:opacity .25s; }
-  body.tv-off .needs-tv { display:none; }
-  details summary { cursor:pointer; color:var(--dim); font-size:14px; }
-  details[open] summary { margin-bottom:10px; }
-  .switch { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-  .switch input { appearance:none; -webkit-appearance:none; width:51px; height:31px; padding:0; border-radius:99px; background:#39393f; border:0; position:relative; flex:0 0 auto; cursor:pointer; transition:.2s; }
-  .switch input::after { content:""; position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%; background:#fff; transition:.2s; }
-  .switch input:checked { background:var(--ok); }
-  .switch input:checked::after { left:22px; }
-  /* Screen time: one series, one hue (the accent), thin bars rounded at the data end. */
-  .total { font-size:34px; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; margin-top:12px; }
-  .chart { position:relative; display:flex; align-items:flex-end; gap:2px; height:120px; margin-top:12px; border-bottom:1px solid var(--line); }
+  .ring .ok { position:absolute; inset:30%; border-radius:50%; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.18);
+              font-size:17px; font-weight:500; letter-spacing:.12em; }
+  .ring .ok:active { background:#f5f5f7; color:#0b0b0d; }
+  .line { display:flex; align-items:center; justify-content:center; gap:14px; margin-top:20px; }
+  .key { flex:0 0 auto; width:58px; height:58px; border-radius:50%; background:var(--key); border:1px solid var(--hair); transition:background .15s, transform .1s; }
+  .key.big { width:74px; height:74px; }
+  .key.white { background:#f5f5f7; color:#0b0b0d; border-color:transparent; }
+  .rocker { flex:0 1 220px; display:flex; align-items:stretch; height:58px; border-radius:29px; background:var(--key); border:1px solid var(--hair); overflow:hidden; }
+  .rocker button { flex:1; }
+  .rocker button:active { background:var(--key-on); }
+  .rocker button + button, .rocker .tag + button { border-left:1px solid rgba(255,255,255,.08); }
+  .rocker .tag { align-self:center; font-size:11px; font-weight:600; letter-spacing:.2em; color:var(--faint); padding:0 6px 0 8px; }
+  .power { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+  .power button { display:flex; flex-direction:column; align-items:center; gap:7px; padding:12px 2px 10px; border-radius:18px; background:var(--key);
+                  border:1px solid var(--hair); font-size:11.5px; color:var(--dim); line-height:1.15; text-align:center; }
+  .power button svg { color:var(--text); }
+  .power button.red svg { color:#ff6961; }
+  .power button:active { background:var(--key-on); }
+
+  /* Lock */
+  .lockface { display:flex; align-items:center; gap:16px; }
+  .lockface .badge { width:56px; height:56px; border-radius:18px; display:flex; align-items:center; justify-content:center; background:var(--key); border:1px solid var(--hair); }
+  .lockface.locked .badge { background:rgba(255,69,58,.18); color:#ff6961; border-color:rgba(255,69,58,.35); }
+  .lockface .state { font-size:24px; font-weight:400; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .countdown { font-size:64px; font-weight:200; letter-spacing:-.02em; line-height:1; font-variant-numeric:tabular-nums; text-align:center; margin:6px 0 4px; }
+
+  /* Activity: one series, one hue, thin bars rounded at the data end. */
+  .seg { display:flex; background:rgba(0,0,0,.35); border:1px solid var(--hair); border-radius:14px; padding:3px; gap:3px; }
+  .seg button { padding:7px 14px; border-radius:11px; color:var(--dim); font-weight:500; font-size:14px; white-space:nowrap; }
+  .seg button.sel { background:#f5f5f7; color:#0b0b0d; }
+  .total { font-size:52px; font-weight:200; letter-spacing:-.02em; line-height:1; font-variant-numeric:tabular-nums; }
+  .chart { position:relative; display:flex; align-items:flex-end; gap:2px; height:130px; margin-top:18px; border-bottom:1px solid var(--hair); }
   .chart .b { flex:1; display:flex; align-items:flex-end; height:100%; cursor:pointer; }
-  .chart .b i { display:block; width:100%; min-height:1px; background:var(--accent); border-radius:4px 4px 0 0; }
-  .chart .b.sel i { background:#ffc266; }
-  .axis { display:flex; justify-content:space-between; font-size:11px; color:var(--dim); margin-top:6px; }
-  .tip { position:absolute; top:-6px; transform:translate(-50%,-100%); background:#2c2c34; border:1px solid var(--line); border-radius:8px; padding:4px 8px; font-size:12px; white-space:nowrap; pointer-events:none; }
-  .apps { margin-top:16px; display:flex; flex-direction:column; gap:12px; }
+  .chart .b i { display:block; width:100%; min-height:1px; background:var(--warn); border-radius:4px 4px 0 0; opacity:.9; }
+  .chart .b.sel i { opacity:1; background:#ffc266; }
+  .axis { display:flex; justify-content:space-between; font-size:11px; color:var(--faint); margin-top:6px; }
+  .tip { position:absolute; top:-6px; transform:translate(-50%,-100%); background:rgba(40,40,44,.95); border:1px solid var(--hair); border-radius:10px; padding:4px 9px; font-size:12px; white-space:nowrap; pointer-events:none; }
+  .apps { margin-top:20px; display:flex; flex-direction:column; gap:14px; }
   .app .top { display:flex; justify-content:space-between; font-size:15px; gap:10px; }
   .app .top span:last-child { color:var(--dim); font-variant-numeric:tabular-nums; }
-  .app .bar { height:6px; background:#24242c; border-radius:99px; margin-top:6px; overflow:hidden; }
-  .app .bar i { display:block; height:100%; background:var(--accent); border-radius:99px; }
+  .app .bar { height:5px; background:rgba(255,255,255,.08); border-radius:99px; margin-top:7px; overflow:hidden; }
+  .app .bar i { display:block; height:100%; background:var(--warn); border-radius:99px; }
+
+  /* Settings: grouped rows. */
+  .group { padding:4px 0; }
+  .setting { display:flex; align-items:center; gap:14px; padding:14px 18px; }
+  .setting + .setting, .setting + .sub, .sub + .setting { border-top:1px solid rgba(255,255,255,.08); }
+  .setting .ic { width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:var(--key); flex:0 0 auto; }
+  .setting .txt { flex:1; min-width:0; }
+  .setting .txt b { display:block; font-weight:500; }
+  .setting .txt span { display:block; font-size:13px; color:var(--dim); }
+  .sub { padding:0 18px 16px 66px; }
+  .steps { font-size:13px; color:var(--dim); margin:4px 0 12px; padding-left:18px; }
+  .steps li { margin:5px 0; } .steps b { color:var(--text); font-weight:500; }
+  .switch { appearance:none; -webkit-appearance:none; width:51px; height:31px; border-radius:99px; background:rgba(120,120,128,.36); position:relative; flex:0 0 auto; cursor:pointer; transition:.2s; border:0; padding:0; }
+  .switch::after { content:""; position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%; background:#fff; transition:.2s; box-shadow:0 2px 6px rgba(0,0,0,.3); }
+  .switch:checked { background:var(--ok); } .switch:checked::after { left:22px; }
+
+  .empty { text-align:center; padding:40px 10px; color:var(--dim); }
+  .empty .big { width:64px; height:64px; margin:0 auto 16px; color:var(--text); }
+  .empty b { display:block; color:var(--text); font-size:24px; font-weight:400; margin-bottom:10px; }
+
+  #toast { position:fixed; left:50%; bottom:calc(var(--tabbar) + 14px); transform:translateX(-50%) translateY(16px); opacity:0; z-index:9;
+           background:rgba(44,44,48,.92); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px); border:1px solid var(--hair);
+           padding:11px 18px; border-radius:22px; font-size:15px; transition:.22s; max-width:calc(100% - 32px); pointer-events:none; }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  #toast.bad { border-color:rgba(255,69,58,.6); }
 </style>
 </head>
 <body class="tv-off">
 <main>
   <header>
-    <h1 id="title">TV Remote</h1>
-    <span class="pill" id="status"><span class="dot"></span><span id="statusText">…</span></span>
+    <div style="min-width:0">
+      <div class="eyebrow" id="greeting">TV Remote</div>
+      <h1 id="title">TV Remote</h1>
+    </div>
+    <span class="status" id="status"><span class="dot"></span><span id="statusText">…</span></span>
   </header>
 
-  <div id="unpaired" class="empty" hidden>
+  <div id="unpaired" class="card empty" hidden>
+    <i class="big" data-i="tv"></i>
     <b>Not paired yet</b>
     On the TV, hold OK on the Wi-Fi button at the top of the Home screen and scan the QR code with this phone.
-    <p style="margin-top:22px">Or paste the QR code's link here (in the camera, hold the link and copy it):</p>
+    <p style="margin:24px 0 0">Or paste the QR code's link (in the camera, hold the link and copy it):</p>
     <div class="row">
       <input id="pairLink" type="url" autocomplete="off" placeholder="https://tv-remote…/#…" style="flex:1">
-      <button class="primary" id="pairBtn" style="flex:0 0 auto">Pair</button>
+      <button class="pill white" id="pairBtn" style="flex:0 0 auto">Pair</button>
     </div>
   </div>
 
   <div id="paired" hidden>
-    <section class="offline" id="offlineCard">
+    <section class="card offline" id="offlineCard">
+      <i class="big" data-i="tvoff"></i>
       <b id="offlineTitle">Connecting to the TV…</b>
       <span id="offlineText">The controls appear as soon as the TV answers.</span>
     </section>
 
-    <div class="tabs needs-tv" id="tabs"><button data-tab="remote" class="sel">Remote</button><button data-tab="live">Live control</button></div>
-
-    <div id="tabLive" hidden>
-      <section class="needs-tv">
-        <div class="switch"><h2 style="margin:0">Live view</h2><input type="checkbox" id="liveToggle" checked aria-label="Show the live view"></div>
-        <div id="liveBox" style="margin-top:12px">
+    <!-- Remote -->
+    <div class="tab" id="tab-remote">
+      <section class="card needs-tv">
+        <div class="card-head">
+          <span class="eyebrow">Live view</span>
+          <button class="pill sm icon" id="liveToggle" aria-label="Show or hide the live view" style="width:40px"><i data-i="eye"></i></button>
+        </div>
+        <div id="liveBox">
           <div class="screen"><img id="liveImg" alt=""><div class="msg" id="liveMsg">Starting the live view…</div></div>
-          <p class="hint">About two pictures a second. Netflix and other protected video, HDMI inputs and the TV tuner show black.</p>
+          <p class="hint">About two pictures a second. Netflix and other protected video, HDMI and the tuner show black.</p>
         </div>
       </section>
-      <section class="needs-tv remote">
+
+      <section class="card needs-tv remote" style="padding:24px 16px 20px">
         <div class="ring">
-          <button class="arrow up" data-key="Up" data-repeat aria-label="Up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button>
-          <button class="arrow left" data-key="Left" data-repeat aria-label="Left"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
-          <button class="arrow right" data-key="Right" data-repeat aria-label="Right"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
-          <button class="arrow down" data-key="Down" data-repeat aria-label="Down"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button class="arrow up" data-key="Up" data-repeat aria-label="Up"><i data-i="up"></i></button>
+          <button class="arrow left" data-key="Left" data-repeat aria-label="Left"><i data-i="left"></i></button>
+          <button class="arrow right" data-key="Right" data-repeat aria-label="Right"><i data-i="right"></i></button>
+          <button class="arrow down" data-key="Down" data-repeat aria-label="Down"><i data-i="down"></i></button>
           <button class="ok" data-key="Confirm" aria-label="OK">OK</button>
         </div>
         <div class="line">
-          <button class="round" data-key="Return" aria-label="Back"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg></button>
-          <button class="round big" data-key="Home" aria-label="Home"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5V20h-5v-5h-6v5H4z"/></svg></button>
-          <button class="round light" data-key="ActionMenu|Options|SyncMenu" aria-label="Menu"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+          <button class="key" data-key="Return" aria-label="Back"><i data-i="back"></i></button>
+          <button class="key big" data-key="Home" aria-label="Home"><i data-i="home"></i></button>
+          <button class="key white" data-key="ActionMenu|Options|SyncMenu" aria-label="Menu"><i data-i="menu"></i></button>
         </div>
         <div class="line">
-          <button class="round" data-key="Mute" aria-label="Mute"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6M21 9l-5 6"/></svg></button>
-          <div class="pill2"><button data-key="VolumeDown" data-repeat aria-label="Volume down"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/></svg></button><button data-key="VolumeUp" data-repeat aria-label="Volume up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/></svg></button></div>
+          <button class="key" data-key="Mute" aria-label="Mute"><i data-i="mute"></i></button>
+          <div class="rocker"><button data-key="VolumeDown" data-repeat aria-label="Volume down"><i data-i="vdown"></i></button><button data-key="VolumeUp" data-repeat aria-label="Volume up"><i data-i="vup"></i></button></div>
         </div>
         <div class="line">
-          <button class="round" id="kbOpen" aria-label="Keyboard"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
-          <div class="pill2"><button data-key="ChannelDown" data-repeat aria-label="Channel down"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 12h12"/></svg></button><span class="tag">CH</span><button data-key="ChannelUp" data-repeat aria-label="Channel up"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg></button></div>
+          <button class="key" id="kbOpen" aria-label="Keyboard"><i data-i="kb"></i></button>
+          <div class="rocker"><button data-key="ChannelDown" data-repeat aria-label="Channel down"><i data-i="minus"></i></button><span class="tag">CH</span><button data-key="ChannelUp" data-repeat aria-label="Channel up"><i data-i="plus"></i></button></div>
         </div>
       </section>
-      <section class="needs-tv" id="kb" hidden>
-        <div class="head"><h2>Keyboard</h2><button id="kbClose" style="flex:0 0 auto;padding:6px 12px">Done</button></div>
+
+      <section class="card needs-tv" id="kb" hidden>
+        <div class="card-head"><span class="eyebrow">Keyboard</span><button class="pill sm" id="kbClose">Done</button></div>
         <textarea id="kbText" placeholder="Type or paste. It appears in the TV's selected text field." autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
         <div class="row">
-          <button class="primary" id="kbEnter">Enter</button>
-          <button id="kbClear">Clear</button>
+          <button class="pill white" id="kbEnter"><i data-i="enter"></i>Enter</button>
+          <button class="pill icon" id="kbClear" aria-label="Clear"><i data-i="x"></i></button>
         </div>
-        <p class="hint">Select a text field on the TV first (a search box, say). What you type here replaces its text as you go.</p>
+        <p class="hint">Select a text field on the TV first. What you type replaces its text as you go.</p>
+      </section>
+
+      <section class="card needs-tv">
+        <div class="card-head"><span class="eyebrow">Power</span></div>
+        <div id="ipSetup" hidden style="margin-bottom:14px">
+          <p class="hint" style="margin-top:0">These use the TV's IP control, which isn't set up yet. On the TV:</p>
+          <ol class="steps">
+            <li><b>Settings › Network &amp; Internet › Remote device settings › Control remotely</b>: On.</li>
+            <li><b>Settings › Network &amp; Internet › Home network › IP control › Authentication</b>: Normal and Pre-Shared Key.</li>
+            <li><b>Pre-Shared Key</b> (same menu): any key, for example 4 digits.</li>
+            <li>Enter the same key here.</li>
+          </ol>
+          <div class="row" style="margin-top:0">
+            <input id="psk2" type="password" autocomplete="off" maxlength="64" placeholder="Pre-Shared Key" style="flex:1">
+            <button class="pill white" id="savePsk2" style="flex:0 0 auto">Save</button>
+          </div>
+        </div>
+        <div class="power">
+          <button data-cmd="screen_off"><i data-i="screenoff"></i>Screen off</button>
+          <button data-cmd="screen_on"><i data-i="screen"></i>Screen on</button>
+          <button data-cmd="standby" class="red"><i data-i="power"></i>Standby</button>
+          <button data-cmd="wake"><i data-i="sun"></i>Turn on</button>
+        </div>
+        <p class="hint">Screen off keeps the TV running, so Screen on always works. From standby the TV may not hear Turn on.</p>
       </section>
     </div>
 
-    <div id="tabRemote">
-
-    <section class="needs-tv">
-      <h2>Message on the TV</h2>
-      <textarea id="text" maxlength="500" placeholder="Dinner is ready!"></textarea>
-      <div class="count"><span id="count">0</span>/500</div>
-      <div class="row">
-        <button class="primary" id="send">Show on TV</button>
-        <button id="clear">Clear</button>
-      </div>
-      <p class="hint">The TV goes to Home and shows the message in large type until someone presses OK.</p>
-    </section>
-
-    <section class="needs-tv">
-      <div class="head"><h2>Lock</h2><span class="badge" id="lockBadge">Unlocked</span></div>
-      <div class="row" style="margin-top:0">
-        <button class="danger" id="lockNow">Lock TV</button>
-        <button id="unlockNow">Unlock</button>
-      </div>
-      <p class="hint" id="noPin" hidden>Set a 4-digit PIN in Settings below first.</p>
-      <h2 style="margin-top:18px">Lock timer</h2>
-      <div id="timerRun" hidden>
-        <div class="countdown" id="countdown">0:00</div>
-        <p class="hint" style="margin-top:4px">until the TV locks</p>
-        <div class="row"><button id="timerCancel">Cancel timer</button></div>
-      </div>
-      <div id="timerSet">
-        <div class="chips" id="chips">
-          <button data-min="15">15 min</button><button data-min="30">30 min</button><button data-min="45">45 min</button>
-          <button data-min="60">1 h</button><button data-min="90">1 h 30</button><button data-min="120">2 h</button>
-        </div>
+    <!-- Message -->
+    <div class="tab" id="tab-message" hidden>
+      <section class="card needs-tv">
+        <div class="card-head"><span class="eyebrow">Message on the TV</span></div>
+        <textarea id="text" maxlength="500" placeholder="Dinner is ready!"></textarea>
+        <div class="count"><span id="count">0</span>/500</div>
         <div class="row">
-          <input id="minutes" type="number" inputmode="numeric" min="1" max="720" placeholder="Minutes" style="flex:1">
-          <button class="primary" id="timerStart" style="flex:0 0 auto">Start</button>
+          <button class="pill white" id="send"><i data-i="send"></i>Show on TV</button>
+          <button class="pill icon" id="clear" aria-label="Clear the message on the TV"><i data-i="x"></i></button>
         </div>
-        <p class="hint">The TV counts down in a corner, then shows the lock screen. The PIN unlocks it.</p>
-      </div>
-    </section>
+        <p class="hint">The TV goes to Home and shows the message in large type until someone presses OK. The ✕ button takes it off.</p>
+      </section>
+    </div>
 
-    <section class="needs-tv">
-      <div class="head">
-        <h2>Screen time</h2>
-        <div class="seg" id="range"><button data-r="today" class="sel">Today</button><button data-r="7d">7 days</button></div>
-      </div>
-      <div id="stBody"><p class="hint" style="margin:0">Loading…</p></div>
-    </section>
-
-    <section class="needs-tv">
-      <h2>Power</h2>
-      <div id="ipSetup" hidden style="margin-bottom:14px">
-        <p class="hint" style="margin-top:0">These buttons use the TV's IP control, which isn't set up yet. On the TV:</p>
-        <ol class="steps">
-          <li><b>Settings › Network &amp; Internet › Remote device settings › Control remotely</b>: On.</li>
-          <li><b>Settings › Network &amp; Internet › Home network › IP control › Authentication</b>: Normal and Pre-Shared Key.</li>
-          <li><b>Pre-Shared Key</b> (same menu): type any key, for example 4 digits.</li>
-          <li>Enter the same key here and save.</li>
-        </ol>
-        <div class="row">
-          <input id="psk2" type="password" autocomplete="off" maxlength="64" placeholder="Pre-Shared Key" style="flex:1">
-          <button class="primary" id="savePsk2" style="flex:0 0 auto">Save</button>
+    <!-- Lock -->
+    <div class="tab" id="tab-lock" hidden>
+      <section class="card needs-tv">
+        <div class="lockface" id="lockFace">
+          <div class="badge"><i id="lockIcon" data-i="unlock"></i></div>
+          <div><div class="eyebrow">This TV is</div><div class="state" id="lockBadge">Unlocked</div></div>
         </div>
-      </div>
-      <div class="grid">
-        <button data-cmd="screen_off">Screen off</button>
-        <button data-cmd="screen_on">Screen on</button>
-        <button data-cmd="standby" class="danger">Turn off (standby)</button>
-        <button data-cmd="wake">Turn on</button>
-      </div>
-      <p class="hint">Screen off keeps the TV running, so Screen on always works. After Turn off (standby) the TV may not hear Turn on.</p>
-    </section>
+        <div class="row" style="margin-top:18px">
+          <button class="pill white" id="lockNow"><i data-i="lock"></i>Lock</button>
+          <button class="pill" id="unlockNow"><i data-i="unlock"></i>Unlock</button>
+        </div>
+        <p class="hint" id="noPin" hidden>Set a 4-digit PIN in Settings first.</p>
+      </section>
+      <section class="card needs-tv">
+        <div class="card-head"><span class="eyebrow">Lock timer</span><i data-i="timer" style="color:var(--dim)"></i></div>
+        <div id="timerRun" hidden>
+          <div class="countdown" id="countdown">0:00</div>
+          <p class="hint" style="text-align:center;margin-top:0">until the TV locks</p>
+          <div class="row"><button class="pill" id="timerCancel">Cancel timer</button></div>
+        </div>
+        <div id="timerSet">
+          <div class="chips" id="chips">
+            <button class="pill sm" data-min="15">15 min</button><button class="pill sm" data-min="30">30 min</button><button class="pill sm" data-min="45">45 min</button>
+            <button class="pill sm" data-min="60">1 h</button><button class="pill sm" data-min="90">1 h 30</button><button class="pill sm" data-min="120">2 h</button>
+          </div>
+          <div class="row">
+            <input id="minutes" type="number" inputmode="numeric" min="1" max="720" placeholder="Minutes" style="flex:1">
+            <button class="pill white" id="timerStart" style="flex:0 0 auto">Start</button>
+          </div>
+          <p class="hint">The TV counts down in a corner, then locks. The PIN unlocks it.</p>
+        </div>
+      </section>
+    </div>
 
-    <section>
-      <div class="switch">
-        <div><h2 style="margin:0 0 4px">Notifications</h2><span class="hint" style="margin:0" id="notifyHint">Tell me when the TV turns on or off.</span></div>
-        <input type="checkbox" id="notify" aria-label="Notify me when the TV turns on or off">
-      </div>
-    </section>
+    <!-- Activity -->
+    <div class="tab" id="tab-activity" hidden>
+      <section class="card needs-tv">
+        <div class="card-head">
+          <span class="eyebrow">Screen time</span>
+          <div class="seg" id="range"><button data-r="today" class="sel">Today</button><button data-r="7d">7 days</button></div>
+        </div>
+        <div id="stBody"><p class="hint" style="margin:0">Loading…</p></div>
+      </section>
+    </div>
 
-    <section id="install" hidden>
-      <h2>Add to Home Screen</h2>
-      <p class="hint" id="installHint" style="margin-top:0"></p>
-      <div class="row" id="installRow" hidden><button class="primary" id="installBtn">Install app</button></div>
-    </section>
+    <!-- Settings -->
+    <div class="tab" id="tab-settings" hidden>
+      <section class="card group">
+        <div class="setting">
+          <span class="ic"><i data-i="bell"></i></span>
+          <div class="txt"><b>Notifications</b><span id="notifyHint">When the TV turns on or off</span></div>
+          <input type="checkbox" class="switch" id="notify" aria-label="Notify me when the TV turns on or off">
+        </div>
+        <div class="setting" id="install" hidden>
+          <span class="ic"><i data-i="add"></i></span>
+          <div class="txt"><b>Add to Home Screen</b><span id="installHint"></span></div>
+          <button class="pill sm white" id="installBtn" hidden>Install</button>
+        </div>
+      </section>
 
-    <section>
-      <details>
-        <summary>Settings</summary>
-        <div class="needs-tv">
-          <h2>PIN</h2>
-          <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="4 digits">
-          <div class="row"><button id="savePin">Save PIN on TV</button></div>
-          <p class="hint">Unlocks the TV after Lock TV or the timer. It is also the TV's App lock PIN.</p>
-          <h2 style="margin-top:20px">Sony IP control key</h2>
-          <input id="psk" type="password" autocomplete="off" maxlength="64" placeholder="Pre-Shared Key">
-          <div class="row"><button id="savePsk">Save on TV</button></div>
-          <p class="hint" style="margin-bottom:0">Screen off/on and standby use the TV's IP control. On the TV:</p>
+      <section class="card group needs-tv">
+        <div class="setting">
+          <span class="ic"><i data-i="key"></i></span>
+          <div class="txt"><b>PIN</b><span>Unlocks the TV; also its App lock PIN</span></div>
+        </div>
+        <div class="sub">
+          <div class="row" style="margin-top:0">
+            <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="4 digits" style="flex:1">
+            <button class="pill white" id="savePin" style="flex:0 0 auto">Save</button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="ic"><i data-i="plug"></i></span>
+          <div class="txt"><b>Sony IP control key</b><span>For Screen off/on, standby and the remote keys</span></div>
+        </div>
+        <div class="sub">
           <ol class="steps">
-          <li><b>Settings › Network &amp; Internet › Remote device settings › Control remotely</b>: On.</li>
-          <li><b>Settings › Network &amp; Internet › Home network › IP control › Authentication</b>: Normal and Pre-Shared Key.</li>
-          <li><b>Pre-Shared Key</b> (same menu): type any key, for example 4 digits.</li>
-          <li>Enter the same key above and save.</li>
-        </ol>
+            <li><b>Settings › Network &amp; Internet › Remote device settings › Control remotely</b>: On.</li>
+            <li><b>Settings › Network &amp; Internet › Home network › IP control › Authentication</b>: Normal and Pre-Shared Key.</li>
+            <li><b>Pre-Shared Key</b> (same menu): any key, for example 4 digits.</li>
+            <li>Enter the same key below.</li>
+          </ol>
+          <div class="row" style="margin-top:0">
+            <input id="psk" type="password" autocomplete="off" maxlength="64" placeholder="Pre-Shared Key" style="flex:1">
+            <button class="pill white" id="savePsk" style="flex:0 0 auto">Save</button>
+          </div>
         </div>
-        <div class="row"><button class="danger" id="forget">Forget this TV</button></div>
-      </details>
-    </section>
+      </section>
+
+      <section class="card group">
+        <div class="setting">
+          <span class="ic" style="color:#ff6961"><i data-i="unlink"></i></span>
+          <div class="txt"><b>Forget this TV</b><span>Scan the QR code again to pair</span></div>
+          <button class="pill sm red" id="forget">Forget</button>
+        </div>
+      </section>
     </div>
   </div>
 </main>
+
+<nav class="tabs" id="tabs" hidden>
+  <button data-tab="remote" class="sel"><i data-i="dpad"></i>Remote</button>
+  <button data-tab="message"><i data-i="chat"></i>Message</button>
+  <button data-tab="lock"><i data-i="lock"></i>Lock</button>
+  <button data-tab="activity"><i data-i="chart"></i>Activity</button>
+  <button data-tab="settings"><i data-i="gear"></i>Settings</button>
+</nav>
 <div id="toast"></div>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
+
+  // ---- icons (stroke icons, 24 px grid) ------------------------------------------------------------
+  const SPK = '<path d="M11 5 6 9H3v6h3l5 4z"/>';
+  const ICONS = {
+    up: '<path d="m6 15 6-6 6 6"/>', down: '<path d="m6 9 6 6 6-6"/>', left: '<path d="m15 6-6 6 6 6"/>', right: '<path d="m9 6 6 6-6 6"/>',
+    back: '<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>',
+    home: '<path d="M4 11.5 12 4l8 7.5V20h-5v-5h-6v5H4z"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    mute: SPK + '<path d="m16 9 5 6M21 9l-5 6"/>',
+    vdown: SPK + '<path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/>',
+    vup: SPK + '<path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/>',
+    plus: '<path d="M12 6v12M6 12h12"/>', minus: '<path d="M6 12h12"/>',
+    kb: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
+    enter: '<path d="M20 5v6a3 3 0 0 1-3 3H5"/><path d="m9 10-4 4 4 4"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    eyeoff: '<path d="M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-2.6 3.5M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M14.1 14.1a3 3 0 0 1-4.2-4.2M3 3l18 18"/>',
+    screen: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+    screenoff: '<path d="M7 4h12a2 2 0 0 1 2 2v8a2 2 0 0 1-1 1.7M17 16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 .6-1.4"/><path d="M8 20h8M12 16v4M3 3l18 18"/>',
+    power: '<path d="M12 3v9"/><path d="M6.3 7.2a8 8 0 1 0 11.4 0"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+    lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    unlock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.8-1.2"/>',
+    timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>',
+    chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    dpad: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="m12 4.5-1.2 1.4h2.4zM12 19.5l-1.2-1.4h2.4zM4.5 12l1.4-1.2v2.4zM19.5 12l-1.4-1.2v2.4z"/>',
+    chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+    key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.8-9.8M16 7l3 3M18.5 4.5l2 2"/>',
+    plug: '<path d="M9 2v6M15 2v6M7 8h10v4a5 5 0 0 1-10 0zM12 17v5"/>',
+    add: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/>',
+    unlink: '<path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 4 8M8 12h3M3 3l18 18"/>',
+    tv: '<rect x="2" y="5" width="20" height="13" rx="2.5"/><path d="M8 21h8M8 2l4 3 4-3"/>',
+    tvoff: '<rect x="2" y="5" width="20" height="13" rx="2.5"/><path d="M8 21h8M9 9l6 5M15 9l-6 5"/>',
+  };
+  function icon(e) {
+    const d = ICONS[e.dataset.i];
+    if (!d) return;
+    const big = e.classList.contains("big");
+    e.innerHTML = '<svg viewBox="0 0 24 24" width="' + (big ? "100%" : "24") + '" height="' + (big ? "100%" : "24") + '" fill="none" stroke="currentColor" stroke-width="' + (big ? 1.4 : 1.9) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  }
+  document.querySelectorAll("[data-i]").forEach(icon);
+  function setIcon(e, name) { e.dataset.i = name; icon(e); }
+
+  // ---- pairing -----------------------------------------------------------------------------------
   const STORE = "tvremote";
   let tv = null;
   try { tv = JSON.parse(localStorage.getItem(STORE) || "null"); } catch (e) {}
@@ -317,6 +470,9 @@ export const PAGE = `<!doctype html>
   }
   let swReg = null;
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").then((r) => (swReg = r)).catch(() => {});
+
+  const h = new Date().getHours();
+  $("greeting").textContent = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 22 ? "Good evening" : "Good night";
 
   let toastTimer;
   function toast(msg, bad) {
@@ -354,22 +510,23 @@ export const PAGE = `<!doctype html>
   function setOnline(on, power) {
     const was = online;
     online = on;
-    $("status").className = "pill " + (on ? "on" : "off");
+    $("status").className = "status " + (on ? (power === "off" ? "standby" : "on") : "off");
     $("statusText").textContent = on ? (power === "off" ? "Standby" : "Online") : "Offline";
     document.body.classList.toggle("tv-off", !on);
-    $("offlineCard").hidden = on;
+    $("offlineCard").hidden = on || tab === "settings";
     if (!on) {
       $("offlineTitle").textContent = power === "off" ? "The TV is off" : "The TV is offline";
       $("offlineText").textContent = "Last seen " + (ago(lastSeen) || "a while ago") + ". The controls come back by themselves when it is on.";
     }
     if (on && was === false) { toast("The TV is back."); loadReport(); loadInfo(); }
-    if (on !== was) setLive(tab === "live");
+    if (on !== was) setLive(tab === "remote");
     if (on && was === null) { loadReport(); loadInfo(); }
   }
   function setLock(st) {
     if (!st) return;
     $("lockBadge").textContent = st.locked ? "Locked" : "Unlocked";
-    $("lockBadge").className = "badge" + (st.locked ? " locked" : "");
+    $("lockFace").classList.toggle("locked", !!st.locked);
+    setIcon($("lockIcon"), st.locked ? "lock" : "unlock");
     $("noPin").hidden = !!st.hasPin;
     lockAt = st.lockAt || 0;
     drawTimer();
@@ -379,8 +536,8 @@ export const PAGE = `<!doctype html>
     $("timerRun").hidden = left <= 0;
     $("timerSet").hidden = left > 0;
     if (left > 0) {
-      const h = Math.floor(left / 3600), mm = Math.floor(left / 60) % 60, s = left % 60;
-      $("countdown").textContent = (h ? h + ":" + String(mm).padStart(2, "0") : mm) + ":" + String(s).padStart(2, "0");
+      const hh = Math.floor(left / 3600), mm = Math.floor(left / 60) % 60, s = left % 60;
+      $("countdown").textContent = (hh ? hh + ":" + String(mm).padStart(2, "0") : mm) + ":" + String(s).padStart(2, "0");
     }
   }
   setInterval(drawTimer, 1000);
@@ -448,17 +605,34 @@ export const PAGE = `<!doctype html>
     else loadInfo();
   }
 
-  // ---- live control -----------------------------------------------------------------------------
+  // ---- tabs ---------------------------------------------------------------------------------------
+  let tab = "remote";
+  function showTab(t) {
+    tab = t;
+    document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("sel", b.dataset.tab === t));
+    document.querySelectorAll(".tab").forEach((p) => (p.hidden = p.id !== "tab-" + t));
+    $("offlineCard").hidden = online === true || t === "settings";
+    setLive(t === "remote");
+    if (t === "activity") loadReport();
+    window.scrollTo(0, 0);
+    try { sessionStorage.setItem("tvremote-tab", t); } catch (e) {}
+  }
+  document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+
+  // ---- live view and remote keys -------------------------------------------------------------------
   let liveOn = false, frameUrl = null, lastFrameAt = 0;
   let liveShown = true;
   try { liveShown = localStorage.getItem("tvremote-live") !== "hidden"; } catch (e) {}
-  $("liveToggle").checked = liveShown;
-  $("liveBox").hidden = !liveShown;
-  $("liveToggle").onchange = () => {
-    liveShown = $("liveToggle").checked;
+  function drawLiveToggle() {
     $("liveBox").hidden = !liveShown;
+    setIcon($("liveToggle").firstElementChild, liveShown ? "eye" : "eyeoff");
+  }
+  drawLiveToggle();
+  $("liveToggle").onclick = () => {
+    liveShown = !liveShown;
+    drawLiveToggle();
     try { localStorage.setItem("tvremote-live", liveShown ? "shown" : "hidden"); } catch (e) {}
-    setLive(tab === "live");
+    setLive(tab === "remote");
   };
   function setLive(on) {
     on = on && liveShown && !document.hidden && online !== false;
@@ -479,18 +653,8 @@ export const PAGE = `<!doctype html>
   setInterval(() => {
     if (liveOn && lastFrameAt && Date.now() - lastFrameAt > 8000) { $("liveMsg").hidden = false; $("liveMsg").textContent = "No picture from the TV right now."; }
   }, 2000);
-  let tab = "remote";
-  function showTab(t) {
-    tab = t;
-    document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("sel", b.dataset.tab === t));
-    $("tabLive").hidden = t !== "live";
-    $("tabRemote").hidden = t !== "remote";
-    setLive(t === "live");
-    try { sessionStorage.setItem("tvremote-tab", t); } catch (e) {}
-  }
-  document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 
-  // Remote buttons: one press at a time (a press waits for the last one), hold repeats where it makes sense.
+  // One press at a time (a press waits for the last one); holding repeats where it makes sense.
   let pressing = Promise.resolve();
   function press(name) {
     if (navigator.vibrate) navigator.vibrate(8);
@@ -526,11 +690,11 @@ export const PAGE = `<!doctype html>
   function hm(ms) {
     const min = Math.round(ms / 60000);
     if (min < 60) return min + " min";
-    return Math.floor(min / 60) + " h " + (min % 60 ? (min % 60) + " min" : "");
+    return Math.floor(min / 60) + " h" + (min % 60 ? " " + (min % 60) + " min" : "");
   }
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
   async function loadReport() {
-    if (!online) return;
+    if (!online || tab !== "activity") return;
     const j = await run("local", { args: { method: "GET", path: "/api/report" + (range === "7d" ? "?range=7d" : "") } }, null);
     const box = $("stBody");
     box.textContent = "";
@@ -538,7 +702,7 @@ export const PAGE = `<!doctype html>
     const r = j.data || {};
     if (!r.allowed) { box.appendChild(el("p", "hint", "The TV needs usage access for Screen time (the install script grants it).")); return; }
     box.appendChild(el("div", "total", hm(r.total || 0)));
-    box.appendChild(el("p", "hint", range === "7d" ? "in the last 7 days" : "today")).style.marginTop = "2px";
+    box.appendChild(el("p", "hint", range === "7d" ? "in the last 7 days" : "today")).style.marginTop = "6px";
     const buckets = r.buckets || [], labels = r.labels || [];
     const max = Math.max(1, ...buckets);
     const chart = el("div", "chart");
@@ -606,13 +770,13 @@ export const PAGE = `<!doctype html>
   async function setupNotify() {
     if (!canPush()) {
       $("notify").disabled = true;
-      $("notifyHint").textContent = ios && !standalone ? "Add this page to the Home Screen first, then switch this on there." : "This browser can't show notifications.";
+      $("notifyHint").textContent = ios && !standalone ? "Add to Home Screen first, then switch this on there" : "This browser can't show notifications";
       return;
     }
     let on = false;
     try { on = localStorage.getItem(NOTIFY) === "1" && Notification.permission === "granted"; } catch (e) {}
     $("notify").checked = on;
-    if (Notification.permission === "denied") $("notifyHint").textContent = "Notifications are blocked for this page in the phone's settings.";
+    if (Notification.permission === "denied") $("notifyHint").textContent = "Blocked in the phone's settings";
   }
   $("notify").onchange = async (e) => {
     const box = e.currentTarget;
@@ -648,8 +812,9 @@ export const PAGE = `<!doctype html>
     try { localStorage.setItem(STORE, JSON.stringify(t)); } catch (e) {}
     location.replace("/?p=" + t.id + "." + t.key);
   };
-  if (!tv) { $("unpaired").hidden = false; $("status").className = "pill off"; $("statusText").textContent = "Not paired"; return; }
+  if (!tv) { $("unpaired").hidden = false; $("status").className = "status off"; $("statusText").textContent = "Not paired"; return; }
   $("paired").hidden = false;
+  $("tabs").hidden = false;
 
   $("text").addEventListener("input", () => ($("count").textContent = $("text").value.length));
   $("send").onclick = async (e) => {
@@ -682,15 +847,15 @@ export const PAGE = `<!doctype html>
 
   if (!standalone) {
     if (ios) {
-      $("installHint").textContent = "Tap Share, then Add to Home Screen, to open the remote like an app.";
+      $("installHint").textContent = "Share › Add to Home Screen opens it like an app";
       $("install").hidden = false;
     }
     let prompt = null;
     addEventListener("beforeinstallprompt", (e) => {
       e.preventDefault();
       prompt = e;
-      $("installHint").textContent = "Put the remote on your home screen and open it like an app.";
-      $("installRow").hidden = false;
+      $("installHint").textContent = "Open the remote like an app";
+      $("installBtn").hidden = false;
       $("install").hidden = false;
     });
     $("installBtn").onclick = async () => {
@@ -706,12 +871,14 @@ export const PAGE = `<!doctype html>
   setupNotify();
   connect();
   refresh();
-  setInterval(() => { if (!document.hidden) { refresh(); if (online) loadReport(); } }, 60000);
+  setInterval(() => { if (!document.hidden) { refresh(); loadReport(); } }, 60000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) { connect(); refresh(); }
-    setLive(tab === "live");
+    setLive(tab === "remote");
   });
-  try { if (sessionStorage.getItem("tvremote-tab") === "live") showTab("live"); } catch (e) {}
+  let start = "remote";
+  try { start = sessionStorage.getItem("tvremote-tab") || "remote"; } catch (e) {}
+  showTab(["remote", "message", "lock", "activity", "settings"].includes(start) ? start : "remote");
 })();
 </script>
 </body>

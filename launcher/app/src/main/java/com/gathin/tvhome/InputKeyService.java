@@ -34,10 +34,15 @@ public class InputKeyService extends AccessibilityService {
     protected void onServiceConnected() {
         running = this;
         // The process can start for this service alone (after an update, with another app in front):
-        // the phone remote and the lock timer shouldn't wait for Home to be opened.
+        // the phone remote, the lock timer and the local servers shouldn't wait for Home to be opened.
         try {
-            RemoteRelay.start(this, Config.load(this).remoteRelay);
+            Config cfg = Config.load(this);
+            RemoteRelay.start(this, cfg.remoteRelay);
             TvLock.start(this);
+            // Likewise the home-network phone page (the remote's Screen time goes through it) and the
+            // IPTV link proxy on 127.0.0.1:8790: both used to wait for Home's onCreate.
+            WebControl.start(this, cfg.webControl, cfg.webPort);
+            StreamProxy.start(this);
         } catch (Exception e) {
             android.util.Log.w(RemoteRelay.TAG, "remote not started: " + e);
         }
