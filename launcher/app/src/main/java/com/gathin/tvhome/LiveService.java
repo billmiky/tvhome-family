@@ -31,8 +31,8 @@ import java.nio.ByteBuffer;
 /**
  * The phone remote's live view: mirrors the screen into a small ImageReader and sends a JPEG through
  * {@link RemoteRelay} a couple of times a second while someone watches. Started by {@link LiveCapture}
- * (Android needs a foreground service of type mediaProjection to hold the capture); stops by itself two
- * minutes after the last viewer leaves, and whenever the system ends the capture (screen off, say).
+ * (Android needs a foreground service of type mediaProjection to hold the capture); stops by itself three
+ * seconds after the last viewer leaves, and whenever the system ends the capture (screen off, say).
  * DRM video, HDMI and the tuner come out black: Android keeps secure layers out of every capture.
  */
 public class LiveService extends Service {
@@ -42,7 +42,8 @@ public class LiveService extends Service {
     private static final String CHANNEL = "live";
     private static final int WIDTH = 640;
     private static final int QUALITY = 60;
-    private static final long IDLE_STOP_MS = 2 * 60_000L;
+    /** A few seconds after the last viewer leaves (a tab switch and back keeps it): Android's red capture icon goes too. */
+    private static final long IDLE_STOP_MS = 3_000L;
 
     private static final Handler main = new Handler(Looper.getMainLooper());
     private static volatile boolean wanted;
