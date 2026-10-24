@@ -704,8 +704,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         cycle.start();
         poke();
         playIntroWhenReady();
-        updateWifiLabel();
-        updateInputsButton();
+        // The network and Inputs pills keep their state while Home is away, and callbacks update them, so this only
+        // catches anything missed. Its binder calls (about 7 ms) would hold up the first frame back on Home, so
+        // after the first resume they run once that frame is drawn (upstream 0f73adcf).
+        if (pillsShown) {
+            refreshPillsAfterNextDraw();
+        } else {
+            updateWifiLabel();
+            updateInputsButton();
+            pillsShown = true;
+        }
         handler.postDelayed(minuteTick, MINUTE_MS);
         startTicker();
         startWeather();
@@ -1946,6 +1954,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         popup.showAsDropDown(anchor, 0, (int) (10 * density), gravity);
         panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+    }
+
+    /** The pills have been filled in once; later resumes refresh them after the first frame. */
+    private boolean pillsShown;
+
+    private void refreshPillsAfterNextDraw() {
+        root.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                root.getViewTreeObserver().removeOnPreDrawListener(this);
+                // Posted from inside the frame's traversal, so it runs after that frame is drawn; a post straight
+                // from onResume would run first, as the frame is only scheduled after onResume returns.
+                handler.post(() -> {
+                    if (isDestroyed()) return;
+                    updateWifiLabel();
+                    updateInputsButton();
+                });
+                return true;
+            }
+        });
+        root.invalidate();   // a resume that changes nothing on screen still draws once, so the refresh runs
     }
 
     private void addSeparator(LinearLayout rows) {
