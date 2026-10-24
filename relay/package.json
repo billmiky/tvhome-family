@@ -1,0 +1,13 @@
+{
+  "name": "tv-remote",
+  "private": true,
+  "type": "module",
+  "description": "Relay between the TV Home launcher and the phone remote page (Cloudflare Worker + Durable Object).",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.152.0"
+  }
+}

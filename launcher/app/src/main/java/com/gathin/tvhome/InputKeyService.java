@@ -27,13 +27,18 @@ public class InputKeyService extends AccessibilityService {
         }
     };
 
+    /** The connected service, for RemoteRelay's standby without IP control; null when off. */
+    static volatile InputKeyService running;
+
     @Override
     protected void onServiceConnected() {
+        running = this;
         registerReceiver(screenOff, new IntentFilter(Intent.ACTION_SCREEN_OFF));
     }
 
     @Override
     public void onDestroy() {
+        if (running == this) running = null;
         try {
             unregisterReceiver(screenOff);
         } catch (IllegalArgumentException ignored) {

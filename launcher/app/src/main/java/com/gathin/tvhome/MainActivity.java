@@ -18,6 +18,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
@@ -54,6 +55,7 @@ import android.text.style.ForegroundColorSpan;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -218,6 +220,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private String greetingName = "";
     static final String PREFS = "home";
     static final String PREF_BTC = "btc_ticker";
+    /** Settings menu: the phone links (relay QR code and the home-network page) in the network menu. */
+    static final String PREF_REMOTE_QR = "remote_qr";
+    /** A message from the phone remote (RemoteRelay) for Home to show when it starts or comes back. */
+    static final String EXTRA_BANNER = "com.gathin.tvhome.BANNER";
     /** Overrides set from the phone page (WebControl); the config value is the default. */
     static final String PREF_NOW_PLAYING = "now_playing";
     static final String PREF_GREETING = "greeting_name";
@@ -393,6 +399,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         WebControl.start(this, cfg.webControl, cfg.webPort);
         // IPTV links (http://127.0.0.1:8790/?url=...), likewise for the life of the process.
         StreamProxy.start(this);
+        // The phone remote through the relay, likewise.
+        RemoteRelay.start(this, cfg.remoteRelay);
+        TvLock.start(this);
+        pendingBanner = getIntent() != null ? getIntent().getStringExtra(EXTRA_BANNER) : null;
         COLUMNS = cfg.columns;
         liveTvPkg = cfg.liveTvPackage;
         liveTvAction = cfg.liveTvAction;
@@ -697,6 +707,35 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         Updater.installListener = () -> handler.post(() -> {
             if (updatePrompt != null) updatePrompt.dismiss();
         });
+        RemoteRelay.screen = new RemoteRelay.Screen() {
+            @Override
+            public void showBanner(String text) {
+                MainActivity.this.showBanner(text);
+            }
+
+            @Override
+            public void clearBanner() {
+                hideBanner();
+            }
+        };
+        TvLock.screen = new TvLock.Screen() {
+            @Override
+            public void locked() {
+                showLock();
+            }
+
+            @Override
+            public void unlocked() {
+                hideLock();
+            }
+        };
+        if (TvLock.locked(this)) showLock();
+        else hideLock();
+        if (pendingBanner != null) {
+            String text = pendingBanner;
+            pendingBanner = null;
+            showBanner(text);
+        }
         WebControl.remote = new WebControl.Remote() {
             @Override
             public void settingsChanged() {
@@ -836,6 +875,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (openPopup != null) openPopup.dismiss();
         Updater.installListener = null;
         WebControl.remote = null;
+        // From another app a message starts Home with it (onNewIntent), so it shows on top.
+        RemoteRelay.screen = null;
+        TvLock.screen = null;
+        // Locked: whatever took the screen (an app button, voice search) gives it back to the lock.
+        if (TvLock.locked(this)) {
+            handler.postDelayed(() -> {
+                if (!resumed && TvLock.locked(this)) TvLock.bringHome(this);
+            }, 400);
+        }
     }
 
     /** The switches and texts the Settings menu or the phone page may have changed since the config was read. */
@@ -1270,7 +1318,184 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String text = intent.getStringExtra(EXTRA_BANNER);
+        if (text != null) pendingBanner = text;   // onResume shows it
+    }
+
+    // ---- banner (a message from the phone remote) -------------------------------------------------
+
+    private String pendingBanner;
+    private View banner;
+
+    /** The message large in the middle of the screen until someone presses OK or Back (or the phone clears it). */
+    private void showBanner(String text) {
+        if (text == null || text.trim().isEmpty()) return;
+        hideBanner();
+        if (openPopup != null) openPopup.dismiss();
+        handler.removeCallbacks(goIdle);
+        setIdle(false, 0);
+
+        FrameLayout scrim = new FrameLayout(this);
+        scrim.setBackgroundColor(0xB3000000);
+        scrim.setClickable(true);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER_HORIZONTAL);
+        int pad = (int) (48 * density);
+        card.setPadding(pad, (int) (36 * density), pad, (int) (32 * density));
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xF01C1C22);
+        bg.setCornerRadius(32 * density);
+        bg.setStroke((int) Math.max(1, density), 0x33FFFFFF);
+        card.setBackground(bg);
+        card.setElevation(24 * density);
+
+        TextView label = new TextView(this);
+        label.setText(R.string.banner_title);
+        label.setTextColor(0xFFFF9F0A);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        label.setLetterSpacing(0.12f);
+        label.setAllCaps(true);
+        label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        card.addView(label);
+
+        TextView body = new TextView(this);
+        body.setText(text.trim());
+        body.setTextColor(Color.WHITE);
+        // Large enough to read across the room; long messages step down so they still fit.
+        int len = text.trim().length();
+        body.setTextSize(TypedValue.COMPLEX_UNIT_SP, len <= 40 ? 56 : len <= 120 ? 42 : len <= 250 ? 32 : 26);
+        body.setLineSpacing(0, 1.12f);
+        body.setGravity(Gravity.CENTER);
+        body.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bp.topMargin = (int) (18 * density);
+        bp.bottomMargin = (int) (26 * density);
+        card.addView(body, bp);
+
+        TextView hint = new TextView(this);
+        hint.setText(getString(R.string.banner_hint,
+                android.text.format.DateFormat.getTimeFormat(this).format(new java.util.Date())));
+        hint.setTextColor(0x99FFFFFF);
+        hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        card.addView(hint);
+
+        int maxWidth = (int) (getResources().getDisplayMetrics().widthPixels * 0.78f);
+        card.setMinimumWidth((int) (420 * density));
+        FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        scrim.addView(card, cp);
+        body.setMaxWidth(maxWidth - 2 * pad);
+
+        root.addView(scrim, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        scrim.setElevation(100 * density);
+        scrim.setAlpha(0f);
+        card.setScaleX(0.92f);
+        card.setScaleY(0.92f);
+        scrim.animate().alpha(1f).setDuration(220).start();
+        card.animate().scaleX(1f).scaleY(1f).setDuration(320).setInterpolator(new android.view.animation.OvershootInterpolator(1.1f)).start();
+        banner = scrim;
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    private void hideBanner() {
+        final View b = banner;
+        if (b == null) return;
+        banner = null;
+        getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        b.animate().alpha(0f).setDuration(180).withEndAction(() -> root.removeView(b)).start();
+        poke();
+    }
+
+    // ---- TV lock (from the phone remote) ------------------------------------------------------------
+
+    private View lockView;
+
+    /** "This TV is locked" over everything, with the PIN pad; OK opens the pad again after Back. */
+    private void showLock() {
+        if (lockView == null) {
+            if (openPopup != null) openPopup.dismiss();
+            handler.removeCallbacks(goIdle);
+            setIdle(false, 0);
+            LinearLayout v = new LinearLayout(this);
+            v.setOrientation(LinearLayout.VERTICAL);
+            v.setGravity(Gravity.CENTER);
+            v.setBackgroundColor(0xFA0B0B0F);
+            v.setClickable(true);
+            v.setOnClickListener(x -> askUnlockPin());
+
+            TextView icon = new TextView(this);
+            icon.setText("🔒");
+            icon.setTextSize(TypedValue.COMPLEX_UNIT_SP, 72);
+            v.addView(icon);
+
+            TextView title = new TextView(this);
+            title.setText(R.string.lock_title);
+            title.setTextColor(Color.WHITE);
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 48);
+            title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+            LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            tp.topMargin = (int) (16 * density);
+            v.addView(title, tp);
+
+            TextView sub = new TextView(this);
+            sub.setText(R.string.lock_subtitle);
+            sub.setTextColor(0xB3FFFFFF);
+            sub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
+            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            sp.topMargin = (int) (10 * density);
+            v.addView(sub, sp);
+
+            root.addView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            v.setElevation(90 * density);   // under a message from the phone (banner), over everything else
+            lockView = v;
+        }
+        askUnlockPin();
+    }
+
+    private boolean unlockPadOpen;
+
+    private void askUnlockPin() {
+        if (unlockPadOpen || lockView == null || !resumed) return;
+        unlockPadOpen = true;
+        verifyPin(getString(R.string.lock_pin_title), () -> {
+            unlockPadOpen = false;
+            TvLock.unlock(this);
+            hideLock();
+        }, () -> unlockPadOpen = false);
+    }
+
+    private void hideLock() {
+        final View v = lockView;
+        if (v == null) return;
+        lockView = null;
+        v.animate().alpha(0f).setDuration(200).withEndAction(() -> root.removeView(v)).start();
+        poke();
+    }
+
+    @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // A message on screen takes every key; OK or Back closes it.
+        if (banner != null) {
+            int k = event.getKeyCode();
+            if (event.getAction() == KeyEvent.ACTION_UP && (k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER
+                    || k == KeyEvent.KEYCODE_NUMPAD_ENTER || k == KeyEvent.KEYCODE_BACK || k == KeyEvent.KEYCODE_ESCAPE)) {
+                hideBanner();
+            }
+            return true;
+        }
+        // Locked: every key stays here; OK brings the PIN pad back.
+        if (lockView != null) {
+            int k = event.getKeyCode();
+            if (event.getAction() == KeyEvent.ACTION_UP && (k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER
+                    || k == KeyEvent.KEYCODE_NUMPAD_ENTER || (k >= KeyEvent.KEYCODE_0 && k <= KeyEvent.KEYCODE_9))) {
+                askUnlockPin();
+            }
+            return true;
+        }
         // Idle: the first key only brings everything back (its key-up is ignored by the views too).
         if (idle) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) setIdle(false, IDLE_WAKE_MS);
@@ -1917,8 +2142,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private void verifyPin(String title, Runnable then) {
+        verifyPin(title, then, null);
+    }
+
+    /** onCancel: the pad was closed without the right PIN (Back). */
+    private void verifyPin(String title, Runnable then, Runnable onCancel) {
         View panel = getLayoutInflater().inflate(R.layout.dialog_pin, root, false);
-        PinPad.show(glassDialog(panel), panel, title, (pad, pin) -> {
+        Dialog dialog = glassDialog(panel);
+        if (onCancel != null) dialog.setOnCancelListener(d -> onCancel.run());
+        PinPad.show(dialog, panel, title, (pad, pin) -> {
             long now = SystemClock.elapsedRealtime();
             if (now < pinWaitUntil) {
                 pad.fail(getString(R.string.app_lock_wait, (int) ((pinWaitUntil - now + 999) / 1000)));
@@ -2964,6 +3196,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             startGallery();
         });
 
+        View qrRow = addMenuRow(rows, getString(R.string.settings_menu_remote_qr), remoteQrState());
+        final TextView qrStatus = qrRow.findViewById(R.id.status);
+        qrRow.setOnClickListener(v -> {
+            SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+            p.edit().putBoolean(PREF_REMOTE_QR, !p.getBoolean(PREF_REMOTE_QR, true)).apply();
+            qrStatus.setText(remoteQrState());
+        });
+
         View lockRow = addMenuRow(rows, getString(R.string.settings_menu_app_lock), appLockState());
         lockRow.setOnClickListener(v -> {
             popup.dismiss();
@@ -2998,7 +3238,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
         final String ip = ipv4Address();
-        final boolean withQr = WebControl.port() > 0 && ip != null;
+        // Settings › Remote QR: Hide leaves out the QR code and the phone page's link (a guest is watching).
+        final boolean showPhone = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_REMOTE_QR, true);
+        // The QR code pairs the phone remote through the relay; without a relay it is the home-network page.
+        final boolean viaRelay = RemoteRelay.enabled();
+        final boolean withQr = showPhone && (viaRelay || (WebControl.port() > 0 && ip != null));
         // With the phone page on, its QR code sits in a column beside the rows (the menu doesn't scroll).
         final PopupWindow popup = glassPopup(panel, (int) ((withQr ? 380 + 186 : 380) * density));
 
@@ -3009,17 +3253,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 .findViewById(R.id.status);
         View toggleRow = addMenuRow(rows, getString(R.string.net_menu_wireless), "");
         final TextView toggleStatus = toggleRow.findViewById(R.id.status);
-        // The phone page: its address with the code, and a way to change the code.
-        final TextView webStatus = addMenuRow(rows, getString(R.string.net_menu_phone), webControlUrl(ip))
-                .findViewById(R.id.status);
+        // The phone remote (relay) and the phone page: the page's address with its code, and a way to change both.
+        if (showPhone && viaRelay) {
+            addMenuRow(rows, getString(R.string.net_menu_remote),
+                    getString(RemoteRelay.online() ? R.string.net_menu_remote_online : R.string.net_menu_remote_connecting));
+        }
+        final TextView webStatus = showPhone
+                ? addMenuRow(rows, getString(R.string.net_menu_phone), webControlUrl(ip)).findViewById(R.id.status) : null;
         final ImageView qr = withQr ? new ImageView(this) : null;
         if (withQr) {
-            qr.setImageBitmap(qrBitmap(webControlUrl(ip)));
+            qr.setImageBitmap(qrBitmap(viaRelay ? RemoteRelay.phoneUrl(this) : webControlUrl(ip)));
             addMenuRow(rows, getString(R.string.net_menu_new_code), getString(R.string.net_menu_new_code_hint))
                     .setOnClickListener(v -> {
                         WebControl.newCode(this);
+                        if (viaRelay) RemoteRelay.newPhoneKey(this);
                         webStatus.setText(webControlUrl(ip));
-                        qr.setImageBitmap(qrBitmap(webControlUrl(ip)));
+                        qr.setImageBitmap(qrBitmap(viaRelay ? RemoteRelay.phoneUrl(this) : webControlUrl(ip)));
                     });
         }
         addMenuRow(rows, getString(R.string.net_menu_pair), getString(R.string.net_menu_pair_hint))
@@ -3203,6 +3452,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Already stopped.
         }
         holder[0] = null;
+    }
+
+    private String remoteQrState() {
+        return getString(getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_REMOTE_QR, true)
+                ? R.string.settings_menu_show : R.string.settings_menu_hide);
     }
 
     private View addMenuRow(LinearLayout rows, String title, String status) {

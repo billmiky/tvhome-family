@@ -43,4 +43,11 @@ public class QrTest {
         assertNotNull(Qr.encode("http://192.168.1.13:8080/?k=123456".getBytes(StandardCharsets.UTF_8)));
         assertNull(Qr.encode(new byte[85]));
     }
+
+    @Test
+    public void fitsTheRemoteLink() {
+        // RemoteRelay.phoneUrl: the relay, then #<12-byte id>.<16-byte key> in base64url (16 + 22 characters).
+        String link = "https://tv-remote.ptrinh.workers.dev/#AbCdEfGhIjKlMnOp.AbCdEfGhIjKlMnOpQrStUv";
+        assertNotNull(Qr.encode(link.getBytes(StandardCharsets.UTF_8)));
+    }
 }

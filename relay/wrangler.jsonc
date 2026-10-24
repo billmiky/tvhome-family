@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tv-remote",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-01",
+  "account_id": "2edc401e8f3f074f198d7290691817a3",
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "TV", "class_name": "Tv" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Tv"] }],
+  "observability": { "enabled": true }
+}

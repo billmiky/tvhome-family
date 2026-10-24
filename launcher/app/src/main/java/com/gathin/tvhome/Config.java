@@ -66,6 +66,8 @@ final class Config {
     /** WebControl: the phone page on the home network, and its port. */
     final boolean webControl;
     final int webPort;
+    /** RemoteRelay: the relay for the phone remote over the internet (relay/ in this repo); empty: off. */
+    final String remoteRelay;
     /** Occasions: the owner's days as a JSON array (validated by Occasions.parse), and the built-in holidays. */
     final String occasions;
     final boolean holidays;
@@ -82,7 +84,7 @@ final class Config {
                    String sourcePanelService, String sourcePanelAction, String inputAction,
                    int columns, int rowsBelowDock,
                    boolean shamsiDate, boolean moduleCards, String vpnApp, boolean showHomeSettingsShortcut, String selfUpdate, boolean btcTicker, String greetingName, boolean nowPlaying, boolean gallery,
-                   boolean weather, String weatherLocation, String weatherUnit, int screensaverIntervalS, boolean webControl, int webPort, String occasions, boolean holidays,
+                   boolean weather, String weatherLocation, String weatherUnit, int screensaverIntervalS, boolean webControl, int webPort, String remoteRelay, String occasions, boolean holidays,
                    String christmasVideo, String newYearVideo, String tetVideo, int backgroundColor,
                    File wallpaper, boolean overlayApplied) {
         this.dockApps = Collections.unmodifiableList(dockApps);
@@ -109,6 +111,7 @@ final class Config {
         this.screensaverIntervalS = screensaverIntervalS;
         this.webControl = webControl;
         this.webPort = webPort;
+        this.remoteRelay = remoteRelay;
         this.occasions = occasions;
         this.holidays = holidays;
         this.christmasVideo = christmasVideo;
@@ -150,6 +153,7 @@ final class Config {
         int screensaverInterval = res.getInteger(R.integer.screensaver_interval_s);
         boolean webControl = res.getBoolean(R.bool.web_control);
         int webPort = res.getInteger(R.integer.web_port);
+        String remoteRelay = res.getString(R.string.remote_relay).trim();
         String occasions = res.getString(R.string.occasions);
         boolean holidays = res.getBoolean(R.bool.holidays);
         String christmasVideo = res.getString(R.string.christmas_video).trim();
@@ -187,6 +191,7 @@ final class Config {
             screensaverInterval = integer(json, "screensaver_interval_s", screensaverInterval, 10, 600);
             webControl = bool(json, "web_control", webControl);
             webPort = integer(json, "web_port", webPort, 1024, 65535);
+            remoteRelay = string(json, "remote_relay", remoteRelay).trim();
             // In config.json the occasions are a real JSON array, not a string.
             JSONArray occ = json.optJSONArray("occasions");
             if (occ != null) occasions = occ.toString();
@@ -204,7 +209,8 @@ final class Config {
         return new Config(dock, hidden, liveTv, liveTvAction, panelService, panelAction, inputAction,
                 Math.max(1, columns), Math.max(0, rowsBelow), shamsi, moduleCards, vpn, homeSettings, Updater.mode(selfUpdate), btc, name, nowPlaying, gallery,
                 weather, weatherLocation, Weather.FAHRENHEIT.equals(weatherUnit) ? Weather.FAHRENHEIT : Weather.CELSIUS,
-                Math.max(10, Math.min(600, screensaverInterval)), webControl, Math.max(1024, Math.min(65535, webPort)), occasions, holidays,
+                Math.max(10, Math.min(600, screensaverInterval)), webControl, Math.max(1024, Math.min(65535, webPort)),
+                remoteRelay.startsWith("https://") ? remoteRelay : "", occasions, holidays,
                 christmasVideo, newYearVideo, tetVideo, background,
                 wallpaper, applied);
     }

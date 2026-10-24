@@ -105,6 +105,11 @@
     <bool name="web_control">true</bool>
     <integer name="web_port">8080</integer>
 
+    <!-- Phone remote over the internet (RemoteRelay): the relay Worker in relay/ of this repo. With it set, the
+         QR code in the network menu (hold OK on the network pill) pairs a phone that can show a message on the
+         TV and switch it off and on from anywhere. https:// only; empty: no connection at all. -->
+    <string name="remote_relay" translatable="false">https://tv-remote.ptrinh.workers.dev</string>
+
     <!-- Occasions: days the greeting line (above the clock) says something else, as a JSON array of
          {"date": "MM-DD" every year or "YYYY-MM-DD" once, "text": "…", "video": optional YouTube link}, e.g.
          [{\"date\": \"03-14\", \"text\": \"Happy birthday, bé An\"}] (Android string resources drop

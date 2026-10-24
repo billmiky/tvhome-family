@@ -76,7 +76,21 @@
     <string name="net_menu_wifi_settings">Wi-Fi settings</string>
     <string name="net_menu_phone">Phone control</string>
     <string name="net_menu_new_code">New code</string>
-    <string name="net_menu_new_code_hint">Phones with the old link have to open the new one</string>
+    <string name="net_menu_new_code_hint">Phones with the old link or QR code have to scan again</string>
+    <string name="net_menu_remote">Phone remote</string>
+    <string name="net_menu_remote_online">Online</string>
+    <string name="net_menu_remote_connecting">Connecting…</string>
+    <string name="settings_menu_remote_qr">Remote QR</string>
+    <string name="settings_menu_show">Show</string>
+    <string name="settings_menu_hide">Hide</string>
+    <string name="banner_title">Message</string>
+    <string name="lock_title">This TV is locked</string>
+    <string name="lock_subtitle">Enter the PIN to unlock</string>
+    <string name="lock_pin_title">Enter PIN to unlock</string>
+    <!-- The lock timer without the countdown overlay; %1$d is minutes left. -->
+    <string name="lock_timer_toast">The TV locks in %1$d min</string>
+    <!-- Under a message from the phone remote; %1$s is the time it arrived. -->
+    <string name="banner_hint">From the phone at %1$s · press OK to close</string>
     <string name="settings_menu_gallery">Gallery</string>
     <string name="settings_menu_app_lock">App lock</string>
     <string name="app_lock_count">%1$d apps need the PIN</string>

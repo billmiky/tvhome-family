@@ -16,6 +16,20 @@ import android.view.accessibility.AccessibilityEvent;
  */
 public class HomeKeyService extends AccessibilityService {
 
+    /** The connected service, for RemoteRelay's standby without IP control; null when off. */
+    static volatile HomeKeyService running;
+
+    @Override
+    protected void onServiceConnected() {
+        running = this;
+    }
+
+    @Override
+    public void onDestroy() {
+        if (running == this) running = null;
+        super.onDestroy();
+    }
+
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
         if (event.getKeyCode() != KeyEvent.KEYCODE_ALL_APPS) return false;
