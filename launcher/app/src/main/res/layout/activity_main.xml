@@ -25,8 +25,7 @@
         android:alpha="0"
         android:textColor="#FFFFFFFF"
         android:textSize="34sp"
-        android:fontFamily="@string/font_body"
-        android:fontVariationSettings="'wght' 300"
+        android:fontFamily="@string/font_light"
         android:letterSpacing="-0.02"
         android:includeFontPadding="false"
         android:singleLine="true" />
@@ -69,8 +68,7 @@
                         android:format24Hour="HH:mm"
                         android:textColor="#FFFFFFFF"
                         android:textSize="52sp"
-                        android:fontFamily="@string/font_body"
-                        android:fontVariationSettings="'wght' 300"
+                        android:fontFamily="@string/font_light"
                         android:letterSpacing="-0.04"
                         android:includeFontPadding="false" />
 
@@ -86,8 +84,7 @@
                         android:format24Hour=""
                         android:textColor="#B3FFFFFF"
                         android:textSize="15sp"
-                        android:fontFamily="@string/font_body"
-                        android:fontVariationSettings="'wght' 500"
+                        android:fontFamily="@string/font_medium"
                         android:letterSpacing="0.08"
                         android:textAllCaps="true" />
 
@@ -122,8 +119,7 @@
                             android:ellipsize="end"
                             android:textColor="#E6FFFFFF"
                             android:textSize="17sp"
-                            android:fontFamily="@string/font_body"
-                            android:fontVariationSettings="'wght' 400"
+                            android:fontFamily="@string/font_regular"
                             android:letterSpacing="0.02"
                             android:includeFontPadding="false"
                             android:visibility="gone" />
@@ -140,8 +136,7 @@
                             android:singleLine="true"
                             android:textColor="#E6FFFFFF"
                             android:textSize="17sp"
-                            android:fontFamily="@string/font_body"
-                            android:fontVariationSettings="'wght' 400"
+                            android:fontFamily="@string/font_regular"
                             android:letterSpacing="0.04"
                             android:includeFontPadding="false"
                             android:visibility="gone" />
@@ -165,8 +160,7 @@
                                 android:ellipsize="end"
                                 android:textColor="#A6FFFFFF"
                                 android:textSize="14sp"
-                                android:fontFamily="@string/font_body"
-                                android:fontVariationSettings="'wght' 400"
+                                android:fontFamily="@string/font_regular"
                                 android:letterSpacing="0.14"
                                 android:textAllCaps="true" />
 
@@ -184,8 +178,7 @@
                                 android:format24Hour="@string/date_format"
                                 android:textColor="#A6FFFFFF"
                                 android:textSize="14sp"
-                                android:fontFamily="@string/font_body"
-                                android:fontVariationSettings="'wght' 400"
+                                android:fontFamily="@string/font_regular"
                                 android:letterSpacing="0.14"
                                 android:textAllCaps="true" />
 
@@ -209,8 +202,7 @@
                 android:singleLine="true"
                 android:textColor="#FFFFFFFF"
                 android:textSize="17sp"
-                android:fontFamily="@string/font_body"
-                android:fontVariationSettings="'wght' 500"
+                android:fontFamily="@string/font_medium"
                 android:letterSpacing="0.02"
                 android:includeFontPadding="false"
                 android:visibility="gone" />
@@ -351,8 +343,7 @@
                 android:duplicateParentState="true"
                 android:textColor="#FFFFFFFF"
                 android:textSize="14sp"
-                android:fontFamily="@string/font_body"
-                android:fontVariationSettings="'wght' 500" />
+                android:fontFamily="@string/font_medium"/>
 
             <TextView
                 android:id="@+id/nowPlayingSubtitle"

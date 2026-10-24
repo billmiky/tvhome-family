@@ -2,4 +2,8 @@
 <!-- Outfit lacks most Vietnamese accented letters, so in Vietnamese the UI uses the system's sans-serif. -->
 <resources>
     <string name="font_body" translatable="false">sans-serif</string>
+    <string name="font_regular" translatable="false">sans-serif</string>
+    <string name="font_light" translatable="false">sans-serif-light</string>
+    <string name="font_extralight" translatable="false">sans-serif-thin</string>
+    <string name="font_medium" translatable="false">sans-serif-medium</string>
 </resources>

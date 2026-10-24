@@ -21,8 +21,7 @@
         android:ellipsize="end"
         android:textColor="#FFFFFFFF"
         android:textSize="22sp"
-        android:fontFamily="@string/font_body"
-        android:fontVariationSettings="'wght' 500"
+        android:fontFamily="@string/font_medium"
         android:letterSpacing="-0.01" />
 
     <TextView

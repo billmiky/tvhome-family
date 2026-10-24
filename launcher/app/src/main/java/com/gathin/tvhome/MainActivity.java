@@ -424,7 +424,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambient = findViewById(R.id.ambient);
         heroName = findViewById(R.id.heroName);
         UiFont.watch(heroName);
-        // The glow is a small bitmap stretched over the screen (setAmbient).
+        // The glow is a small bitmap stretched over the screen (setAmbient); its alpha is applied while drawing it
+        // rather than through a full-screen offscreen buffer on every frame of a fade.
+        ambient.forceHasOverlappingRendering(false);
         greeting = findViewById(R.id.greeting);
         UiFont.watch(greeting);
         intro = new GreetingIntro(root, greeting, handler);
@@ -1137,16 +1139,23 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void setAmbient(int color) {
         if (color == ambientColor && ambient.getBackground() != null) return;
         ambientColor = color;
-        int c = color & 0x00FFFFFF;
-        int w = 480, h = 270;
-        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        paint.setShader(new RadialGradient(w * 0.32f, h * 0.42f, w * 0.62f,
-                new int[]{0x5C000000 | c, 0x26000000 | c, 0x00000000 | c}, new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP));
-        new Canvas(bmp).drawRect(0, 0, w, h, paint);
-        android.graphics.drawable.BitmapDrawable drawable = new android.graphics.drawable.BitmapDrawable(getResources(), bmp);
-        drawable.setGravity(Gravity.FILL);
-        ambient.setBackground(drawable);
+        // Painted once in white and tinted with the app's colour: changing apps neither repaints it on the CPU
+        // (about 11 ms) nor uploads it again (upstream 4cc83ce1).
+        android.graphics.drawable.BitmapDrawable glow = ambient.getBackground() instanceof android.graphics.drawable.BitmapDrawable
+                ? (android.graphics.drawable.BitmapDrawable) ambient.getBackground() : null;
+        if (glow == null) {
+            int w = 480, h = 270;
+            Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setShader(new RadialGradient(w * 0.32f, h * 0.42f, w * 0.62f,
+                    new int[]{0x5CFFFFFF, 0x26FFFFFF, 0x00FFFFFF}, new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP));
+            new Canvas(bmp).drawRect(0, 0, w, h, paint);
+            glow = new android.graphics.drawable.BitmapDrawable(getResources(), bmp);
+            glow.setGravity(Gravity.FILL);
+            ambient.setBackground(glow);
+        }
+        // The default tint mode, SRC_IN, keeps the mask's alpha and takes the colour from the tint.
+        glow.setTint(0xFF000000 | color);
     }
 
     private void hideHero() {

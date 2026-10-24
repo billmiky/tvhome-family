@@ -3,4 +3,8 @@
      glyphs for most Vietnamese accented letters, so values-vi points it at the system sans-serif. -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="ReferenceType">
     <string name="font_body" translatable="false">@font/outfit</string>
+    <string name="font_regular" translatable="false">@font/outfit_regular</string>
+    <string name="font_light" translatable="false">@font/outfit_light</string>
+    <string name="font_extralight" translatable="false">@font/outfit_extralight</string>
+    <string name="font_medium" translatable="false">@font/outfit_medium</string>
 </resources>

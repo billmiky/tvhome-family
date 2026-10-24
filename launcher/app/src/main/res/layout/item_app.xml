@@ -65,7 +65,6 @@
         android:translationY="-6dp"
         android:textColor="#F2FFFFFF"
         android:textSize="14sp"
-        android:fontFamily="@string/font_body"
-        android:fontVariationSettings="'wght' 500"
+        android:fontFamily="@string/font_medium"
         android:letterSpacing="0.02" />
 </FrameLayout>

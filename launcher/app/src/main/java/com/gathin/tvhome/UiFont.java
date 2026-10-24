@@ -43,7 +43,10 @@ final class UiFont {
     /** Keeps v in its own font, or the system sans-serif (same style) while its text is Vietnamese. */
     static void watch(final TextView v) {
         final Typeface own = v.getTypeface();
-        final Typeface system = Typeface.create("sans-serif", own != null ? own.getStyle() : Typeface.NORMAL);
+        final Typeface base = Typeface.create("sans-serif", own != null ? own.getStyle() : Typeface.NORMAL);
+        // Same weight as the view's Outfit family (outfit_light, outfit_medium…) where Android can say it.
+        final Typeface system = android.os.Build.VERSION.SDK_INT >= 28 && own != null
+                ? Typeface.create(base, own.getWeight(), own.isItalic()) : base;
         TextWatcher w = new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
