@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Outfit lacks most Vietnamese accented letters, so in Vietnamese the UI uses the system's sans-serif. -->
+<resources>
+    <string name="font_body" translatable="false">sans-serif</string>
+</resources>

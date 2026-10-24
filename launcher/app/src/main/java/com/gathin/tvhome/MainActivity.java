@@ -419,6 +419,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glass = findViewById(R.id.glass);
         ambient = findViewById(R.id.ambient);
         heroName = findViewById(R.id.heroName);
+        UiFont.watch(heroName);
         ambientGlow = new GradientDrawable();
         ambientGlow.setGradientType(GradientDrawable.RADIAL_GRADIENT);
         ambientGlow.setGradientCenter(0.32f, 0.42f);
@@ -426,6 +427,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambient.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
                 ambientGlow.setGradientRadius((r - l) * 0.62f));
         greeting = findViewById(R.id.greeting);
+        UiFont.watch(greeting);
         intro = new GreetingIntro(root, greeting, handler);
         intro.onDone = () -> {
             if (resumed) {
@@ -527,6 +529,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         selfUpdate = cfg.selfUpdate;
         greetingName = cfg.greetingName;
         btcTicker = findViewById(R.id.btcTicker);
+        UiFont.watch(btcTicker);
         btcOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_BTC, cfg.btcTicker);
         weatherView = findViewById(R.id.weather);
         weatherOn = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_WEATHER, cfg.weather);
@@ -2278,6 +2281,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         nowPlayingState = findViewById(R.id.nowPlayingState);
         nowPlayingTitle = findViewById(R.id.nowPlayingTitle);
         nowPlayingSubtitle = findViewById(R.id.nowPlayingSubtitle);
+        UiFont.watch(nowPlayingTitle);
+        UiFont.watch(nowPlayingSubtitle);
         sessionListener = new ComponentName(this, NowPlayingListener.class);
         heroName.setEllipsize(TextUtils.TruncateAt.END);
         nowPlaying.setContentDescription(getString(R.string.now_playing_description));

@@ -19,7 +19,7 @@
         android:textColor="@drawable/pill_text"
         android:duplicateParentState="true"
         android:textSize="15sp"
-        android:fontFamily="@font/outfit"
+        android:fontFamily="@string/font_body"
         android:fontVariationSettings="'wght' 500"
         android:singleLine="true"
         android:ellipsize="end" />
@@ -31,6 +31,6 @@
         android:textColor="@drawable/pill_text_mid"
         android:duplicateParentState="true"
         android:textSize="11sp"
-        android:fontFamily="@font/outfit"
+        android:fontFamily="@string/font_body"
         android:maxLines="2" />
 </LinearLayout>

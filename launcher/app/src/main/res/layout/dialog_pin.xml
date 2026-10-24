@@ -21,7 +21,7 @@
         android:ellipsize="end"
         android:textColor="#FFFFFFFF"
         android:textSize="22sp"
-        android:fontFamily="@font/outfit"
+        android:fontFamily="@string/font_body"
         android:fontVariationSettings="'wght' 500"
         android:letterSpacing="-0.01" />
 
@@ -42,7 +42,7 @@
         android:visibility="gone"
         android:textColor="#FFFF8A80"
         android:textSize="13sp"
-        android:fontFamily="@font/outfit" />
+        android:fontFamily="@string/font_body" />
 
     <GridLayout
         android:id="@+id/keys"

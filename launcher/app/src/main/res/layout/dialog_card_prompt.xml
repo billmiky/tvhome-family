@@ -20,7 +20,7 @@
         android:ellipsize="end"
         android:textColor="#FFFFFFFF"
         android:textSize="22sp"
-        android:fontFamily="@font/outfit"
+        android:fontFamily="@string/font_body"
         android:fontVariationSettings="'wght' 500"
         android:letterSpacing="-0.01" />
 
@@ -32,7 +32,7 @@
         android:textColor="#D9FFFFFF"
         android:textSize="15sp"
         android:lineSpacingExtra="3sp"
-        android:fontFamily="@font/outfit" />
+        android:fontFamily="@string/font_body" />
 
     <TextView
         android:id="@+id/names"
@@ -42,7 +42,7 @@
         android:textColor="#D9FFFFFF"
         android:textSize="15sp"
         android:lineSpacingExtra="3sp"
-        android:fontFamily="@font/outfit" />
+        android:fontFamily="@string/font_body" />
 
     <TextView
         android:id="@+id/hint"
@@ -52,7 +52,7 @@
         android:text="@string/card_prompt_hint"
         android:textColor="#99FFFFFF"
         android:textSize="13sp"
-        android:fontFamily="@font/outfit" />
+        android:fontFamily="@string/font_body" />
 
     <TextView
         android:id="@+id/identity"
@@ -63,7 +63,7 @@
         android:textColor="#80FFFFFF"
         android:textSize="12sp"
         android:letterSpacing="0.03"
-        android:fontFamily="@font/outfit" />
+        android:fontFamily="@string/font_body" />
 
     <LinearLayout
         android:layout_width="match_parent"

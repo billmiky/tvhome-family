@@ -206,7 +206,7 @@ final class ReportPanel {
         t.setBackgroundResource(R.drawable.pill_bg);
         t.setTextColor(c.getColorStateList(R.drawable.pill_text));
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        t.setTypeface(c.getResources().getFont(R.font.outfit));
+        t.setTypeface(UiFont.get(c));
         t.setGravity(Gravity.CENTER);
         t.setPadding(px(16), 0, px(16), 0);
         t.setFocusable(true);
@@ -223,7 +223,7 @@ final class ReportPanel {
         TextView t = new TextView(c);
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         t.setTextColor(color);
-        t.setTypeface(c.getResources().getFont(R.font.outfit));
+        t.setTypeface(UiFont.get(c));
         t.setFontVariationSettings("'wght' " + weight);
         return t;
     }
@@ -250,10 +250,10 @@ final class ReportPanel {
             label.setColor(0x80FFFFFF);
             label.setTextSize(11 * c.getResources().getDisplayMetrics().scaledDensity);
             label.setTextAlign(Paint.Align.CENTER);
-            label.setTypeface(c.getResources().getFont(R.font.outfit));
+            label.setTypeface(UiFont.get(c));
             top.setColor(0xCCFFFFFF);
             top.setTextAlign(Paint.Align.CENTER);
-            top.setTypeface(c.getResources().getFont(R.font.outfit));
+            top.setTypeface(UiFont.get(c));
         }
 
         void set(long[] values, String[] labels, boolean week, int color) {
