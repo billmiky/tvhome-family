@@ -1457,11 +1457,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private boolean unlockPadOpen;
+    private Dialog unlockPad;
 
     private void askUnlockPin() {
         if (unlockPadOpen || lockView == null || !resumed) return;
         unlockPadOpen = true;
-        verifyPin(getString(R.string.lock_pin_title), () -> {
+        unlockPad = verifyPin(getString(R.string.lock_pin_title), () -> {
             unlockPadOpen = false;
             TvLock.unlock(this);
             hideLock();
@@ -1469,6 +1470,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private void hideLock() {
+        // Unlocked from the phone: the PIN pad goes too.
+        if (unlockPad != null) {
+            if (unlockPad.isShowing()) unlockPad.dismiss();
+            unlockPad = null;
+        }
+        unlockPadOpen = false;
         final View v = lockView;
         if (v == null) return;
         lockView = null;
@@ -2145,8 +2152,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         verifyPin(title, then, null);
     }
 
-    /** onCancel: the pad was closed without the right PIN (Back). */
-    private void verifyPin(String title, Runnable then, Runnable onCancel) {
+    /** onCancel: the pad was closed without the right PIN (Back). Returns the pad's dialog. */
+    private Dialog verifyPin(String title, Runnable then, Runnable onCancel) {
         View panel = getLayoutInflater().inflate(R.layout.dialog_pin, root, false);
         Dialog dialog = glassDialog(panel);
         if (onCancel != null) dialog.setOnCancelListener(d -> onCancel.run());
@@ -2170,6 +2177,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 pad.fail(getString(R.string.app_lock_wrong));
             }
         });
+        return dialog;
     }
 
     /** A new PIN, typed twice. */
