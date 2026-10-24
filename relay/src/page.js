@@ -542,7 +542,7 @@ export const PAGE = `<!doctype html>
     $("btnStandby").hidden = standby;
     $("btnWake").hidden = !standby;
     $("status").className = "status " + (on ? (power === "off" ? "standby" : "on") : "off");
-    $("statusText").textContent = on ? (power === "off" ? "Standby" : "Online") : "Offline";
+    $("statusText").textContent = on ? (power === "off" ? "Standby" : "Online") : "Offline" + (lastSeen ? " · " + ago(lastSeen) : "");
     document.body.classList.toggle("tv-off", !on);
     $("offlineCard").hidden = on || tab === "settings";
     if (!on) {
@@ -572,6 +572,8 @@ export const PAGE = `<!doctype html>
     }
   }
   setInterval(drawTimer, 1000);
+  // Offline: keep "· 5 min ago" current. A tap on the pill checks again now.
+  setInterval(() => { if (online === false) $("statusText").textContent = "Offline" + (lastSeen ? " · " + ago(lastSeen) : ""); }, 30000);
 
   // Live status over a WebSocket; the key goes in the first message, not in the address.
   let sock = null, backoff = 1000, pinger = null;
@@ -978,6 +980,9 @@ export const PAGE = `<!doctype html>
     };
     addEventListener("appinstalled", () => ($("install").hidden = true));
   }
+
+  $("status").style.cursor = "pointer";
+  $("status").onclick = () => { $("statusText").textContent = "Checking…"; connect(); refresh(); };
 
   setupNotify();
   connect();
