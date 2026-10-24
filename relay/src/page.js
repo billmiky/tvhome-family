@@ -624,7 +624,13 @@ export const PAGE = `<!doctype html>
     }
   }
   async function savePsk(input, btn) {
-    const j = await run("set_psk", { text: input.value }, "Saved on the TV.", btn);
+    if (!input.value.trim()) { toast("Enter the key first.", true); return; }
+    btn.disabled = true;
+    const j = await post("/api/cmd", { cmd: "set_psk", text: input.value }).catch(() => ({ msg: "No connection." }));
+    btn.disabled = false;
+    // The TV says "refused the IP control key" for a wrong key: say it plainly.
+    if (j.ok) toast(j.msg || "Saved on the TV.");
+    else toast(/refuse/i.test(j.msg || "") ? "Incorrect key." : j.msg || j.error || "Something went wrong.", true);
     if (j.ok) { input.value = ""; $("ipSetup").hidden = true; }
     else loadInfo();
   }

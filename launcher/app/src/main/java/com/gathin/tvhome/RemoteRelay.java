@@ -522,7 +522,11 @@ final class RemoteRelay {
                 }
                 // Kept only once the TV accepts it, so "IP control set up" means it works. getPowerStatus
                 // answers without a key, so the check is a method that needs one.
-                SonyIp.call(arg, "system", "getSystemInformation", new JSONArray(), "1.0");
+                try {
+                    SonyIp.call(arg, "system", "getSystemInformation", new JSONArray(), "1.0");
+                } catch (SonyIp.Failed f) {
+                    throw f.getMessage().contains("refused") ? new SonyIp.Failed("Incorrect key.") : f;
+                }
                 prefs(app).edit().putString(PREF_PSK, arg).apply();
                 // Remote start (Wake-on-LAN): keeps the network up in standby, so the TV can be woken.
                 String wol;
