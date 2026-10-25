@@ -184,6 +184,19 @@ export const PAGE = `<!doctype html>
   .switch { appearance:none; -webkit-appearance:none; width:51px; height:31px; border-radius:99px; background:rgba(120,120,128,.36); position:relative; flex:0 0 auto; cursor:pointer; transition:.2s; border:0; padding:0; }
   .switch::after { content:""; position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%; background:#fff; transition:.2s; box-shadow:0 2px 6px rgba(0,0,0,.3); }
   .switch:checked { background:var(--ok); } .switch:checked::after { left:22px; }
+  /* AI agents: the new key once, then one row per agent with its two switches. */
+  .keybox { margin-top:14px; padding:14px; border-radius:16px; background:rgba(52,199,89,.12); border:1px solid rgba(52,199,89,.4); }
+  .keybox code { display:block; margin-top:8px; padding:11px 13px; border-radius:12px; background:rgba(0,0,0,.4); border:1px solid var(--hair);
+                 font:13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; word-break:break-all; -webkit-user-select:all; user-select:all; }
+  #agentList .setting { border-top:1px solid rgba(255,255,255,.08); }
+  .perm { display:flex; align-items:center; gap:12px; padding:8px 0; }
+  .perm .txt { flex:1; min-width:0; font-size:15px; }
+  .perm .txt small { display:block; font-size:12.5px; color:var(--dim); }
+  .agentlog { list-style:none; margin:0; padding:0; font-size:13px; color:var(--dim); }
+  .agentlog li { display:flex; gap:8px; padding:5px 0; } .agentlog li + li { border-top:1px solid rgba(255,255,255,.06); }
+  .agentlog .when { flex:0 0 auto; font-variant-numeric:tabular-nums; color:var(--faint); }
+  .agentlog .what { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .agentlog .bad { color:#ff6961; }
 
   .empty { text-align:center; padding:40px 10px; color:var(--dim); }
   .empty .big { width:64px; height:64px; margin:0 auto 16px; color:var(--text); }
@@ -414,6 +427,34 @@ export const PAGE = `<!doctype html>
         </div>
       </section>
 
+      <section class="card group needs-tv" id="agentsCard" hidden>
+        <div class="setting">
+          <span class="ic"><i data-i="bot"></i></span>
+          <div class="txt"><b>AI agents</b><span>An assistant such as Claude uses this TV with a key of its own</span></div>
+        </div>
+        <div class="sub">
+          <div class="row" style="margin-top:0">
+            <input id="agentName" type="text" maxlength="40" autocomplete="off" placeholder="Name, e.g. Claude" style="flex:1">
+            <button class="pill white" id="agentCreate" style="flex:0 0 auto">Create</button>
+          </div>
+          <div class="keybox" id="agentKeyBox" hidden>
+            <b id="agentKeyTitle">Copy the key now</b>
+            <p class="hint" style="margin-top:4px">It is shown only this once. The agent sends it as <b>Authorization: Bearer</b> (or <b>TV_AGENT_KEY</b> for the MCP server).</p>
+            <code id="agentKey"></code>
+            <div class="row">
+              <button class="pill white" id="agentCopy"><i data-i="copy"></i>Copy key</button>
+              <button class="pill icon" id="agentKeyHide" aria-label="Hide the key" style="flex:0 0 auto"><i data-i="x"></i></button>
+            </div>
+          </div>
+          <p class="hint" id="agentPerms"></p>
+        </div>
+        <div id="agentList"></div>
+        <div class="sub" id="agentLogBox" hidden style="padding-top:14px">
+          <div class="eyebrow" style="margin-bottom:6px">Recent agent commands</div>
+          <ul class="agentlog" id="agentLog"></ul>
+        </div>
+      </section>
+
       <section class="card group">
         <div class="setting">
           <span class="ic" style="color:#ff6961"><i data-i="unlink"></i></span>
@@ -475,6 +516,8 @@ export const PAGE = `<!doctype html>
     tv: '<rect x="2" y="5" width="20" height="13" rx="2.5"/><path d="M8 21h8M8 2l4 3 4-3"/>',
     terminal: '<rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m7 9 3 3-3 3M13 15h4"/>',
     tvoff: '<rect x="2" y="5" width="20" height="13" rx="2.5"/><path d="M8 21h8M9 9l6 5M15 9l-6 5"/>',
+    bot: '<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16.5h5"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
   };
   function icon(e) {
     const d = ICONS[e.dataset.i];
@@ -647,6 +690,7 @@ export const PAGE = `<!doctype html>
     const j = await run("info", {}, null);
     if (!j.ok || !j.data) return;
     caps = j.data.caps || null;
+    if (tab === "settings") loadAgents();
     $("ipSetup").hidden = !!j.data.ipControl;
     if (j.data.ipControl) loadPicture();
     $("ipSetupText").textContent = j.data.ipKeySaved
@@ -696,7 +740,7 @@ export const PAGE = `<!doctype html>
     $("offlineCard").hidden = online === true || t === "settings";
     setLive(t === "remote");
     if (t === "activity") loadReport();
-    if (t === "settings") loadAdb();
+    if (t === "settings") { loadAdb(); loadAgents(); }
     window.scrollTo(0, 0);
     try { sessionStorage.setItem("tvremote-tab", t); } catch (e) {}
   }
@@ -937,6 +981,116 @@ export const PAGE = `<!doctype html>
     box.disabled = false;
     if (j.ok && j.data) drawAdb(j.data); else loadAdb();
   };
+
+  // ---- AI agents ---------------------------------------------------------------------------------
+  // The TV keeps the agents and enforces what each may do; this page makes a key, hands the TV only its SHA-256
+  // (the key never passes the relay here) and shows it once. The relay fills in the permission summaries.
+  const AGENT_PERMS = /*AGENT_PERMS*/null || {
+    read: { title: "Read", summary: "Status, info, the TV's apps and screen time" },
+    control: { title: "Control", summary: "Remote keys, typing, opening apps, power, messages and the lock" },
+  };
+  $("agentPerms").textContent = "A new agent may read; control is a switch on each agent. Guide for agents: " + location.origin + "/api/guide";
+  function agentKey() {
+    const b = new Uint8Array(24);
+    crypto.getRandomValues(b);
+    return btoa(String.fromCharCode.apply(null, b)).replace(/[+]/g, "-").replace(/[/]/g, "_").replace(/=+$/, "");
+  }
+  async function sha256hex(s) {
+    const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+    return Array.from(new Uint8Array(d)).map((x) => x.toString(16).padStart(2, "0")).join("");
+  }
+  async function loadAgents() {
+    if (!online || !caps) return;
+    if (caps.indexOf("agents") < 0) { $("agentsCard").hidden = true; return; }
+    const j = await run("agents", { args: { action: "list" } }, null);
+    $("agentsCard").hidden = !j.ok;
+    if (j.ok && j.data) drawAgents(j.data);
+  }
+  function permSwitch(a, perm) {
+    const row = el("label", "perm");
+    const txt = el("span", "txt", AGENT_PERMS[perm].title);
+    txt.appendChild(el("small", "", AGENT_PERMS[perm].summary));
+    const box = el("input", "switch");
+    box.type = "checkbox";
+    box.checked = !!a[perm];
+    box.setAttribute("aria-label", AGENT_PERMS[perm].title + " for " + a.name);
+    box.onchange = async () => {
+      box.disabled = true;
+      const args = { action: "set", id: a.id };
+      args[perm] = box.checked;
+      const j = await run("agents", { args: args }, box.checked ? AGENT_PERMS[perm].title + " granted." : AGENT_PERMS[perm].title + " taken away.");
+      box.disabled = false;
+      if (!j.ok) box.checked = !box.checked;
+    };
+    row.appendChild(txt);
+    row.appendChild(box);
+    return row;
+  }
+  function drawAgents(d) {
+    const list = $("agentList");
+    list.textContent = "";
+    (d.agents || []).forEach((a) => {
+      const head = el("div", "setting");
+      const ic = el("span", "ic");
+      const i = el("i");
+      setIcon(i, "bot");
+      ic.appendChild(i);
+      head.appendChild(ic);
+      const txt = el("div", "txt");
+      txt.appendChild(el("b", "", a.name));
+      txt.appendChild(el("span", "", a.lastUsed ? "Used " + ago(a.lastUsed) : "Not used yet"));
+      head.appendChild(txt);
+      const revoke = el("button", "pill sm red", "Revoke");
+      revoke.onclick = async () => {
+        if (!confirm("Revoke " + a.name + "? Its key stops working at once.")) return;
+        if ((await run("agents", { args: { action: "revoke", id: a.id } }, "Revoked.", revoke)).ok) loadAgents();
+      };
+      head.appendChild(revoke);
+      list.appendChild(head);
+      const sub = el("div", "sub");
+      sub.appendChild(permSwitch(a, "read"));
+      sub.appendChild(permSwitch(a, "control"));
+      list.appendChild(sub);
+    });
+    const log = (d.log || []).slice(0, 8);
+    $("agentLogBox").hidden = !log.length;
+    const ul = $("agentLog");
+    ul.textContent = "";
+    log.forEach((e) => {
+      const li = el("li");
+      const t = new Date(e.t || 0);
+      li.appendChild(el("span", "when", String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0")));
+      const what = el("span", "what" + (e.ok ? "" : " bad"), (e.name || "") + " · " + e.cmd + (e.what ? " " + e.what : "") + (e.ok ? "" : " · " + (e.msg || "not done")));
+      what.title = what.textContent;
+      li.appendChild(what);
+      ul.appendChild(li);
+    });
+  }
+  $("agentCreate").onclick = async (e) => {
+    if (!window.crypto || !crypto.subtle) { toast("This browser can't make a key here (it needs https).", true); return; }
+    const key = agentKey();
+    const name = $("agentName").value.trim() || "Agent";
+    const j = await run("agents", { args: { action: "create", name: name, hash: await sha256hex(key), control: false } }, "Agent created.", e.currentTarget);
+    if (!j.ok) return;
+    $("agentName").value = "";
+    $("agentKeyTitle").textContent = "Key for " + ((j.data && j.data.name) || name) + ": copy it now";
+    $("agentKey").textContent = "agent:" + tv.id + "." + key;
+    $("agentKeyBox").hidden = false;
+    loadAgents();
+  };
+  $("agentCopy").onclick = async () => {
+    const text = $("agentKey").textContent;
+    try { await navigator.clipboard.writeText(text); toast("Key copied."); }
+    catch (err) {
+      const r = document.createRange();
+      r.selectNodeContents($("agentKey"));
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      toast("Selected: copy it from the menu.");
+    }
+  };
+  // Hidden for good: the page keeps the key nowhere.
+  $("agentKeyHide").onclick = () => { $("agentKey").textContent = ""; $("agentKeyBox").hidden = true; };
 
   // ---- notifications ---------------------------------------------------------------------------
   const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
