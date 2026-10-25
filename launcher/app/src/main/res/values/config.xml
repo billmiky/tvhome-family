@@ -91,10 +91,10 @@
          refreshed every 30 minutes while Home is in front. Off by default; also switched on the TV: hold OK
          on Settings, then Weather. weather_location is "lat,lon" (e.g. "1.29,103.85") or a place name
          ("Singapore"), looked up once on geocoding-api.open-meteo.com. Empty: no weather. -->
-    <bool name="weather">false</bool>
-    <string name="weather_location" translatable="false"></string>
+    <bool name="weather">true</bool>
+    <string name="weather_location" translatable="false">Brooklyn, New York</string>
     <!-- celsius or fahrenheit -->
-    <string name="weather_unit" translatable="false">celsius</string>
+    <string name="weather_unit" translatable="false">fahrenheit</string>
 
     <!-- Gallery screensaver (pick "Gallery" as the screensaver): seconds each photo stays, 10 to 600. -->
     <integer name="screensaver_interval_s">30</integer>
@@ -139,7 +139,7 @@
          [{\"date\": \"03-14\", \"text\": \"Happy birthday, bé An\"}] (Android string resources drop
          unescaped double quotes, hence the backslashes). Up to 50, text up to 48 characters. In a theme's
          config.json write the plain array instead. The phone page can also edit them. -->
-    <string name="occasions" translatable="false">[]</string>
+    <string name="occasions" translatable="false">[{\"date\": \"2027-01-18\", \"text\": \"Happy MLK Day\"}, {\"date\": \"2027-02-15\", \"text\": \"Happy Presidents Day\"}, {\"date\": \"02-14\", \"text\": \"Happy Valentine\'s Day\"}, {\"date\": \"2027-05-09\", \"text\": \"Happy Mother\'s Day\"}, {\"date\": \"2027-05-31\", \"text\": \"Happy Memorial Day\"}, {\"date\": \"2027-06-20\", \"text\": \"Happy Father\'s Day\"}, {\"date\": \"06-19\", \"text\": \"Happy Juneteenth\"}, {\"date\": \"07-04\", \"text\": \"Happy 4th of July 🎆\"}, {\"date\": \"2027-09-06\", \"text\": \"Happy Labor Day\"}, {\"date\": \"10-31\", \"text\": \"Happy Halloween 🎃\"}, {\"date\": \"11-11\", \"text\": \"Happy Veterans Day\"}, {\"date\": \"2026-11-26\", \"text\": \"Happy Thanksgiving 🦃\"}, {\"date\": \"2027-11-25\", \"text\": \"Happy Thanksgiving 🦃\"}]</string>
     <!-- Built-in holidays when no occasion of yours is set that day: Christmas, 24 and 25 December (MERRY
          CHRISTMAS 🎄 🎅); New Year, 31 December and 1 January (HAPPY NEW YEAR 🍾 🎉); Tết, three days before
          mùng 1 to five days after (HAPPY NEW YEAR 🧧 🎉). -->
