@@ -3914,6 +3914,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             else apply.run();
         });
 
+        if (RemoteRelay.enabled()) {
+            int agentCount = RemoteRelay.agents(this).list().size();
+            View agentsRow = addMenuRow(rows, getString(R.string.agents_menu),
+                    agentCount == 0 ? getString(R.string.agents_none) : String.valueOf(agentCount));
+            agentsRow.setOnClickListener(v -> {
+                popup.dismiss();
+                showAgents();
+            });
+        }
+
         View lockRow = addMenuRow(rows, getString(R.string.settings_menu_app_lock), appLockState());
         lockRow.setOnClickListener(v -> {
             popup.dismiss();
@@ -3961,6 +3971,221 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         fitBelow(popup, panel, anchor);
         dropIn(popup, panel, anchor, Gravity.END);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    // ---- AI agents (Agents) ------------------------------------------------------------------------
+
+    /** Settings menu, AI agents: Create an agent, every agent (OK on one changes or revokes it), the log. */
+    private void showAgents() {
+        View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
+        ((TextView) panel.findViewById(R.id.heading)).setText(R.string.agents_menu);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (420 * density));
+        final Agents agents = RemoteRelay.agents(this);
+        addMenuRow(rows, getString(R.string.agents_create), getString(R.string.agents_create_hint)).setOnClickListener(v -> {
+            if (agents.list().size() >= Agents.MAX) {
+                Toast.makeText(this, R.string.agents_full, Toast.LENGTH_LONG).show();
+                return;
+            }
+            popup.dismiss();
+            // A key lets someone else's program drive the TV: the PIN first, if any, as for the Remote QR.
+            SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
+            if (AppLock.hasPin(p)) verifyPin(getString(R.string.agents_pin), this::nameAgent);
+            else nameAgent();
+        });
+        for (Agents.Agent a : agents.list()) {
+            addMenuRow(rows, a.name, agentState(a)).setOnClickListener(v -> {
+                popup.dismiss();
+                showAgent(a.id);
+            });
+        }
+        addMenuRow(rows, getString(R.string.agents_log), "").setOnClickListener(v -> {
+            popup.dismiss();
+            showAgentLog();
+        });
+        fitBelow(popup, panel, btnSettings);
+        dropIn(popup, panel, btnSettings, Gravity.END);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    /** "Read + control · used 5 minutes ago". */
+    private String agentState(Agents.Agent a) {
+        String perms = getString(a.read && a.control ? R.string.agents_perm_read_control
+                : a.control ? R.string.agents_control : a.read ? R.string.agents_read : R.string.agents_perm_none);
+        String used = a.lastUsed == 0 ? getString(R.string.agents_never)
+                : getString(R.string.agents_used, android.text.format.DateUtils.getRelativeTimeSpanString(a.lastUsed,
+                System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS));
+        return perms + " · " + used;
+    }
+
+    /** One agent: Read and Control switch, Revoke removes it (the relay is told at once). */
+    private void showAgent(String id) {
+        final Agents agents = RemoteRelay.agents(this);
+        final Agents.Agent a = agents.byId(id);
+        if (a == null) {
+            showAgents();
+            return;
+        }
+        View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
+        ((TextView) panel.findViewById(R.id.heading)).setText(a.name);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (420 * density));
+        View readRow = addMenuRow(rows, getString(R.string.agents_read) + " · " + getString(R.string.agents_read_hint),
+                getString(a.read ? R.string.settings_menu_on : R.string.settings_menu_off));
+        final TextView readStatus = readRow.findViewById(R.id.status);
+        readRow.setOnClickListener(v -> {
+            agents.set(id, !a.read, null);
+            RemoteRelay.agentsChanged();
+            readStatus.setText(a.read ? R.string.settings_menu_on : R.string.settings_menu_off);
+        });
+        View controlRow = addMenuRow(rows, getString(R.string.agents_control) + " · " + getString(R.string.agents_control_hint),
+                getString(a.control ? R.string.settings_menu_on : R.string.settings_menu_off));
+        final TextView controlStatus = controlRow.findViewById(R.id.status);
+        controlRow.setOnClickListener(v -> {
+            Runnable flip = () -> {
+                agents.set(id, null, !a.control);
+                RemoteRelay.agentsChanged();
+                controlStatus.setText(a.control ? R.string.settings_menu_on : R.string.settings_menu_off);
+            };
+            // Granting control asks for the PIN, as making a key does; taking it away never does.
+            if (!a.control && AppLock.hasPin(getSharedPreferences(PREFS, MODE_PRIVATE))) verifyPin(getString(R.string.agents_pin), flip);
+            else flip.run();
+        });
+        addMenuRow(rows, getString(R.string.agents_revoke), agentState(a)).setOnClickListener(v -> {
+            popup.dismiss();
+            agents.revoke(id);
+            RemoteRelay.agentsChanged();
+            showAgents();
+        });
+        fitBelow(popup, panel, btnSettings);
+        dropIn(popup, panel, btnSettings, Gravity.END);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    /** The new agent's name (the phone remote's keyboard can type it), then its key. */
+    private void nameAgent() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundResource(R.drawable.glass_panel);
+        int pad = (int) (24 * density);
+        panel.setPadding(pad, pad, pad, (int) (18 * density));
+        TextView title = new TextView(this);
+        title.setText(R.string.agents_name_title);
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        title.setTypeface(UiFont.get(this));
+        panel.addView(title);
+        final android.widget.EditText name = new android.widget.EditText(this);
+        name.setSingleLine(true);
+        name.setHint("Claude");
+        name.setTextColor(Color.WHITE);
+        name.setHintTextColor(0x66FFFFFF);
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        name.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(Agents.MAX_NAME)});
+        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        np.topMargin = (int) (14 * density);
+        panel.addView(name, np);
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bp.topMargin = (int) (16 * density);
+        panel.addView(buttons, bp);
+        final Dialog dialog = glassDialog(panel);
+        Runnable create = () -> {
+            dialog.dismiss();
+            try {
+                Agents.Created c = RemoteRelay.agents(this).create(name.getText().toString(), false, System.currentTimeMillis());
+                RemoteRelay.agentsChanged();
+                showAgentKey(c);
+            } catch (Exception e) {
+                Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        };
+        name.setOnEditorActionListener((v, actionId, event) -> {
+            create.run();
+            return true;
+        });
+        buttons.addView(dialogButton(getString(R.string.agents_create_button), create));
+        dialog.show();
+        name.requestFocus();
+    }
+
+    /** The key, once: as text and as a QR code, with the relay's address. Nothing keeps it after Done. */
+    private void showAgentKey(Agents.Created c) {
+        String token = RemoteRelay.agentToken(this, c.key);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundResource(R.drawable.glass_panel);
+        int pad = (int) (24 * density);
+        panel.setPadding(pad, pad, pad, (int) (18 * density));
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.agents_key_title, c.agent.name));
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        title.setTypeface(UiFont.get(this));
+        panel.addView(title);
+        TextView body = new TextView(this);
+        body.setText(getString(R.string.agents_key_body, String.valueOf(RemoteRelay.relayBase())));
+        body.setTextColor(0xB3FFFFFF);
+        body.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        body.setTypeface(UiFont.get(this));
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hp.topMargin = (int) (8 * density);
+        panel.addView(body, hp);
+        TextView key = new TextView(this);
+        key.setText(token);
+        key.setTextColor(Color.WHITE);
+        key.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        key.setTypeface(Typeface.MONOSPACE);
+        key.setTextIsSelectable(true);
+        LinearLayout.LayoutParams kp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        kp.topMargin = (int) (12 * density);
+        panel.addView(key, kp);
+        ImageView qr = new ImageView(this);
+        qr.setImageBitmap(qrBitmap(token));
+        int side = (int) (168 * density);
+        LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(side, side);
+        qp.topMargin = (int) (12 * density);
+        qp.gravity = Gravity.CENTER_HORIZONTAL;
+        panel.addView(qr, qp);
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        bp.topMargin = (int) (16 * density);
+        panel.addView(buttons, bp);
+        final Dialog dialog = glassDialog(panel);
+        TextView done = dialogButton(getString(R.string.agents_done), () -> {
+            dialog.dismiss();
+            showAgents();
+        });
+        buttons.addView(done);
+        dialog.show();
+        done.requestFocus();
+    }
+
+    /** The agent log, newest first: when, who, what, and the result. */
+    private void showAgentLog() {
+        View panel = getLayoutInflater().inflate(R.layout.popup_cards, root, false);
+        ((TextView) panel.findViewById(R.id.heading)).setText(R.string.agents_log);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (480 * density));
+        org.json.JSONArray log = RemoteRelay.agents(this).log(Agents.LOG_MAX);
+        java.text.DateFormat time = android.text.format.DateFormat.getTimeFormat(this);
+        java.text.DateFormat day = android.text.format.DateFormat.getMediumDateFormat(this);
+        for (int i = 0; i < log.length(); i++) {
+            org.json.JSONObject e = log.optJSONObject(i);
+            if (e == null) continue;
+            java.util.Date at = new java.util.Date(e.optLong("t"));
+            String what = e.optString("cmd") + (e.optString("what").isEmpty() ? "" : " " + e.optString("what"));
+            String result = getString(e.optBoolean("ok") ? R.string.agents_ok : R.string.agents_failed)
+                    + (e.optString("msg").isEmpty() ? "" : " · " + e.optString("msg"));
+            addMenuRow(rows, e.optString("name") + " · " + what, day.format(at) + " " + time.format(at) + " · " + result);
+        }
+        if (rows.getChildCount() == 0) addMenuRow(rows, getString(R.string.agents_log_empty), "");
+        fitBelow(popup, panel, btnSettings);
+        dropIn(popup, panel, btnSettings, Gravity.END);
         rows.getChildAt(0).requestFocus();
     }
 

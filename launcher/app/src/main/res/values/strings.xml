@@ -213,4 +213,30 @@
     <string name="remap_webhook_bad">Enter a URL that starts with http:// or https://</string>
     <string name="remap_webhook_failed">Webhook failed: %1$s</string>
     <string name="remap_no_permission">The launcher may not change this (WRITE_SECURE_SETTINGS, granted by the install script).</string>
+
+    <!-- Settings menu › AI agents (Agents) -->
+    <string name="agents_menu">AI agents</string>
+    <string name="agents_none">None</string>
+    <string name="agents_create">Create an agent</string>
+    <string name="agents_create_hint">Shown once, with a QR code</string>
+    <string name="agents_create_button">Create</string>
+    <string name="agents_full">At most 10 agents. Revoke one first.</string>
+    <string name="agents_pin">Enter PIN to give an agent access</string>
+    <string name="agents_name_title">Name the agent (for example Claude)</string>
+    <string name="agents_key_title">Key for %1$s</string>
+    <string name="agents_key_body">Shown only now. Give the agent this key (TV_AGENT_KEY) and the relay %1$s (RELAY_URL). It may read; grant control in its row.</string>
+    <string name="agents_done">Done</string>
+    <string name="agents_read">Read</string>
+    <string name="agents_read_hint">status, apps, screen time</string>
+    <string name="agents_control">Control</string>
+    <string name="agents_control_hint">keys, typing, apps, power, messages, lock</string>
+    <string name="agents_perm_read_control">Read + control</string>
+    <string name="agents_perm_none">Paused</string>
+    <string name="agents_never">never used</string>
+    <string name="agents_used">used %1$s</string>
+    <string name="agents_revoke">Revoke</string>
+    <string name="agents_log">Agent log</string>
+    <string name="agents_log_empty">No agent commands yet</string>
+    <string name="agents_ok">OK</string>
+    <string name="agents_failed">Not done</string>
 </resources>

@@ -42,6 +42,8 @@ import javax.net.ssl.SSLSocketFactory;
  * the TV sends on connecting. Commands: banner, banner_clear, screen_off, screen_on, standby, wake,
  * set_psk, set_pin, lock, unlock, lock_timer, lock_timer_cancel and ping; each is answered with an ack
  * the phone page shows, carrying the lock state (TvLock).
+ * AI agents (Agents) send commands through the relay with keys of their own: the relay marks each with the
+ * agent's key hash, and the TV runs it only when that agent may (read or control), logging it.
  *
  * One daemon thread for the socket, reconnecting with backoff; a ping every 20 s keeps it open through
  * NATs and a VPN's userspace TCP stack (Proxy Switchboard drops a flow idle for 60 s), and the relay answers
@@ -85,6 +87,7 @@ final class RemoteRelay {
     /** The default network the last connect went out on: a different one means the socket is stale. */
     private static volatile android.net.Network network;
     private static Context app;
+    private static volatile Agents agents;
     private static final Object writeLock = new Object();
     private static final ExecutorService work = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "remote-cmd");
@@ -102,6 +105,7 @@ final class RemoteRelay {
         app = ctx.getApplicationContext();
         base = relay.trim().replaceAll("/+$", "");
         keys(app);
+        agents(app);
         TvLock.start(app);
         startedAt = android.os.SystemClock.elapsedRealtime();
         Thread t = new Thread(RemoteRelay::loop, "remote-relay");
@@ -162,6 +166,47 @@ final class RemoteRelay {
     static void newPhoneKey(Context ctx) {
         prefs(ctx).edit().putString(PREF_PHONE_KEY, random(16)).apply();
         work.execute(RemoteRelay::hello);
+    }
+
+    /** The AI agents, kept in the launcher's preferences. */
+    static synchronized Agents agents(Context ctx) {
+        if (agents == null) {
+            final SharedPreferences p = prefs(ctx);
+            agents = new Agents(new Agents.Store() {
+                @Override
+                public String get(String key) {
+                    return p.getString(key, null);
+                }
+
+                @Override
+                public void put(String key, String value) {
+                    p.edit().putString(key, value).apply();
+                }
+            });
+        }
+        return agents;
+    }
+
+    /** What an agent sends as its Bearer token: agent:<TV id>.<key>. */
+    static String agentToken(Context ctx, String key) {
+        return Agents.token(keys(ctx).getString(PREF_ID, ""), key);
+    }
+
+    static String relayBase() {
+        return base;
+    }
+
+    /** An agent was made, revoked or changed on the TV: tell the relay now, so a revoked key stops at once. */
+    static void agentsChanged() {
+        if (base != null) work.execute(RemoteRelay::pushAgents);
+    }
+
+    private static void pushAgents() {
+        try {
+            send(new JSONObject().put("t", "agents").put("agents", agents(app).forRelay()).toString());
+        } catch (Exception e) {
+            // Offline: the next hello carries the list, and until then no command reaches the TV anyway.
+        }
     }
 
     // ---- connection --------------------------------------------------------------------------------
@@ -334,6 +379,7 @@ final class RemoteRelay {
                     .put("name", name)
                     .put("v", BuildConfig.VERSION_NAME)
                     .put("phones", new JSONArray().put(sha256(p.getString(PREF_PHONE_KEY, ""))))
+                    .put("agents", agents(app).forRelay())
                     .put("power", interactive() ? "on" : "off")
                     .put("state", TvLock.state(app));
             send(m.toString());
@@ -443,22 +489,40 @@ final class RemoteRelay {
         final String cmd = m.optString("cmd");
         final String arg = m.optString("text", "");
         final JSONObject args = m.optJSONObject("args") != null ? m.optJSONObject("args") : new JSONObject();
+        // From an AI agent: the relay adds the hash of its key. Without one it is a paired phone (the owner).
+        final String agentHash = m.optString("agent", "").isEmpty() ? null : m.optString("agent");
         work.execute(() -> {
             boolean ok = true;
             String msg;
             JSONObject out = new JSONObject();
-            try {
-                msg = run(cmd, arg, args, out);
-            } catch (SonyIp.Failed f) {
+            Agents ag = agentHash != null ? agents(app) : null;
+            Agents.Agent who = ag != null ? ag.byHash(agentHash) : null;
+            String refused = ag != null ? Agents.refusal(who, cmd) : null;
+            if (refused != null) {
                 ok = false;
-                msg = f.getMessage();
-            } catch (Exception e) {
-                ok = false;
-                msg = "The TV could not do that: " + e.getMessage();
+                msg = refused;
+            } else {
+                try {
+                    msg = run(cmd, arg, args, out);
+                    if (who != null) Agents.forAgent(who, cmd, out);
+                } catch (SonyIp.Failed f) {
+                    ok = false;
+                    msg = f.getMessage();
+                } catch (Exception e) {
+                    ok = false;
+                    msg = "The TV could not do that: " + e.getMessage();
+                }
+            }
+            if (ag != null) {
+                long now = System.currentTimeMillis();
+                if (who != null) ag.used(who, now);
+                // The relay's status check pings for the agent: last used, but not a line in the log.
+                if (!"ping".equals(cmd)) ag.log(who, agentHash, cmd, Agents.summary(cmd, arg, args), ok, msg, now);
             }
             try {
                 JSONObject ack = new JSONObject().put("t", "ack").put("n", n).put("ok", ok).put("msg", msg)
                         .put("state", TvLock.state(app));
+                if (refused != null) ack.put("denied", true);
                 if (out.has("data")) ack.put("data", out.get("data"));
                 String json = ack.toString();
                 if (json.length() > MAX_FRAME - 64) {
@@ -479,6 +543,7 @@ final class RemoteRelay {
             "ping", "caps", "info", "banner", "banner_clear", "lock", "unlock", "lock_timer", "lock_timer_cancel",
             "set_pin", "screen_off", "screen_on", "standby", "wake", "set_psk",
             "sony", "button", "buttons", "intent", "launch", "apps", "global", "local", "type", "adb", "longpress",
+            "screen_time", "agents",
     };
 
     /**
@@ -652,8 +717,52 @@ final class RemoteRelay {
             case "local":
                 out.put("data", local(args.optString("method", "GET"), args.optString("path"), args.opt("body")));
                 return "";
+            case "screen_time":
+                // The phone page's report (GET /api/report) without the page: what agents read.
+                out.put("data", new JSONObject(ScreenTime.json(app, ScreenTime.load(app, "7d".equals(args.optString("range", arg))))));
+                return "";
+            case "agents":
+                return agentsCommand(args, out);
             default:
                 throw new SonyIp.Failed("This TV does not know \"" + cmd + "\" yet. Update the launcher.");
+        }
+    }
+
+    /**
+     * The phone page's AI agents section (never an agent's: Agents.refusal keeps them out). action: list (the
+     * agents without hashes, and the log), create {name, hash, control} with a key the page made, revoke {id},
+     * set {id, read?, control?}. Each change goes to the relay before the answer, so it holds when the page sees it.
+     */
+    private static String agentsCommand(JSONObject args, JSONObject out) throws Exception {
+        Agents ag = agents(app);
+        String id = args.optString("id");
+        switch (args.optString("action", "list")) {
+            case "list":
+                out.put("data", new JSONObject().put("agents", ag.forPhone()).put("log", ag.log(50)));
+                return "";
+            case "create": {
+                Agents.Agent a;
+                try {
+                    a = ag.add(args.optString("name"), args.optString("hash"), args.optBoolean("control"), System.currentTimeMillis());
+                } catch (IllegalStateException | IllegalArgumentException e) {
+                    throw new SonyIp.Failed(e.getMessage());
+                }
+                pushAgents();
+                out.put("data", new JSONObject().put("id", a.id).put("name", a.name));
+                return "Agent created.";
+            }
+            case "revoke":
+                if (!ag.revoke(id)) throw new SonyIp.Failed("No such agent.");
+                pushAgents();
+                return "Revoked.";
+            case "set":
+                if (!ag.set(id, args.has("read") ? args.optBoolean("read") : null, args.has("control") ? args.optBoolean("control") : null)) {
+                    throw new SonyIp.Failed("No such agent.");
+                }
+                pushAgents();
+                return "Saved.";
+            default:
+                throw new SonyIp.Failed("action is list, create, revoke or set");
         }
     }
 
