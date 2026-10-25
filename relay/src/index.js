@@ -6,6 +6,8 @@
 // /api/cmd with the TV id and its key; the object checks the key, hands the command to the TV and waits
 // for its answer. Commands pass through by name, so a new feature on the phone page needs no relay change.
 // Phones may also hold a WebSocket (/phone) for live status, and a Web Push subscription for "TV on/off".
+// AI agents use /api/cmd and /api/status with "Authorization: Bearer agent:<id>.<key>" (agents.js): the TV lists
+// their hashes and permissions, the relay forwards their commands marked with the hash, and the TV enforces them.
 // Stored: the key hashes, push subscriptions, the TV's name, power and lock state, when it was last seen.
 
 import { DurableObject } from "cloudflare:workers";
@@ -14,6 +16,7 @@ import { SW } from "./sw.js";
 import { ICON512, ICON192, APPLE180 } from "./icons.js";
 import { OUTFIT } from "./font.js";
 import { push, makeVapid } from "./webpush.js";
+import { guide, parseAgentAuth, agentNeeds, cleanAgents, takeToken, PERMS, BAD_AUTH } from "./agents.js";
 
 const ID = /^[A-Za-z0-9_-]{12,32}$/;
 const KEY = /^[A-Za-z0-9_-]{22,64}$/;
@@ -32,6 +35,10 @@ const OFF_AFTER_MS = 2 * 60 * 1000;
 // A dropped TV socket shows as offline only after this: a Wi-Fi blip reconnects within seconds.
 const GRACE_MS = 15 * 1000;
 const SUBJECT = "https://tv-remote.ptrinh.workers.dev";
+// Hashes of revoked agent keys, kept to answer "revoked" rather than "bad agent key".
+const MAX_REVOKED = 20;
+// The permission summaries for the page's AI agents section (one source with the guide).
+const PAGE_OUT = PAGE.replace("/*AGENT_PERMS*/null", JSON.stringify(PERMS));
 const ICONS = {
   "/icon-512.png": ICON512,
   "/icon-192.png": ICON192,
@@ -65,7 +72,7 @@ export default {
     if (path === "/" && (req.method === "GET" || req.method === "HEAD")) {
       // A paired page (/?p=<id>.<key>) links the manifest that starts the home-screen app paired.
       const p = url.searchParams.get("p") || "";
-      const page = PAIRING.test(p) ? PAGE.replace('href="/manifest.webmanifest"', 'href="/manifest.webmanifest?p=' + p + '"') : PAGE;
+      const page = PAIRING.test(p) ? PAGE_OUT.replace('href="/manifest.webmanifest"', 'href="/manifest.webmanifest?p=' + p + '"') : PAGE_OUT;
       return new Response(page, {
         headers: {
           "content-type": "text/html; charset=utf-8",
@@ -98,6 +105,9 @@ export default {
       return new Response(SW, { headers: { "content-type": "text/javascript", "cache-control": "no-cache" } });
     }
     if (path === "/api/vapid") return json(200, { key: (await vapidKeys(env)).pub });
+    if (path === "/api/guide") {
+      return new Response(guide(url.origin), { headers: { "content-type": "text/markdown; charset=utf-8", "cache-control": "public, max-age=300" } });
+    }
     if (path === "/tv" || path === "/phone") {
       const id = url.searchParams.get("id") || "";
       if (!ID.test(id)) return text(400, "bad id");
@@ -107,14 +117,27 @@ export default {
       if (req.method !== "POST") return json(405, { ok: false, error: "POST only" });
       const len = Number(req.headers.get("content-length") || 0);
       if (len > 8192) return json(413, { ok: false, error: "too large" });
+      // Phones send their key in the body; agents in the Authorization header (and may send no body for status).
+      const auth = req.headers.get("authorization");
+      const agent = parseAgentAuth(auth);
+      if (auth && (!agent || path === "/api/push")) return json(401, { ok: false, error: "bad agent key" });
       let body;
       try {
-        body = await req.json();
+        const raw = await req.text();
+        body = raw.trim() || !agent ? JSON.parse(raw) : {};
       } catch {
         return json(400, { ok: false, error: "bad json" });
       }
-      if (!body || !ID.test(body.id || "") || !KEY.test(body.key || "")) return json(400, { ok: false, error: "not paired" });
-      const stub = env.TV.get(env.TV.idFromName(body.id));
+      if (!body || typeof body !== "object" || Array.isArray(body)) return json(400, { ok: false, error: "bad json" });
+      if (agent) {
+        delete body.id;
+        delete body.key;
+        body.agent = agent.key;
+      } else {
+        delete body.agent;
+        if (!ID.test(body.id || "") || !KEY.test(body.key || "")) return json(400, { ok: false, error: "not paired" });
+      }
+      const stub = env.TV.get(env.TV.idFromName(agent ? agent.id : body.id));
       return stub.fetch(new Request("https://tv" + path, { method: "POST", body: JSON.stringify(body) }));
     }
     return text(404, "not found");
@@ -126,6 +149,9 @@ export class Tv extends DurableObject {
     super(ctx, env);
     this.env = env;
     this.pending = new Map();
+    // Agent rate limits, in memory: an evicted object starts every bucket full again.
+    this.buckets = new Map();
+    this.badAuth = { n: 0, since: 0 };
     // Keep-alive pings (TV and phones) are answered without waking the object.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
@@ -149,22 +175,74 @@ export class Tv extends DurableObject {
     return phones.includes(await sha256(key));
   }
 
+  // ---- agents ----------------------------------------------------------------------------------------
+
+  /** The TV's record {h, read, control} for an agent key, or {error: Response}; rate limits both ways. */
+  async agentFor(key) {
+    const now = Date.now();
+    if (now - this.badAuth.since > 60000) this.badAuth = { n: 0, since: now };
+    if (this.badAuth.n >= BAD_AUTH.perMinute) return { error: limited(Math.max(1, Math.ceil((this.badAuth.since + 60000 - now) / 1000))) };
+    const h = KEY.test(key || "") ? await sha256(key) : "";
+    const rec = h ? ((await this.ctx.storage.get("agents")) || []).find((a) => a.h === h) : null;
+    if (!rec) {
+      this.badAuth.n++;
+      const revoked = h && ((await this.ctx.storage.get("revokedAgents")) || []).includes(h);
+      return { error: revoked ? json(403, { ok: false, error: "revoked" }) : json(401, { ok: false, error: "bad agent key" }) };
+    }
+    let bucket = this.buckets.get(h);
+    if (!bucket) this.buckets.set(h, (bucket = {}));
+    const wait = takeToken(bucket, now);
+    return wait ? { error: limited(wait) } : { rec };
+  }
+
+  /** The TV's agent list changed (hello, or a create, revoke or permission change): sockets of keys gone close. */
+  async setAgents(list) {
+    const old = (await this.ctx.storage.get("agents")) || [];
+    const gone = old.filter((a) => !list.some((b) => b.h === a.h)).map((a) => a.h);
+    if (gone.length) {
+      const revoked = ((await this.ctx.storage.get("revokedAgents")) || []).filter((h) => !gone.includes(h)).concat(gone);
+      await this.ctx.storage.put("revokedAgents", revoked.slice(-MAX_REVOKED));
+      for (const h of gone) this.buckets.delete(h);
+    }
+    await this.ctx.storage.put("agents", list);
+    const readers = new Set(list.filter((a) => a.read).map((a) => a.h));
+    for (const ws of this.ctx.getWebSockets("phone")) {
+      const a = ws.deserializeAttachment();
+      if (!a || !a.agent || readers.has(a.agent)) continue;
+      try {
+        ws.send(JSON.stringify({ t: "revoked" }));
+        ws.close(4003, "revoked");
+      } catch {}
+    }
+  }
+
   async fetch(req) {
     const url = new URL(req.url);
     if (url.pathname === "/_vapid") return json(200, await this.vapid());
     if (url.pathname === "/tv") return this.connectTv(req);
     if (url.pathname === "/phone") return this.connectPhone(req);
     const body = await req.json();
-    if (!(await this.paired(body.key))) return json(403, { ok: false, error: "not paired" });
+    // An agent's commands go to the TV marked with its hash and the TV decides; a phone is the owner's.
+    let agent = null;
+    if (typeof body.agent === "string") {
+      const a = await this.agentFor(body.agent);
+      if (a.error) return a.error;
+      agent = a.rec;
+    } else if (!(await this.paired(body.key))) return json(403, { ok: false, error: "not paired" });
 
     if (url.pathname === "/api/status") {
-      if (this.tv()) await this.ask({ cmd: "ping" }, 4000);
+      if (agent && !agent.read) return json(403, { ok: false, denied: true, msg: "This agent may not read the TV's status." });
+      if (this.tv()) await this.ask(agent ? { cmd: "ping", agent: agent.h } : { cmd: "ping" }, 4000);
       return json(200, { ok: true, ...(await this.status()) });
     }
-    if (url.pathname === "/api/push") return this.subscribe(body);
+    if (url.pathname === "/api/push") {
+      if (agent) return json(403, { ok: false, denied: true, msg: "Agents have no notifications." });
+      return this.subscribe(body);
+    }
 
     const cmd = String(body.cmd || "");
     if (!CMD.test(cmd)) return json(400, { ok: false, error: "bad command name" });
+    if (agent && !agentNeeds(cmd)) return json(403, { ok: false, denied: true, msg: "Agents may not use \"" + cmd + "\"." });
     const msg = { cmd };
     const t = typeof body.text === "string" ? body.text.trim() : "";
     if (t.length > MAX_TEXT) return json(400, { ok: false, error: "text is at most 500 characters" });
@@ -178,8 +256,9 @@ export class Tv extends DurableObject {
     if (cmd === "set_pin" && !/^[0-9]{4}$/.test(t)) return json(400, { ok: false, error: "The PIN is 4 digits." });
     if (cmd === "lock_timer" && !(/^[0-9]{1,3}$/.test(t) && +t >= 1 && +t <= 720)) return json(400, { ok: false, error: "The timer is 1 to 720 minutes." });
     if (cmd === "set_psk" && t.length > 64) return json(400, { ok: false, error: "PSK is at most 64 characters" });
+    if (agent) msg.agent = agent.h;
     const r = await this.ask(msg, ANSWER_MS);
-    return json(r.offline ? 503 : 200, r);
+    return json(r.offline ? 503 : agent && r.denied ? 403 : 200, r);
   }
 
   // ---- sockets ---------------------------------------------------------------------------------------
@@ -246,12 +325,22 @@ export class Tv extends DurableObject {
       if (m.t === "auth" && typeof m.key === "string" && KEY.test(m.key) && (await this.paired(m.key))) {
         ws.serializeAttachment({ auth: true, live: false });
         ws.send(JSON.stringify({ t: "status", ...(await this.status()) }));
+      } else if (m.t === "auth" && typeof m.agent === "string") {
+        // An agent's live status (read permission; never the live view). setAgents closes it on revoke.
+        const a = await this.agentFor(m.agent);
+        if (a.rec && a.rec.read) {
+          ws.serializeAttachment({ auth: true, live: false, agent: a.rec.h });
+          ws.send(JSON.stringify({ t: "status", ...(await this.status()) }));
+        } else {
+          ws.send(JSON.stringify({ t: "unpaired" }));
+          ws.close(4003, "not allowed");
+        }
       } else if (m.t === "auth") {
         ws.send(JSON.stringify({ t: "unpaired" }));
         ws.close(4003, "not paired");
       } else if (m.t === "live") {
         const a = ws.deserializeAttachment() || {};
-        if (!a.auth) return;
+        if (!a.auth || a.agent) return;
         a.live = m.on === true;
         a.fps = Math.max(1, Math.min(5, Number(m.fps) || 2));
         ws.serializeAttachment(a);
@@ -262,6 +351,8 @@ export class Tv extends DurableObject {
     if (m.t === "hello") {
       const phones = Array.isArray(m.phones) ? m.phones.filter((h) => typeof h === "string" && HEX64.test(h)).slice(0, MAX_PHONES) : [];
       await this.ctx.storage.put({ phones, name: typeof m.name === "string" ? m.name.slice(0, 60) : "TV", lastSeen: Date.now() });
+      // A launcher without agents sends none: no agent key works with it.
+      await this.setAgents(cleanAgents(m.agents));
       if (m.state && typeof m.state === "object") await this.ctx.storage.put("state", m.state);
       await this.setPower(m.power === "off" ? "off" : "on", true);
       await this.broadcast();
@@ -270,6 +361,8 @@ export class Tv extends DurableObject {
       if (m.state && typeof m.state === "object") await this.ctx.storage.put("state", m.state);
       if (m.power === "on" || m.power === "off") await this.setPower(m.power, true);
       await this.broadcast();
+    } else if (m.t === "agents") {
+      await this.setAgents(cleanAgents(m.agents));
     } else if (m.t === "live_error") {
       const msg = JSON.stringify({ t: "live_error", msg: String(m.msg || "").slice(0, 200) });
       for (const p of this.ctx.getWebSockets("phone")) {
@@ -285,7 +378,9 @@ export class Tv extends DurableObject {
       const data = m.data === undefined ? undefined : JSON.stringify(m.data).length > MAX_DATA ? null : m.data;
       if (p) {
         this.pending.delete(m.n);
-        p({ ok: m.ok === true, msg: typeof m.msg === "string" ? m.msg.slice(0, 300) : "", state: m.state || null, data });
+        const r = { ok: m.ok === true, msg: typeof m.msg === "string" ? m.msg.slice(0, 300) : "", state: m.state || null, data };
+        if (m.denied === true) r.denied = true;
+        p(r);
       }
       const prev = JSON.stringify((await this.ctx.storage.get("state")) || null);
       await this.ctx.storage.put("lastSeen", Date.now());
@@ -512,6 +607,13 @@ async function sha256(s) {
 
 function json(status, obj) {
   return new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+}
+
+function limited(seconds) {
+  return new Response(JSON.stringify({ ok: false, error: "rate limited", retryAfter: seconds }), {
+    status: 429,
+    headers: { "content-type": "application/json", "cache-control": "no-store", "retry-after": String(seconds) },
+  });
 }
 
 function text(status, s) {

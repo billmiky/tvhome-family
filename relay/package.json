@@ -5,7 +5,9 @@
   "description": "Relay between the TV Home launcher and the phone remote page (Cloudflare Worker + Durable Object).",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "test": "node --test test/agents.test.js test/page.test.js",
+    "test:e2e": "node --test --test-concurrency=1 test/e2e.test.js ../tools/tv-remote-mcp/test/smoke.test.js"
   },
   "devDependencies": {
     "wrangler": "^4.152.0"
