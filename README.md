@@ -55,6 +55,10 @@ What it does:
 - **Live status**: the controls disappear while the TV is offline (with when it was last seen) and come back
   by themselves.
 - **Settings**: the PIN, the TV's IP control key, ADB over Wi-Fi on or off with the address to connect to.
+- **AI agents**: give an assistant such as Claude a key of its own (made on the TV or the phone, shown once).
+  It may read (status, apps, screen time); switch on control for keys, typing, apps, power, messages and the
+  lock. The TV enforces it and logs every command; revoking a key stops it at once. The relay documents the API
+  at `/api/guide`, and [`tools/tv-remote-mcp`](tools/tv-remote-mcp) is an MCP server for `claude mcp add`.
 
 **How it works**
 

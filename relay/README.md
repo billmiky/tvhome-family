@@ -15,7 +15,7 @@ installable web app) posts commands to `/api/cmd`.
   method), `button` {name | names[], gapMs} (any remote button, e.g. VolumeUp, Netflix, Num1), `buttons`,
   `intent` {action, data, type, package, component, categories, extras}, `launch` {package}, `apps`,
   `global` {action: back|home|recents|notifications|quick_settings|lock_screen}, `local` {method, path, body}
-  (the home-network phone page's `/api/…`, e.g. `/api/report?range=7d`), `info`, `caps`. The answer's
+  (the home-network phone page's `/api/…`, e.g. `/api/report?range=7d`), `screen_time` {range: today|7d}, `info`, `caps`, `agents` {action: list|create|revoke|set} (phones only). The answer's
   `data` carries any result.
 - **Live status**: phones open `/phone?id=…` and send `{t:"auth", key}`; the relay pushes
   `{t:"status", online, power, state, name, lastSeen}` whenever something changes.
@@ -26,7 +26,23 @@ installable web app) posts commands to `/api/cmd`.
   IP control, Authentication "Normal and Pre-Shared Key"); save the same key from the phone page. Without
   a key, standby falls back to the launcher's accessibility service. Wake from standby is best effort: the
   TV usually stops the launcher's connection in standby.
-- **Stored**: TV key hash, phone key hashes, push subscriptions, TV name, power and lock state, last seen.
+- **AI agents** (`src/agents.js`): `POST /api/cmd` and `/api/status` also take
+  `Authorization: Bearer agent:<TV id>.<key>`. The TV makes agent keys (Settings › AI agents) or the phone page
+  makes one and hands the TV only its SHA-256; the TV sends the relay `[{h, read, control}]` in its hello and
+  again (`{t:"agents"}`) on every create, revoke or permission change, so a revoked key gets 403 at once and an
+  agent's status socket (`/phone`, `{t:"auth", agent}`) is closed with 4003. The relay forwards only the agent
+  commands listed in `agents.js` (never `set_pin`, `set_psk`, `adb`, `sony`, `intent`, `local`, `agents`), adds
+  the key hash, and the TV enforces **read** (status, info, caps, apps, buttons, `screen_time`; on by default)
+  and **control** (button, longpress, global, type, launch, power, banner, lock; when granted), logging each
+  command (Settings › AI agents › Agent log, and the phone page). A refusal is 403 `{denied:true}`. Rate limit
+  per key: 20 at once, 60 a minute (429 with Retry-After); 20 wrong keys a minute lock agents out of that TV
+  for the minute. `GET /api/guide` is the markdown guide for agents, written from the same list. An MCP server
+  is in [`tools/tv-remote-mcp`](../tools/tv-remote-mcp).
+- **Stored**: TV key hash, phone key hashes, agent key hashes and permissions (and the last 20 revoked hashes),
+  push subscriptions, TV name, power and lock state, last seen.
+- **Tests**: `npm install`, then `npm test` (agent rules, the guide, the launcher's lists match, the page script
+  parses without backticks or dollar-brace) and `npm run test:e2e` (a local `wrangler dev` with a fake TV: agent
+  auth, revoke, rate limits, `/api/guide`, and the MCP server's smoke test).
 
 Deploy (personal account): `npx wrangler deploy`. The launcher's relay address is `remote_relay` in
 `launcher/app/src/main/res/values/config.xml` (or `remote_relay` in a theme's `config.json`); empty turns
