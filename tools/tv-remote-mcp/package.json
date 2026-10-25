@@ -1,0 +1,12 @@
+{
+  "name": "tv-remote-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server (stdio) that drives a TV Home TV through the TV Remote relay with an agent key. No dependencies.",
+  "bin": { "tv-remote-mcp": "server.js" },
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test test/"
+  }
+}
