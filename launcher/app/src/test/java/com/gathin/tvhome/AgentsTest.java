@@ -35,10 +35,10 @@ public class AgentsTest {
         assertFalse(a.control);
         for (String c : Agents.READ) assertNull(c, Agents.refusal(a, c));
         for (String c : Agents.CONTROL) assertNotNull(c, Agents.refusal(a, c));
-        ag.set(a.id, null, true);
+        ag.set(a.id, null, true, null);
         for (String c : Agents.CONTROL) assertNull(c, Agents.refusal(a, c));
         // Read off: status-like commands are refused, control still works.
-        ag.set(a.id, false, null);
+        ag.set(a.id, false, null, null);
         assertNotNull(Agents.refusal(a, "info"));
         assertNull(Agents.refusal(a, "button"));
     }
@@ -46,7 +46,7 @@ public class AgentsTest {
     @Test public void agentsNeverReachTheOwnersCommands() throws Exception {
         Agents ag = new Agents(new MapStore());
         Agents.Agent a = ag.create("Claude", true, NOW).agent;
-        for (String c : new String[] {"set_pin", "set_psk", "adb", "sony", "intent", "local", "agents", "nope"}) {
+        for (String c : new String[] {"set_pin", "set_psk", "sony", "intent", "local", "agents", "nope"}) {
             assertNotNull(c, Agents.refusal(a, c));
             assertNull(c, Agents.needs(c));
         }
@@ -55,6 +55,35 @@ public class AgentsTest {
                 java.nio.charset.StandardCharsets.UTF_8);
         for (String c : Agents.READ) assertTrue(c, relay.contains("case \"" + c + "\":"));
         for (String c : Agents.CONTROL) assertTrue(c, relay.contains("case \"" + c + "\":"));
+    }
+
+    @Test public void adbIsAThirdPermissionOffByDefault() throws Exception {
+        MapStore store = new MapStore();
+        Agents ag = new Agents(store);
+        Agents.Agent a = ag.create("Claude", true, NOW).agent;
+        assertFalse(a.adb);
+        assertEquals("adb", Agents.needs("adb"));
+        // Control doesn't include it.
+        assertNotNull(Agents.refusal(a, "adb"));
+        assertFalse(Agents.caps(a).toString().contains("adb"));
+        // Granting it (or control) is what asks for the PIN; taking either away, or read, never does.
+        assertTrue(Agents.grants(a, null, true));
+        assertFalse(Agents.grants(a, false, false));
+        assertFalse(Agents.grants(a, true, null));   // already has control
+        ag.set(a.id, null, null, true);
+        assertNull(Agents.refusal(a, "adb"));
+        assertTrue(Agents.caps(a).toString().contains("\"adb\""));
+        assertFalse(Agents.grants(a, null, true));
+        assertTrue(ag.forRelay().getJSONObject(0).getBoolean("adb"));
+        assertTrue(ag.forPhone().getJSONObject(0).getBoolean("adb"));
+        assertTrue(new Agents(store).byId(a.id).adb);
+        // adb alone: no keys, no reads beyond it.
+        ag.set(a.id, false, false, null);
+        assertNull(Agents.refusal(a, "adb"));
+        assertNotNull(Agents.refusal(a, "button"));
+        assertNotNull(Agents.refusal(a, "info"));
+        assertEquals("on", Agents.summary("adb", "", new JSONObject().put("action", "on")));
+        assertEquals("status", Agents.summary("adb", "", new JSONObject()));
     }
 
     @Test public void revokedKeyIsRefusedAtOnce() throws Exception {
@@ -134,14 +163,14 @@ public class AgentsTest {
         MapStore store = new MapStore();
         Agents ag = new Agents(store);
         Agents.Agent a = ag.create("  Claude\n Code  ", false, NOW).agent;
-        ag.set(a.id, null, true);
+        ag.set(a.id, null, true, null);
         ag.used(a, NOW + 5);
         Agents again = new Agents(store);
         Agents.Agent b = again.byId(a.id);
         assertEquals("Claude Code", b.name);
         assertTrue(b.read && b.control);
         assertEquals(NOW + 5, b.lastUsed);
-        assertEquals(new JSONArray().put(new JSONObject().put("h", a.hash).put("read", true).put("control", true)).toString(),
+        assertEquals(new JSONArray().put(new JSONObject().put("h", a.hash).put("read", true).put("control", true).put("adb", false)).toString(),
                 again.forRelay().toString());
     }
 

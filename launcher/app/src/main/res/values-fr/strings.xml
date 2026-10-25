@@ -67,6 +67,9 @@
     <string name="agents_perm_none">En pause</string>
     <string name="agents_never">jamais utilisé</string>
     <string name="agents_used">utilisé %1$s</string>
+    <string name="agents_adb">ADB</string>
+    <string name="agents_adb_hint">Débogage sans fil oui/non</string>
+    <string name="agents_adb_warning">Tout appareil du réseau domestique déjà associé pourra alors se connecter.</string>
     <string name="agents_revoke">Révoquer</string>
     <string name="agents_log">Journal des agents</string>
     <string name="agents_log_empty">Aucune commande d\'agent</string>

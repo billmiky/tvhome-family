@@ -23,16 +23,18 @@ test("agent auth: Bearer agent:<id>.<key> only", () => {
 test("the TV's agent list: hashes checked, booleans strict, capped", () => {
   assert.deepEqual(cleanAgents(null), []);
   assert.deepEqual(cleanAgents([{ h: H, read: true, control: "yes" }, { h: "nothex", read: true }, { h: H.toUpperCase() }, null]),
-    [{ h: H, read: true, control: false }]);
+    [{ h: H, read: true, control: false, adb: false }]);
+  assert.deepEqual(cleanAgents([{ h: H, adb: true }]), [{ h: H, read: false, control: false, adb: true }]);
   assert.equal(cleanAgents(Array.from({ length: 30 }, () => ({ h: H }))).length, 10);
 });
 
 test("only the listed commands, and never the owner's", () => {
-  for (const c of ["set_pin", "set_psk", "adb", "sony", "intent", "local", "agents", "anything"]) assert.equal(agentNeeds(c), null, c);
+  for (const c of ["set_pin", "set_psk", "sony", "intent", "local", "agents", "anything"]) assert.equal(agentNeeds(c), null, c);
   assert.equal(agentNeeds("status"), "read");
   assert.equal(agentNeeds("apps"), "read");
   assert.equal(agentNeeds("button"), "control");
   assert.equal(agentNeeds("lock"), "control");
+  assert.equal(agentNeeds("adb"), "adb");
   for (const c of AGENT_COMMANDS) assert.ok(PERMS[c.perm], c.cmd);
 });
 
@@ -64,7 +66,8 @@ test("the guide documents every command with JSON examples", () => {
   for (const code of ["400", "401", "403", "413", "429", "503"]) assert.ok(g.includes("| " + code + " |"), code);
   assert.ok(g.includes(RATE.burst + " requests at once and " + RATE.perMinute + " a minute"));
   assert.ok(g.includes("https://relay.example/api/cmd"));
-  assert.ok(!/set_pin|set_psk|"adb"|intent/.test(g), "no owner-only command in the guide");
+  assert.ok(!/set_pin|set_psk|intent|"sony"/.test(g), "no owner-only command in the guide");
+  assert.ok(g.includes("| `adb` | off") && g.includes(PERMS.adb.warning), "adb, its default and its warning");
 });
 
 test("the launcher's Agents.READ and Agents.CONTROL match agents.js", () => {
@@ -76,4 +79,5 @@ test("the launcher's Agents.READ and Agents.CONTROL match agents.js", () => {
   };
   assert.deepEqual(list("READ"), commandsFor("read").sort());
   assert.deepEqual(list("CONTROL"), commandsFor("control").sort());
+  assert.deepEqual(list("ADB"), commandsFor("adb").sort());
 });

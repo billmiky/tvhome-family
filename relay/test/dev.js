@@ -1,6 +1,6 @@
 // For the end-to-end tests: a local relay (wrangler dev, its state in a temporary folder) and a fake TV that
 // connects the way the launcher does, says hello with its phone and agent hashes, and answers commands with the
-// launcher's rules for agents (Agents.READ / Agents.CONTROL), so the relay's forwarding is what is tested.
+// launcher's rules for agents (Agents.READ / CONTROL / ADB), so the relay's forwarding is what is tested.
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -63,9 +63,10 @@ export async function startRelay() {
 
 const READ = new Set(commandsFor("read"));
 const CONTROL = new Set(commandsFor("control"));
+const ADB = new Set(commandsFor("adb"));
 
 /**
- * A fake TV on the relay. agents: [{key, read, control}]. Every command it gets is kept in `seen` (with the agent
+ * A fake TV on the relay. agents: [{key, read, control, adb}]. Every command it gets is kept in `seen` (with the agent
  * hash the relay added); it answers like the launcher: refused (denied) unless the agent may, else ok.
  */
 export async function fakeTv(url, { agents = [] } = {}) {
@@ -78,7 +79,7 @@ export async function fakeTv(url, { agents = [] } = {}) {
     ws.onopen = resolve;
     ws.onerror = (e) => reject(new Error("TV socket: " + (e.message || "error")));
   });
-  const relayList = () => tv.agents.map((a) => ({ h: a.h, read: !!a.read, control: !!a.control }));
+  const relayList = () => tv.agents.map((a) => ({ h: a.h, read: !!a.read, control: !!a.control, adb: !!a.adb }));
   ws.onmessage = (e) => {
     if (typeof e.data !== "string" || e.data === "pong") return;
     const m = JSON.parse(e.data);
@@ -87,9 +88,10 @@ export async function fakeTv(url, { agents = [] } = {}) {
     const ack = { t: "ack", n: m.n, ok: true, msg: "", state: { locked: false, hasPin: true, lockAt: 0 } };
     if (m.agent) {
       const a = tv.agents.find((x) => x.h === m.agent);
-      const need = READ.has(m.cmd) ? "read" : CONTROL.has(m.cmd) ? "control" : null;
+      const need = READ.has(m.cmd) ? "read" : CONTROL.has(m.cmd) ? "control" : ADB.has(m.cmd) ? "adb" : null;
       if (!a || !need || !a[need]) Object.assign(ack, { ok: false, denied: true, msg: "refused by the TV" });
     }
+    if (ack.ok && m.cmd === "adb") ack.data = { wifi: (m.args || {}).action === "on", adb: true, tcp5555: false, ip: "192.168.1.50", port: 37241 };
     if (ack.ok && m.cmd === "apps") ack.data = [{ label: "Netflix", package: "com.netflix.ninja" }, { label: "YouTube", package: "com.google.android.youtube.tv" }];
     ws.send(JSON.stringify(ack));
   };

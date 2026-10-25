@@ -1,7 +1,8 @@
 // AI agents: what an agent key may do through the relay, in one place. The relay checks the names here (an agent
-// can't reach set_pin, adb, sony, intent, local or the agent list at all), GET /api/guide is written from them,
+// can't reach set_pin, set_psk, sony, intent, local or the agent list at all), GET /api/guide is written from them,
 // the phone page shows the permission summaries, and test/agents.test.js checks that the launcher's lists
-// (Agents.READ and Agents.CONTROL) say the same. The TV enforces read and control; the relay only forwards.
+// (Agents.READ, Agents.CONTROL and Agents.ADB) say the same. The TV enforces read, control and adb; the relay
+// only forwards.
 //
 // An agent authenticates with "Authorization: Bearer agent:<TV id>.<key>". The TV makes the key (or the phone page
 // does, and hands the TV only its SHA-256); the TV sends the relay the hashes with each agent's permissions, in its
@@ -17,6 +18,8 @@ export const BAD_AUTH = { perMinute: 20 };
 export const PERMS = {
   read: { title: "Read", summary: "Status, info, the TV's apps and screen time" },
   control: { title: "Control", summary: "Remote keys, typing, opening apps, power, messages and the lock" },
+  adb: { title: "ADB", summary: "Wireless debugging on or off, and its address",
+    warning: "Anyone on the home network who is already paired can then connect." },
 };
 
 const STATE = { locked: false, hasPin: true, lockAt: 0 };
@@ -64,6 +67,8 @@ export const AGENT_COMMANDS = [
   { cmd: "lock_timer", perm: "control", summary: "Locks the TV in text minutes (1 to 720), counting down in a corner.", req: { cmd: "lock_timer", text: "30" },
     res: { ok: true, msg: "The TV locks in 30 min.", state: { locked: false, hasPin: true, lockAt: 1761371800000 } } },
   { cmd: "lock_timer_cancel", perm: "control", summary: "Cancels the lock timer.", req: { cmd: "lock_timer_cancel" }, res: ok("Timer cancelled.") },
+  { cmd: "adb", perm: "adb", summary: "Wireless debugging: args.action status (default), on or off. Answers {wifi, adb, tcp5555, ip?, port?}: whether Wireless debugging is on, ADB at all, classic ADB on 5555, and the address to `adb connect` to. Only switches it; there is no shell. " + PERMS.adb.warning,
+    req: { cmd: "adb", args: { action: "on" } }, res: ok("", { wifi: true, adb: true, tcp5555: false, ip: "192.168.1.50", port: 37241 }) },
 ];
 
 const BY_NAME = new Map(AGENT_COMMANDS.map((c) => [c.cmd, c]));
@@ -87,13 +92,13 @@ export function parseAgentAuth(header) {
   return m ? { id: m[1], key: m[2] } : null;
 }
 
-/** The agents list from the TV: [{h, read, control}], hashes checked, at most MAX_AGENTS. */
+/** The agents list from the TV: [{h, read, control, adb}], hashes checked, at most MAX_AGENTS. */
 export function cleanAgents(list) {
   if (!Array.isArray(list)) return [];
   return list
     .filter((a) => a && typeof a.h === "string" && /^[0-9a-f]{64}$/.test(a.h))
     .slice(0, MAX_AGENTS)
-    .map((a) => ({ h: a.h, read: a.read === true, control: a.control === true }));
+    .map((a) => ({ h: a.h, read: a.read === true, control: a.control === true, adb: a.adb === true }));
 }
 
 /**
@@ -122,7 +127,7 @@ export function guide(origin) {
   const out = [];
   out.push("# TV Remote relay: guide for AI agents", "");
   out.push("This relay passes commands to one Android TV running TV Home (the launcher). An agent drives the TV with the",
-    "commands below and nothing else: no shell, no settings, no PIN. The TV checks every command against the agent's",
+    "commands below and nothing else: no shell, no other settings, no PIN. The TV checks every command against the agent's",
     "permissions and keeps a log of them, which its owner can read on the TV.", "");
   out.push("## Authentication", "");
   out.push("The TV's owner creates an agent key on the TV (Settings › AI agents) or in the phone remote (Settings › AI agents).",
@@ -133,7 +138,8 @@ export function guide(origin) {
   out.push("## Permissions", "");
   out.push("| Permission | Default | Covers |", "|---|---|---|");
   out.push("| `read` | on | " + PERMS.read.summary + ": " + AGENT_COMMANDS.filter((c) => c.perm === "read").map((c) => "`" + c.cmd + "`").join(", ") + " |");
-  out.push("| `control` | off, the owner grants it | " + PERMS.control.summary + ": " + AGENT_COMMANDS.filter((c) => c.perm === "control").map((c) => "`" + c.cmd + "`").join(", ") + " |");
+  out.push("| `control` | off, the owner grants it (with the TV's PIN) | " + PERMS.control.summary + ": " + AGENT_COMMANDS.filter((c) => c.perm === "control").map((c) => "`" + c.cmd + "`").join(", ") + " |");
+  out.push("| `adb` | off, the owner grants it (with the TV's PIN) | " + PERMS.adb.summary + ": `adb`. " + PERMS.adb.warning + " |");
   out.push("");
   out.push("## Endpoints", "");
   out.push("- `POST " + o + "/api/status` with `{}`: the TV's status (needs `read`).");

@@ -731,7 +731,8 @@ final class RemoteRelay {
     /**
      * The phone page's AI agents section (never an agent's: Agents.refusal keeps them out). action: list (the
      * agents without hashes, and the log), create {name, hash, control} with a key the page made, revoke {id},
-     * set {id, read?, control?}. Each change goes to the relay before the answer, so it holds when the page sees it.
+     * set {id, read?, control?, adb?, pin?}: granting control or adb takes the TV's PIN when one is set, as on the
+     * TV. Each change goes to the relay before the answer, so it holds when the page sees it.
      */
     private static String agentsCommand(JSONObject args, JSONObject out) throws Exception {
         Agents ag = agents(app);
@@ -755,12 +756,19 @@ final class RemoteRelay {
                 if (!ag.revoke(id)) throw new SonyIp.Failed("No such agent.");
                 pushAgents();
                 return "Revoked.";
-            case "set":
-                if (!ag.set(id, args.has("read") ? args.optBoolean("read") : null, args.has("control") ? args.optBoolean("control") : null)) {
-                    throw new SonyIp.Failed("No such agent.");
+            case "set": {
+                Boolean read = args.has("read") ? args.optBoolean("read") : null;
+                Boolean control = args.has("control") ? args.optBoolean("control") : null;
+                Boolean adb = args.has("adb") ? args.optBoolean("adb") : null;
+                SharedPreferences p = prefs(app);
+                if (Agents.grants(ag.byId(id), control, adb) && AppLock.hasPin(p) && !AppLock.checkPin(p, args.optString("pin"))) {
+                    out.put("data", new JSONObject().put("pin", true));
+                    throw new SonyIp.Failed(args.has("pin") ? "Incorrect PIN." : "Enter the TV's PIN to grant that.");
                 }
+                if (!ag.set(id, read, control, adb)) throw new SonyIp.Failed("No such agent.");
                 pushAgents();
                 return "Saved.";
+            }
             default:
                 throw new SonyIp.Failed("action is list, create, revoke or set");
         }

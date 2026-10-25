@@ -28,12 +28,15 @@ installable web app) posts commands to `/api/cmd`.
   TV usually stops the launcher's connection in standby.
 - **AI agents** (`src/agents.js`): `POST /api/cmd` and `/api/status` also take
   `Authorization: Bearer agent:<TV id>.<key>`. The TV makes agent keys (Settings › AI agents) or the phone page
-  makes one and hands the TV only its SHA-256; the TV sends the relay `[{h, read, control}]` in its hello and
+  makes one and hands the TV only its SHA-256; the TV sends the relay `[{h, read, control, adb}]` in its hello and
   again (`{t:"agents"}`) on every create, revoke or permission change, so a revoked key gets 403 at once and an
   agent's status socket (`/phone`, `{t:"auth", agent}`) is closed with 4003. The relay forwards only the agent
-  commands listed in `agents.js` (never `set_pin`, `set_psk`, `adb`, `sony`, `intent`, `local`, `agents`), adds
+  commands listed in `agents.js` (never `set_pin`, `set_psk`, `sony`, `intent`, `local`, `agents`), adds
   the key hash, and the TV enforces **read** (status, info, caps, apps, buttons, `screen_time`; on by default)
-  and **control** (button, longpress, global, type, launch, power, banner, lock; when granted), logging each
+  **control** (button, longpress, global, type, launch, power, banner, lock; when granted) and **adb** (the `adb`
+  command: Wireless debugging on/off and its address, no shell; when granted, since anyone on the home network
+  who is already paired can then connect). Granting control or adb takes the TV's PIN, on the TV and from the
+  phone page (`agents` set with `pin`). The TV logs each
   command (Settings › AI agents › Agent log, and the phone page). A refusal is 403 `{denied:true}`. Rate limit
   per key: 20 at once, 60 a minute (429 with Retry-After); 20 wrong keys a minute lock agents out of that TV
   for the minute. `GET /api/guide` is the markdown guide for agents, written from the same list. An MCP server

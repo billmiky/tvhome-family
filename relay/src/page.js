@@ -192,6 +192,7 @@ export const PAGE = `<!doctype html>
   .perm { display:flex; align-items:center; gap:12px; padding:8px 0; }
   .perm .txt { flex:1; min-width:0; font-size:15px; }
   .perm .txt small { display:block; font-size:12.5px; color:var(--dim); }
+  .perm .txt small.warn { color:var(--warn); margin-top:2px; }
   .agentlog { list-style:none; margin:0; padding:0; font-size:13px; color:var(--dim); }
   .agentlog li { display:flex; gap:8px; padding:5px 0; } .agentlog li + li { border-top:1px solid rgba(255,255,255,.06); }
   .agentlog .when { flex:0 0 auto; font-variant-numeric:tabular-nums; color:var(--faint); }
@@ -579,7 +580,7 @@ export const PAGE = `<!doctype html>
   }
 
   // ---- status ---------------------------------------------------------------------------------
-  let online = null, lockAt = 0, lastSeen = 0;
+  let online = null, lockAt = 0, lastSeen = 0, tvHasPin = false;
   function ago(t) {
     if (!t) return "";
     const s = Math.max(0, Math.round((Date.now() - t) / 1000));
@@ -619,6 +620,7 @@ export const PAGE = `<!doctype html>
     $("lockFace").classList.toggle("locked", !!st.locked);
     setIcon($("lockIcon"), st.locked ? "lock" : "unlock");
     $("noPin").hidden = !!st.hasPin;
+    tvHasPin = !!st.hasPin;
     lockAt = st.lockAt || 0;
     drawTimer();
   }
@@ -988,8 +990,9 @@ export const PAGE = `<!doctype html>
   const AGENT_PERMS = /*AGENT_PERMS*/null || {
     read: { title: "Read", summary: "Status, info, the TV's apps and screen time" },
     control: { title: "Control", summary: "Remote keys, typing, opening apps, power, messages and the lock" },
+    adb: { title: "ADB", summary: "Wireless debugging on or off, and its address", warning: "Anyone on the home network who is already paired can then connect." },
   };
-  $("agentPerms").textContent = "A new agent may read; control is a switch on each agent. Guide for agents: " + location.origin + "/api/guide";
+  $("agentPerms").textContent = "A new agent may read; control and ADB are switches on each agent (granting them asks for the TV's PIN). Guide for agents: " + location.origin + "/api/guide";
   function agentKey() {
     const b = new Uint8Array(24);
     crypto.getRandomValues(b);
@@ -1010,6 +1013,7 @@ export const PAGE = `<!doctype html>
     const row = el("label", "perm");
     const txt = el("span", "txt", AGENT_PERMS[perm].title);
     txt.appendChild(el("small", "", AGENT_PERMS[perm].summary));
+    if (AGENT_PERMS[perm].warning) txt.appendChild(el("small", "warn", AGENT_PERMS[perm].warning));
     const box = el("input", "switch");
     box.type = "checkbox";
     box.checked = !!a[perm];
@@ -1018,7 +1022,19 @@ export const PAGE = `<!doctype html>
       box.disabled = true;
       const args = { action: "set", id: a.id };
       args[perm] = box.checked;
-      const j = await run("agents", { args: args }, box.checked ? AGENT_PERMS[perm].title + " granted." : AGENT_PERMS[perm].title + " taken away.");
+      // Granting control or ADB takes the TV's PIN, as on the TV; the TV checks it.
+      const askPin = () => prompt("The TV's PIN, to grant " + AGENT_PERMS[perm].title + " to " + a.name + ":");
+      if (box.checked && perm !== "read" && tvHasPin) {
+        const pin = askPin();
+        if (pin === null) { box.checked = false; box.disabled = false; return; }
+        args.pin = pin.trim();
+      }
+      const done = box.checked ? AGENT_PERMS[perm].title + " granted." : AGENT_PERMS[perm].title + " taken away.";
+      let j = await run("agents", { args: args }, done);
+      if (!j.ok && j.data && j.data.pin && !("pin" in args)) {
+        const pin = askPin();
+        if (pin !== null) { args.pin = pin.trim(); j = await run("agents", { args: args }, done); }
+      }
       box.disabled = false;
       if (!j.ok) box.checked = !box.checked;
     };
@@ -1050,6 +1066,7 @@ export const PAGE = `<!doctype html>
       const sub = el("div", "sub");
       sub.appendChild(permSwitch(a, "read"));
       sub.appendChild(permSwitch(a, "control"));
+      sub.appendChild(permSwitch(a, "adb"));
       list.appendChild(sub);
     });
     const log = (d.log || []).slice(0, 8);

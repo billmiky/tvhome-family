@@ -6,7 +6,8 @@
 //   TV_AGENT_KEY  the key from the TV or the phone remote (Settings › AI agents): agent:<TV id>.<key>
 //
 // Each tool is one relay request (POST /api/cmd or /api/status). The TV decides what the key may do: read
-// (status, apps, screen time) always, control (keys, typing, apps, power, message, lock) when its owner grants it.
+// (status, apps, screen time) always, control (keys, typing, apps, power, message, lock) and adb (Wireless debugging
+// on/off and its address; never a shell) when its owner grants them.
 // The relay documents every command at GET <RELAY_URL>/api/guide.
 
 import { createInterface } from "node:readline";
@@ -125,6 +126,24 @@ const TOOLS = [
     description: "Screen time today or over the last 7 days: total and per app (milliseconds), by hour or by day.",
     inputSchema: { type: "object", properties: { range: { type: "string", enum: ["today", "7d"], description: "today (default) or 7d" } } },
     run: (a) => cmd("screen_time", { args: { range: a.range === "7d" ? "7d" : "today" } }),
+  },
+  {
+    name: "adb_wifi_status",
+    description: "Wireless debugging (ADB over Wi-Fi): whether it is on, and the address to `adb connect` to. Needs the adb permission.",
+    inputSchema: { type: "object", properties: {} },
+    run: () => cmd("adb", { args: { action: "status" } }),
+  },
+  {
+    name: "adb_wifi_on",
+    description: "Switches Wireless debugging on and answers its address. Anyone on the home network who is already paired can then connect. Needs the adb permission.",
+    inputSchema: { type: "object", properties: {} },
+    run: () => cmd("adb", { args: { action: "on" } }),
+  },
+  {
+    name: "adb_wifi_off",
+    description: "Switches Wireless debugging off. Needs the adb permission.",
+    inputSchema: { type: "object", properties: {} },
+    run: () => cmd("adb", { args: { action: "off" } }),
   },
 ];
 

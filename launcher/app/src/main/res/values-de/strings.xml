@@ -68,6 +68,9 @@
     <string name="agents_perm_none">Pausiert</string>
     <string name="agents_never">nie benutzt</string>
     <string name="agents_used">benutzt %1$s</string>
+    <string name="agents_adb">ADB</string>
+    <string name="agents_adb_hint">Kabelloses Debugging ein/aus</string>
+    <string name="agents_adb_warning">Wer im Heimnetz schon gekoppelt ist, kann sich dann verbinden.</string>
     <string name="agents_revoke">Widerrufen</string>
     <string name="agents_log">Agenten-Protokoll</string>
     <string name="agents_log_empty">Noch keine Agentenbefehle</string>

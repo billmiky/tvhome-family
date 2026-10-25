@@ -50,7 +50,7 @@ test("read-only agent: status and reads pass, control is refused by the TV, owne
     assert.equal(key.body.denied, true);
 
     const before = tv.seen.length;
-    for (const cmd of ["set_pin", "adb", "sony", "intent", "local", "agents", "set_psk"]) {
+    for (const cmd of ["set_pin", "sony", "intent", "local", "agents", "set_psk"]) {
       const r = await asAgent(relay.url, "/api/cmd", tv.token(reader), { cmd, text: "1234", args: { action: "on" } });
       assert.equal(r.status, 403, cmd);
       assert.equal(r.body.denied, true, cmd);
@@ -79,6 +79,27 @@ test("agent with control: keys go through; bad keys and headers are refused", as
     const p = await phone(tv, "/api/cmd", { cmd: "ping", agent: agent.key });
     assert.equal(p.status, 200);
     assert.equal(tv.seen.at(-1).agent, undefined);
+  } finally {
+    tv.close();
+  }
+});
+
+test("adb: a permission of its own, off with control, forwarded when granted", async () => {
+  const agent = { key: randomKey(), read: true, control: true, adb: false };
+  const tv = await fakeTv(relay.url, { agents: [agent] });
+  try {
+    const no = await asAgent(relay.url, "/api/cmd", tv.token(agent), { cmd: "adb", args: { action: "on" } });
+    assert.equal(no.status, 403);
+    assert.equal(no.body.denied, true);
+    assert.equal(tv.seen.at(-1).cmd, "adb", "the relay forwards it; the TV refuses");
+    tv.agents[0].adb = true;
+    tv.pushAgents();
+    await new Promise((r) => setTimeout(r, 200));
+    const on = await asAgent(relay.url, "/api/cmd", tv.token(agent), { cmd: "adb", args: { action: "on" } });
+    assert.equal(on.status, 200);
+    assert.equal(on.body.data.wifi, true);
+    assert.equal(on.body.data.port, 37241);
+    assert.deepEqual(tv.seen.at(-1).args, { action: "on" });
   } finally {
     tv.close();
   }

@@ -67,6 +67,9 @@
     <string name="agents_perm_none">หยุดชั่วคราว</string>
     <string name="agents_never">ยังไม่เคยใช้</string>
     <string name="agents_used">ใช้ %1$s</string>
+    <string name="agents_adb">ADB</string>
+    <string name="agents_adb_hint">เปิด/ปิดการแก้ไขข้อบกพร่องไร้สาย</string>
+    <string name="agents_adb_warning">ใครก็ตามในเครือข่ายบ้านที่จับคู่ไว้แล้วจะเชื่อมต่อได้</string>
     <string name="agents_revoke">เพิกถอน</string>
     <string name="agents_log">บันทึกเอเจนต์</string>
     <string name="agents_log_empty">ยังไม่มีคำสั่งจากเอเจนต์</string>

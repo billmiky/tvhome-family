@@ -4016,10 +4016,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         String used = a.lastUsed == 0 ? getString(R.string.agents_never)
                 : getString(R.string.agents_used, android.text.format.DateUtils.getRelativeTimeSpanString(a.lastUsed,
                 System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS));
-        return perms + " · " + used;
+        return perms + (a.adb ? " + ADB" : "") + " · " + used;
     }
 
-    /** One agent: Read and Control switch, Revoke removes it (the relay is told at once). */
+    /** One agent: Read, Control and ADB switch, Revoke removes it (the relay is told at once). */
     private void showAgent(String id) {
         final Agents agents = RemoteRelay.agents(this);
         final Agents.Agent a = agents.byId(id);
@@ -4035,7 +4035,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 getString(a.read ? R.string.settings_menu_on : R.string.settings_menu_off));
         final TextView readStatus = readRow.findViewById(R.id.status);
         readRow.setOnClickListener(v -> {
-            agents.set(id, !a.read, null);
+            agents.set(id, !a.read, null, null);
             RemoteRelay.agentsChanged();
             readStatus.setText(a.read ? R.string.settings_menu_on : R.string.settings_menu_off);
         });
@@ -4044,12 +4044,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         final TextView controlStatus = controlRow.findViewById(R.id.status);
         controlRow.setOnClickListener(v -> {
             Runnable flip = () -> {
-                agents.set(id, null, !a.control);
+                agents.set(id, null, !a.control, null);
                 RemoteRelay.agentsChanged();
                 controlStatus.setText(a.control ? R.string.settings_menu_on : R.string.settings_menu_off);
             };
             // Granting control asks for the PIN, as making a key does; taking it away never does.
             if (!a.control && AppLock.hasPin(getSharedPreferences(PREFS, MODE_PRIVATE))) verifyPin(getString(R.string.agents_pin), flip);
+            else flip.run();
+        });
+        // ADB: the existing adb command only (Wireless debugging on, off, its port), with what that opens up.
+        View adbRow = addMenuRow(rows, getString(R.string.agents_adb) + " · " + getString(R.string.agents_adb_hint), adbState(a));
+        final TextView adbStatus = adbRow.findViewById(R.id.status);
+        adbRow.setOnClickListener(v -> {
+            Runnable flip = () -> {
+                agents.set(id, null, null, !a.adb);
+                RemoteRelay.agentsChanged();
+                adbStatus.setText(adbState(a));
+            };
+            if (!a.adb && AppLock.hasPin(getSharedPreferences(PREFS, MODE_PRIVATE))) verifyPin(getString(R.string.agents_pin), flip);
             else flip.run();
         });
         addMenuRow(rows, getString(R.string.agents_revoke), agentState(a)).setOnClickListener(v -> {
@@ -4061,6 +4073,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         fitBelow(popup, panel, btnSettings);
         dropIn(popup, panel, btnSettings, Gravity.END);
         rows.getChildAt(0).requestFocus();
+    }
+
+    /** "Off · Anyone on the home network who is already paired can then connect." */
+    private String adbState(Agents.Agent a) {
+        return getString(a.adb ? R.string.settings_menu_on : R.string.settings_menu_off) + " · " + getString(R.string.agents_adb_warning);
     }
 
     /** The new agent's name (the phone remote's keyboard can type it), then its key. */

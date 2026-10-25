@@ -73,6 +73,9 @@
     <string name="agents_perm_none">На паузе</string>
     <string name="agents_never">не использовался</string>
     <string name="agents_used">использован %1$s</string>
+    <string name="agents_adb">ADB</string>
+    <string name="agents_adb_hint">Отладка по Wi-Fi вкл/выкл</string>
+    <string name="agents_adb_warning">Любой уже сопряжённый в домашней сети сможет подключиться.</string>
     <string name="agents_revoke">Отозвать</string>
     <string name="agents_log">Журнал агентов</string>
     <string name="agents_log_empty">Команд агентов пока нет</string>

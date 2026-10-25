@@ -20,7 +20,9 @@ import java.util.Set;
  * stops at once. The relay marks an agent's command with the hash; check() decides it here.
  *
  * Permissions: read (status, info, caps, apps, buttons, screen time), on by default; control (remote keys, type,
- * launch, power, message, lock) when the owner grants it. Nothing else ever: no PIN, IP control key, ADB, Sony
+ * launch, power, message, lock) when the owner grants it; adb (the existing adb command: Wireless debugging on, off
+ * and its state, never a shell) when the owner grants that too. Granting control or adb asks for the TV's PIN, on
+ * the TV and from the phone page (grants()). Nothing else ever: no PIN, IP control key, Sony
  * calls, intents, the phone page's API or the agent list. The lists match relay/src/agents.js (a test checks).
  * Every agent command goes into a capped log (who, when, what, result) that Settings › AI agents shows.
  *
@@ -32,6 +34,8 @@ final class Agents {
             "button", "longpress", "global", "type", "launch", "screen_off", "screen_on", "standby", "wake",
             "banner", "banner_clear", "lock", "unlock", "lock_timer", "lock_timer_cancel",
     };
+    /** Wireless debugging: anyone on the home network who is already paired can then connect. */
+    static final String[] ADB = {"adb"};
     static final int MAX = 10;
     static final int LOG_MAX = 100;
     static final int MAX_NAME = 40;
@@ -42,6 +46,7 @@ final class Agents {
     private static final String K_LOG = "remote_agent_log";
     private static final Set<String> READ_SET = new HashSet<>(Arrays.asList(READ));
     private static final Set<String> CONTROL_SET = new HashSet<>(Arrays.asList(CONTROL));
+    private static final Set<String> ADB_SET = new HashSet<>(Arrays.asList(ADB));
     private static final SecureRandom RNG = new SecureRandom();
 
     /** Where the lists live: the launcher's SharedPreferences on the TV, a map in the tests. */
@@ -57,6 +62,7 @@ final class Agents {
         final String hash;
         boolean read;
         boolean control;
+        boolean adb;
         final long created;
         long lastUsed;
 
@@ -96,6 +102,7 @@ final class Agents {
                 if (!h.matches("[0-9a-f]{64}")) continue;
                 agents.add(new Agent(o.optString("id"), o.optString("name"), h, o.optBoolean("read", true),
                         o.optBoolean("control"), o.optLong("created"), o.optLong("used")));
+                agents.get(agents.size() - 1).adb = o.optBoolean("adb");
             }
         } catch (Exception ignored) {
             // A broken list: start empty (every key stops working, which is the safe way to fail).
@@ -152,22 +159,29 @@ final class Agents {
         return true;
     }
 
-    /** Switches read or control (null leaves it). */
-    synchronized boolean set(String id, Boolean read, Boolean control) {
+    /** Switches read, control or adb (null leaves it). */
+    synchronized boolean set(String id, Boolean read, Boolean control, Boolean adb) {
         Agent a = byId(id);
         if (a == null) return false;
         if (read != null) a.read = read;
         if (control != null) a.control = control;
+        if (adb != null) a.adb = adb;
         save();
         return true;
     }
 
     // ---- deciding --------------------------------------------------------------------------------------
 
-    /** "read", "control", or null: agents may never send it. */
+    /** True when the change gives agent a control or adb it doesn't have: the owner's PIN first, if there is one. */
+    static boolean grants(Agent a, Boolean control, Boolean adb) {
+        return a != null && (Boolean.TRUE.equals(control) && !a.control || Boolean.TRUE.equals(adb) && !a.adb);
+    }
+
+    /** "read", "control", "adb", or null: agents may never send it. */
     static String needs(String cmd) {
         if (READ_SET.contains(cmd)) return "read";
         if (CONTROL_SET.contains(cmd)) return "control";
+        if (ADB_SET.contains(cmd)) return "adb";
         return null;
     }
 
@@ -178,6 +192,7 @@ final class Agents {
         if (need == null) return "Agents may not use \"" + cmd + "\".";
         if ("read".equals(need) && !a.read) return "This agent may not read from the TV (no read permission).";
         if ("control".equals(need) && !a.control) return "This agent may not control the TV. The owner can grant control in Settings › AI agents.";
+        if ("adb".equals(need) && !a.adb) return "This agent may not switch Wireless debugging. The owner can grant ADB in Settings › AI agents.";
         return null;
     }
 
@@ -186,6 +201,7 @@ final class Agents {
         JSONArray c = new JSONArray();
         if (a.read) for (String s : READ) c.put(s);
         if (a.control) for (String s : CONTROL) c.put(s);
+        if (a.adb) for (String s : ADB) c.put(s);
         return c;
     }
 
@@ -252,6 +268,8 @@ final class Agents {
                 return text + " min";
             case "screen_time":
                 return args.optString("range", text.isEmpty() ? "today" : text);
+            case "adb":
+                return args.optString("action", text.isEmpty() ? "status" : text);
             default:
                 return "";
         }
@@ -259,10 +277,10 @@ final class Agents {
 
     // ---- the lists out -----------------------------------------------------------------------------------
 
-    /** For the relay: [{h, read, control}]. Hashes only, as for phone keys. */
+    /** For the relay: [{h, read, control, adb}]. Hashes only, as for phone keys. */
     synchronized JSONArray forRelay() throws Exception {
         JSONArray a = new JSONArray();
-        for (Agent x : agents) a.put(new JSONObject().put("h", x.hash).put("read", x.read).put("control", x.control));
+        for (Agent x : agents) a.put(new JSONObject().put("h", x.hash).put("read", x.read).put("control", x.control).put("adb", x.adb));
         return a;
     }
 
@@ -270,7 +288,7 @@ final class Agents {
     synchronized JSONArray forPhone() throws Exception {
         JSONArray a = new JSONArray();
         for (Agent x : agents) {
-            a.put(new JSONObject().put("id", x.id).put("name", x.name).put("read", x.read).put("control", x.control)
+            a.put(new JSONObject().put("id", x.id).put("name", x.name).put("read", x.read).put("control", x.control).put("adb", x.adb)
                     .put("created", x.created).put("lastUsed", x.lastUsed));
         }
         return a;
@@ -291,7 +309,7 @@ final class Agents {
             JSONArray a = new JSONArray();
             for (Agent x : agents) {
                 a.put(new JSONObject().put("id", x.id).put("name", x.name).put("h", x.hash).put("read", x.read)
-                        .put("control", x.control).put("created", x.created).put("used", x.lastUsed));
+                        .put("control", x.control).put("adb", x.adb).put("created", x.created).put("used", x.lastUsed));
             }
             store.put(K_AGENTS, a.toString());
         } catch (Exception ignored) {

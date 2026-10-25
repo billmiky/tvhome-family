@@ -67,6 +67,9 @@
     <string name="agents_perm_none">En pausa</string>
     <string name="agents_never">nunca usado</string>
     <string name="agents_used">usado %1$s</string>
+    <string name="agents_adb">ADB</string>
+    <string name="agents_adb_hint">Depuración inalámbrica sí/no</string>
+    <string name="agents_adb_warning">Cualquiera en la red de casa que ya esté emparejado podrá conectarse.</string>
     <string name="agents_revoke">Revocar</string>
     <string name="agents_log">Registro de agentes</string>
     <string name="agents_log_empty">Aún no hay órdenes de agentes</string>

@@ -227,6 +227,9 @@
     <string name="agents_perm_none">Tạm dừng</string>
     <string name="agents_never">chưa dùng</string>
     <string name="agents_used">dùng %1$s</string>
+    <string name="agents_adb">ADB</string>
+    <string name="agents_adb_hint">Bật/tắt gỡ lỗi không dây</string>
+    <string name="agents_adb_warning">Ai trong mạng nhà đã ghép nối từ trước đều có thể kết nối.</string>
     <string name="agents_revoke">Thu hồi</string>
     <string name="agents_log">Nhật ký trợ lý</string>
     <string name="agents_log_empty">Chưa có lệnh nào từ trợ lý</string>

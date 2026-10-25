@@ -34,18 +34,22 @@ function mcp(env) {
   return { call, notify, stop: () => proc.kill() };
 }
 
-let relay, tv, owner, reader;
+let relay, tv, owner, reader, admin;
 const agent = { key: randomKey(), read: true, control: true };
+// A key of its own for the adb tools: the first test's calls use up most of the other key's burst.
+const adbAgent = { key: randomKey(), read: false, control: false, adb: true };
 const readOnly = { key: randomKey(), read: true, control: false };
 before(async () => {
   relay = await startRelay();
-  tv = await fakeTv(relay.url, { agents: [agent, readOnly] });
+  tv = await fakeTv(relay.url, { agents: [agent, readOnly, adbAgent] });
   owner = mcp({ RELAY_URL: relay.url + "/", TV_AGENT_KEY: tv.token(agent) });
+  admin = mcp({ RELAY_URL: relay.url, TV_AGENT_KEY: tv.token(adbAgent) });
   reader = mcp({ RELAY_URL: relay.url, TV_AGENT_KEY: "Bearer " + tv.token(readOnly) });
 });
 after(async () => {
   owner && owner.stop();
   reader && reader.stop();
+  admin && admin.stop();
   tv && tv.close();
   relay && (await relay.stop());
 });
@@ -59,7 +63,7 @@ test("initialize and the tool list", async () => {
   owner.notify("notifications/initialized");
   const { tools } = await owner.call("tools/list", {});
   const names = tools.map((t) => t.name).sort();
-  assert.deepEqual(names, ["launch_app", "list_apps", "lock", "message", "press_key", "screen_off", "screen_on", "screen_time",
+  assert.deepEqual(names, ["adb_wifi_off", "adb_wifi_on", "adb_wifi_status", "launch_app", "list_apps", "lock", "message", "press_key", "screen_off", "screen_on", "screen_time",
     "standby", "tv_command", "tv_status", "type_text", "unlock"]);
   for (const t of tools) assert.equal(t.inputSchema.type, "object", t.name);
   await assert.rejects(owner.call("nope/never", {}), (e) => e.code === -32601);
@@ -100,6 +104,18 @@ test("tools reach the TV as the right commands", async () => {
   for (const m of tv.seen.slice(-5)) assert.ok(m.agent, "marked as the agent's");
 });
 
+test("adb tools: the existing adb command, with the adb permission only", async () => {
+  for (const [tool, action] of [["adb_wifi_status", "status"], ["adb_wifi_on", "on"], ["adb_wifi_off", "off"]]) {
+    const r = await admin.call("tools/call", { name: tool, arguments: {} });
+    assert.equal(r.isError, false, tool + ": " + text(r));
+    assert.equal(tv.seen.at(-1).cmd, "adb");
+    assert.deepEqual(tv.seen.at(-1).args, { action });
+  }
+  assert.match(text(await admin.call("tools/call", { name: "adb_wifi_on", arguments: {} })), /"port":37241/);
+  const key = await admin.call("tools/call", { name: "press_key", arguments: { key: "Home" } });
+  assert.equal(key.isError, true, "adb is not control");
+});
+
 test("a read-only key: reads work, control comes back as an error the agent can read", async () => {
   await reader.call("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "0" } });
   const apps = await reader.call("tools/call", { name: "list_apps", arguments: {} });
@@ -107,6 +123,8 @@ test("a read-only key: reads work, control comes back as an error the agent can 
   const key = await reader.call("tools/call", { name: "press_key", arguments: { key: "Home" } });
   assert.equal(key.isError, true);
   assert.match(text(key), /denied/);
+  const adb = await reader.call("tools/call", { name: "adb_wifi_on", arguments: {} });
+  assert.equal(adb.isError, true, "no adb permission");
   const pin = await reader.call("tools/call", { name: "tv_command", arguments: { cmd: "set_pin", text: "0000" } });
   assert.equal(pin.isError, true);
   assert.match(text(pin), /Agents may not use/);

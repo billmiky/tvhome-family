@@ -8,7 +8,8 @@ Remote relay. Stdio, Node 18+, one file, no dependencies, no build step.
 On the TV, hold OK on Settings › **AI agents** › Create an agent (the key is shown once, as text and a QR code),
 or in the phone remote, Settings › **AI agents** › Create. The key looks like `agent:<TV id>.<key>`. A new agent
 may **read** (status, apps, screen time); switch **control** on for it (keys, typing, opening apps, power,
-messages, lock) on the TV or the phone. Revoke it there too: it stops working at once.
+messages, lock) and, if you want, **adb** (Wireless debugging on/off and its address, never a shell) on the TV or
+the phone; granting either asks for the TV's PIN. Revoke it there too: it stops working at once.
 
 ## Claude Code
 
@@ -42,6 +43,7 @@ Claude Desktop and other clients take the same command in their config:
 | `screen_off`, `screen_on`, `standby` | control | power (screen off keeps the TV running) |
 | `message` | control | large text on the TV until OK; `clear` takes it off |
 | `lock`, `unlock` | control | lock now or after `minutes`; `cancel_timer` |
+| `adb_wifi_status`, `adb_wifi_on`, `adb_wifi_off` | adb | Wireless debugging and its address (no shell). Anyone on the home network who is already paired can then connect |
 | `tv_command` | per command | any agent command: `{cmd, text?, args?}` |
 
 Every command, its JSON and the errors are in the relay's guide: `GET <RELAY_URL>/api/guide`. A command the key

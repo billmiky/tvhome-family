@@ -67,6 +67,9 @@
     <string name="agents_perm_none">已暂停</string>
     <string name="agents_never">从未使用</string>
     <string name="agents_used">%1$s使用</string>
+    <string name="agents_adb">ADB</string>
+    <string name="agents_adb_hint">无线调试开/关</string>
+    <string name="agents_adb_warning">家庭网络中任何已配对的设备随后都能连接。</string>
     <string name="agents_revoke">撤销</string>
     <string name="agents_log">代理日志</string>
     <string name="agents_log_empty">还没有代理命令</string>

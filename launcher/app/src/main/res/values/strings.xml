@@ -234,6 +234,9 @@
     <string name="agents_perm_none">Paused</string>
     <string name="agents_never">never used</string>
     <string name="agents_used">used %1$s</string>
+    <string name="agents_adb">ADB</string>
+    <string name="agents_adb_hint">Wireless debugging on/off</string>
+    <string name="agents_adb_warning">Anyone on the home network who is already paired can then connect.</string>
     <string name="agents_revoke">Revoke</string>
     <string name="agents_log">Agent log</string>
     <string name="agents_log_empty">No agent commands yet</string>

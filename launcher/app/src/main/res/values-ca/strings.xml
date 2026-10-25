@@ -66,6 +66,9 @@
     <string name="agents_perm_none">En pausa</string>
     <string name="agents_never">mai usat</string>
     <string name="agents_used">usat %1$s</string>
+    <string name="agents_adb">ADB</string>
+    <string name="agents_adb_hint">Depuració sense fil sí/no</string>
+    <string name="agents_adb_warning">Qualsevol a la xarxa de casa que ja estigui vinculat s\'hi podrà connectar.</string>
     <string name="agents_revoke">Revoca</string>
     <string name="agents_log">Registre d\'agents</string>
     <string name="agents_log_empty">Encara cap ordre d\'agent</string>
